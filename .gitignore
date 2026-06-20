@@ -1,0 +1,16 @@
+# Claude Code local config — personal, never pushed to the remote.
+.claude/
+
+# Dependencies / build output (also covered per-package, kept here as a backstop).
+node_modules/
+dist/
+
+# Environment / secrets.
+.env
+.env.*
+!.env.example
+
+# Logs / OS cruft.
+*.log
+.DS_Store
+Thumbs.db

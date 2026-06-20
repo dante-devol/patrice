@@ -1,0 +1,61 @@
+# Patrice — local/self-host stack (Slice 1).
+# `docker compose up` on an empty DB: migrations run, the API prints a bootstrap
+# key, and the web app is served. Single-instance topology (v1).
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: patrice
+      POSTGRES_PASSWORD: patrice
+      POSTGRES_DB: patrice
+    ports:
+      - '5432:5432'
+    volumes:
+      # PostgreSQL 18 images store data in a version-specific subdirectory, so the
+      # mount goes at /var/lib/postgresql (NOT /var/lib/postgresql/data).
+      - patrice-db:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U patrice']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - '8025:8025' # web UI
+      - '1025:1025' # SMTP
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://patrice:patrice@db:5432/patrice?schema=public
+      PUBLIC_BASE_URL: http://localhost:8080
+      SESSION_SECRET: dev-session-secret-change-me-please
+      TOKEN_PEPPER: dev-token-pepper-change-me-please
+      SMTP_URL: smtp://mailpit:1025
+      EMAIL_FROM: Patrice <no-reply@patrice.local>
+      NODE_ENV: production
+      LOG_LEVEL: info
+      COOKIE_SECURE: 'false'
+      TRUST_PROXY: 'true'
+      PORT: '3000'
+    ports:
+      - '3000:3000'
+
+  web:
+    build:
+      context: ./web
+    depends_on:
+      - api
+    ports:
+      - '8080:80'
+
+volumes:
+  patrice-db:

@@ -1,0 +1,280 @@
+// Patrice — Prisma schema (Slice 1).
+//
+// Conventions (docs/slices/00-overview.md):
+//   - UUIDv7 PKs (PostgreSQL 18 `uuidv7()` default; see migration).
+//   - timestamptz everywhere, UTC.
+//   - Tenant tables carry organization_id (singleton org in v1).
+//   - lifecycle_state + retired_at on core entities; FKs to core data ON DELETE RESTRICT.
+//   - Some structures (citext columns, the partial bootstrap unique index, the
+//     singleton CHECK) are hand-applied in the SQL migration — Prisma can't express them.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LifecycleState {
+  active
+  deactivated
+  retired
+}
+
+enum AuthProvider {
+  password
+  google
+}
+
+enum AuthMethod {
+  password
+  google
+}
+
+enum RoleKind {
+  standalone
+  division
+  team
+}
+
+enum GrantEffect {
+  permit
+  forbid
+}
+
+enum ScopeKind {
+  global
+  own
+  own_division
+  own_team
+  specific_division
+  specific_team
+  role
+}
+
+enum UserRoleSource {
+  patrice
+  integration
+}
+
+enum AuthTokenKind {
+  email_verification
+  password_reset
+}
+
+enum ActivitySource {
+  patrice
+  integration
+  system
+}
+
+model Organization {
+  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name          String
+  settings      Json     @default("{}")
+  configVersion BigInt   @default(0) @map("config_version")
+  // Singleton guard column: always 0, with a UNIQUE so only one row can exist.
+  singleton     Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users       AppUser[]
+  invitations Invitation[]
+  roles       Role[]
+  grants      Grant[]
+  activities  Activity[]
+
+  @@unique([singleton])
+  @@map("organization")
+}
+
+model AppUser {
+  id                      String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId          String         @map("organization_id") @db.Uuid
+  email                   String?        @db.Text // ALTERed to citext in migration
+  displayName             String         @map("display_name")
+  createdViaInvitationId  String?        @map("created_via_invitation_id") @db.Uuid
+  lifecycleState          LifecycleState @default(active) @map("lifecycle_state")
+  deactivatedAt           DateTime?      @map("deactivated_at") @db.Timestamptz(6)
+  retiredAt               DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version                 Int            @default(0)
+  createdAt               DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  identities     UserIdentity[]
+  sessions       Session[]
+  userRoles      UserRole[]
+  authTokens     AuthToken[]
+  invitationUses InvitationUse[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("app_user")
+}
+
+model UserIdentity {
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  provider        AuthProvider
+  providerSubject String?      @map("provider_subject")
+  passwordHash    String?      @map("password_hash")
+  verifiedAt      DateTime?    @map("verified_at") @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, providerSubject])
+  @@unique([userId, provider])
+  @@map("user_identity")
+}
+
+model Session {
+  id               String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId           String     @map("user_id") @db.Uuid
+  tokenHash        String     @unique @map("token_hash")
+  authMethod       AuthMethod @map("auth_method")
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt       DateTime   @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(6)
+  idleExpiresAt    DateTime   @map("idle_expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  ip               String?    @db.Inet
+  userAgent        String?    @map("user_agent")
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Invitation {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  tokenHash       String    @unique @map("token_hash")
+  email           String?   @db.Text // ALTERed to citext in migration
+  intendedRoleIds String[]  @map("intended_role_ids") @db.Uuid
+  passcodeHash    String?   @map("passcode_hash")
+  maxUses         Int       @default(1) @map("max_uses")
+  useCount        Int       @default(0) @map("use_count")
+  createdBy       String?   @map("created_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  uses         InvitationUse[]
+
+  @@index([organizationId])
+  @@map("invitation")
+}
+
+model InvitationUse {
+  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  invitationId  String   @map("invitation_id") @db.Uuid
+  createdUserId String   @map("created_user_id") @db.Uuid
+  usedAt        DateTime @default(now()) @map("used_at") @db.Timestamptz(6)
+
+  invitation  Invitation @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  createdUser AppUser    @relation(fields: [createdUserId], references: [id], onDelete: Restrict)
+
+  @@index([invitationId])
+  @@map("invitation_use")
+}
+
+model AuthToken {
+  id         String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId     String        @map("user_id") @db.Uuid
+  kind       AuthTokenKind
+  tokenHash  String        @unique @map("token_hash")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt  DateTime      @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime?     @map("consumed_at") @db.Timestamptz(6)
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("auth_token")
+}
+
+model Role {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String
+  kind           RoleKind
+  divisionId     String?        @unique @map("division_id") @db.Uuid
+  teamId         String?        @unique @map("team_id") @db.Uuid
+  lifecycleState LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version        Int            @default(0)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userRoles    UserRole[]
+  grants       Grant[]
+
+  @@index([organizationId])
+  @@map("role")
+}
+
+model UserRole {
+  id                 String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId             String         @map("user_id") @db.Uuid
+  roleId             String         @map("role_id") @db.Uuid
+  source             UserRoleSource @default(patrice)
+  sourceConnectionId String?        @map("source_connection_id") @db.Uuid
+  grantedBy          String?        @map("granted_by") @db.Uuid
+  grantedAt          DateTime       @default(now()) @map("granted_at") @db.Timestamptz(6)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role Role    @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+  @@map("user_role")
+}
+
+model Grant {
+  id               String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId   String      @map("organization_id") @db.Uuid
+  roleId           String      @map("role_id") @db.Uuid
+  action           String
+  effect           GrantEffect @default(permit)
+  scopeKind        ScopeKind   @map("scope_kind")
+  scopeDivisionId  String?     @map("scope_division_id") @db.Uuid
+  scopeTeamId      String?     @map("scope_team_id") @db.Uuid
+  scopeRoleId      String?     @map("scope_role_id") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@index([roleId])
+  @@map("grant")
+}
+
+model Activity {
+  id                 String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId     String         @map("organization_id") @db.Uuid
+  actorUserId        String?        @map("actor_user_id") @db.Uuid
+  subjectType        String         @map("subject_type")
+  subjectId          String         @map("subject_id") @db.Uuid
+  verb               String
+  payload            Json
+  source             ActivitySource
+  sourceConnectionId String?        @map("source_connection_id") @db.Uuid
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([subjectType, subjectId, createdAt])
+  @@index([createdAt])
+  @@map("activity")
+}

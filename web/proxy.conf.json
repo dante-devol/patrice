@@ -1,0 +1,8 @@
+{
+  "/auth": { "target": "http://localhost:3000", "secure": false },
+  "/me": { "target": "http://localhost:3000", "secure": false },
+  "/invite": { "target": "http://localhost:3000", "secure": false },
+  "/invitations": { "target": "http://localhost:3000", "secure": false },
+  "/bootstrap": { "target": "http://localhost:3000", "secure": false },
+  "/health": { "target": "http://localhost:3000", "secure": false }
+}
