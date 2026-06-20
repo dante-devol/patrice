@@ -52,6 +52,14 @@ export const activityPayloadSchemas = {
   'role.updated': z.object({ roleId: uuid }).strict(),
   'role.retired': z.object({ roleId: uuid }).strict(),
   'role.revived': z.object({ roleId: uuid }).strict(),
+  'division.created': z.object({ divisionId: uuid }).strict(),
+  'division.updated': z.object({ divisionId: uuid }).strict(),
+  'division.retired': z.object({ divisionId: uuid }).strict(),
+  'division.revived': z.object({ divisionId: uuid }).strict(),
+  'team.created': z.object({ teamId: uuid }).strict(),
+  'team.updated': z.object({ teamId: uuid }).strict(),
+  'team.retired': z.object({ teamId: uuid }).strict(),
+  'team.revived': z.object({ teamId: uuid }).strict(),
 } as const;
 
 export type ActivityVerb = keyof typeof activityPayloadSchemas;

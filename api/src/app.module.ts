@@ -11,6 +11,8 @@ import { AuthModule } from './auth/auth.module';
 import { SessionGuard } from './auth/session.guard';
 import { InvitationsModule } from './invitations/invitations.module';
 import { RolesModule } from './roles/roles.module';
+import { DivisionsModule } from './divisions/divisions.module';
+import { TeamsModule } from './teams/teams.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -25,6 +27,8 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     AuthModule,
     InvitationsModule,
     RolesModule,
+    DivisionsModule,
+    TeamsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -23,8 +23,12 @@ function actionDecls(): string {
 }
 
 export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
-  entity Division;
-  entity Team;
+  entity Division {
+    restrictClaims: Bool
+  };
+  entity Team {
+    restrictClaims: Bool
+  };
   entity Role;
   entity User in [Role] {
     memberDivisions: Set<Division>,

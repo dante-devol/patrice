@@ -33,6 +33,17 @@ export const ACTIONS = {
   roleUpdate: { action: 'role:update', resourceType: 'Organization' },
   roleRetire: { action: 'role:retire', resourceType: 'Organization' },
   roleRevive: { action: 'role:revive', resourceType: 'Organization' },
+  // Division/Team config (Slice 2.2). Governance-scoped: the singleton org is the
+  // resource for all of these (admin holds global grants), mirroring the role ops —
+  // keeps revive clear of the Retired-as-Hard-Deny that targets the entity itself.
+  divisionCreate: { action: 'division:create', resourceType: 'Organization' },
+  divisionUpdate: { action: 'division:update', resourceType: 'Organization' },
+  divisionRetire: { action: 'division:retire', resourceType: 'Organization' },
+  divisionRevive: { action: 'division:revive', resourceType: 'Organization' },
+  teamCreate: { action: 'team:create', resourceType: 'Organization' },
+  teamUpdate: { action: 'team:update', resourceType: 'Organization' },
+  teamRetire: { action: 'team:retire', resourceType: 'Organization' },
+  teamRevive: { action: 'team:revive', resourceType: 'Organization' },
 } as const satisfies Record<string, ActionDef>;
 
 export type ActionKey = keyof typeof ACTIONS;
@@ -71,7 +82,15 @@ export const ADMIN_SEED_ACTIONS: readonly string[] = [
   'invite:retire',
   // `*:revive` actions are seeded with global-scoped Admin grants by default
   // (docs/slices/02 action vocabulary); narrower revive authority is delegated
-  // via the matrix. Slice 2 seeds role/division/team revive.
+  // via the matrix. Slice 2 seeds role/division/team management for the admin.
   'role:revive',
+  'division:create',
+  'division:update',
+  'division:retire',
+  'division:revive',
+  'team:create',
+  'team:update',
+  'team:retire',
+  'team:revive',
   ...EFFECTIVE_ADMIN_ACTIONS,
 ];

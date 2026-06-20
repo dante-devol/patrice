@@ -85,9 +85,50 @@ model Organization {
   roles       Role[]
   grants      Grant[]
   activities  Activity[]
+  divisions   Division[]
+  teams       Team[]
 
   @@unique([singleton])
   @@map("organization")
+}
+
+model Division {
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId  String         @map("organization_id") @db.Uuid
+  name            String
+  defaultOpenings Int            @default(1) @map("default_openings")
+  openingsLocked  Boolean        @default(false) @map("openings_locked")
+  restrictClaims  Boolean        @default(false) @map("restrict_claims")
+  lifecycleState  LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt       DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version         Int            @default(0)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  // The atomically-created inherent role (kind='division'); UNIQUE role.division_id.
+  inherentRole Role?
+
+  @@index([organizationId])
+  @@map("division")
+}
+
+model Team {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String
+  restrictClaims Boolean        @default(false) @map("restrict_claims")
+  lifecycleState LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version        Int            @default(0)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  inherentRole Role?
+
+  @@index([organizationId])
+  @@map("team")
 }
 
 model AppUser {
@@ -216,6 +257,9 @@ model Role {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   userRoles    UserRole[]
   grants       Grant[]
+  // Inherent-role back-relations: an inherent role points at its division/team.
+  division     Division?    @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: Restrict)
 
   @@index([organizationId])
   @@map("role")
