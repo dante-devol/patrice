@@ -55,6 +55,73 @@ export class QuestionnairesService {
     return qn ? this.toView(qn) : null;
   }
 
+  /**
+   * Edit a task's questionnaire copy in place (`task:configure_questionnaire`). The
+   * task's copy is an existing row (seeded at task creation), so this rewrites its
+   * question children — it never creates a sibling. In Slice 5 this becomes **locked
+   * once a submission exists**; until submissions land (Slice 5) it's always editable.
+   * The task's existence/retirement and the actor's authority are checked by the route
+   * guard before this runs.
+   */
+  async putForTask(
+    taskId: string,
+    actorUserId: string,
+    dto: PutQuestionnaireDto,
+  ): Promise<QuestionnaireView> {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true, organizationId: true },
+    });
+    if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+
+    const questionnaire = await this.prisma.questionnaire.findUnique({
+      where: { ownerTaskId: taskId },
+      select: { id: true },
+    });
+    if (!questionnaire) {
+      throw new NotFoundError('QUESTIONNAIRE_NOT_FOUND', 'This task has no questionnaire');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.question.deleteMany({ where: { questionnaireId: questionnaire.id } });
+      if (dto.questions.length > 0) {
+        await tx.question.createMany({
+          data: dto.questions.map((q, ordinal) => ({
+            questionnaireId: questionnaire.id,
+            ordinal,
+            type: q.type as QuestionType,
+            prompt: q.prompt,
+            required: q.required,
+            constraints: q.constraints as Prisma.InputJsonValue,
+          })),
+        });
+      }
+      await tx.questionnaire.update({
+        where: { id: questionnaire.id },
+        data: { updatedAt: new Date() },
+      });
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId,
+        subjectType: 'questionnaire',
+        subjectId: questionnaire.id,
+        verb: 'task_questionnaire.updated',
+        payload: {
+          questionnaireId: questionnaire.id,
+          taskId,
+          questionCount: dto.questions.length,
+        },
+      });
+      return tx.questionnaire.findUniqueOrThrow({
+        where: { id: questionnaire.id },
+        include: { questions: { orderBy: { ordinal: 'asc' } } },
+      });
+    });
+
+    return this.toView(result);
+  }
+
   private toView(
     qn: Prisma.QuestionnaireGetPayload<{ include: { questions: true } }>,
   ): QuestionnaireView {

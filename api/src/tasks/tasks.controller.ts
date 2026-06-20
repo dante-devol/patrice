@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
 } from '@nestjs/common';
@@ -20,6 +21,10 @@ import {
 import { ACTIONS } from '../access/actions';
 import { TasksService } from './tasks.service';
 import { QuestionnairesService } from '../questionnaires/questionnaires.service';
+import {
+  putQuestionnaireSchema,
+  type PutQuestionnaireDto,
+} from '../questionnaires/questionnaires.dto';
 import {
   changeRequesterSchema,
   createTaskSchema,
@@ -144,5 +149,16 @@ export class TasksController {
       );
     }
     return qn;
+  }
+
+  @Put(':id/questionnaire')
+  @Authorize(ACTIONS.taskConfigureQuestionnaire.action, taskResource)
+  async putQuestionnaire(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(putQuestionnaireSchema)) body: PutQuestionnaireDto,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.questionnaires.putForTask(id, req.user.id, body);
   }
 }

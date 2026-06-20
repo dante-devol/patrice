@@ -76,6 +76,10 @@ export const activityPayloadSchemas = {
   'questionnaire.updated': z
     .object({ questionnaireId: uuid, divisionId: uuid, questionCount: z.number().int() })
     .strict(),
+  // Slice 4.1 — per-task questionnaire copy edited via task:configure_questionnaire.
+  'task_questionnaire.updated': z
+    .object({ questionnaireId: uuid, taskId: uuid, questionCount: z.number().int() })
+    .strict(),
   // Slice 4.1 — tasks. IDs only (no name/description PII; render by joining at read).
   'task.created': z
     .object({

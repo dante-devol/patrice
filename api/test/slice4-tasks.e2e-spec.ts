@@ -210,6 +210,44 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     });
   });
 
+  describe('PUT /tasks/:id/questionnaire — task:configure_questionnaire', () => {
+    let taskId: string;
+    beforeAll(async () => {
+      // Admin role also needs the configure action (not in the default seed).
+      await auth(http().post('/api/grants')).send({
+        roleId: adminRoleId,
+        action: 'task:configure_questionnaire',
+        scopeKind: 'global',
+      });
+      taskId = (await auth(http().post('/api/tasks')).send({ name: 'Configurable', divisionId: writingId })).body.id;
+    });
+
+    it('rewrites the task copy in place without touching the division default', async () => {
+      const res = await auth(http().put(`/api/tasks/${taskId}/questionnaire`)).send({
+        questions: [
+          { type: 'text', prompt: 'Overridden A', required: false, constraints: {} },
+          { type: 'numeric', prompt: 'Overridden B', required: true, constraints: { kind: 'integer', min: 0 } },
+        ],
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.ownerTaskId).toBe(taskId);
+      expect(res.body.questions.map((q: any) => q.prompt)).toEqual(['Overridden A', 'Overridden B']);
+
+      // The Writing default is unchanged (still Title/Body).
+      const div = await auth(http().get(`/api/divisions/${writingId}/questionnaire`));
+      expect(div.body.questions.map((q: any) => q.prompt)).toEqual(['Title', 'Body']);
+    });
+
+    it('writes a task_questionnaire.updated activity (IDs-only)', async () => {
+      const row = await prisma.activity.findFirst({
+        where: { verb: 'task_questionnaire.updated' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(row).not.toBeNull();
+      expect((row!.payload as any).taskId).toBe(taskId);
+    });
+  });
+
   describe('Cedar — task:create scoping', () => {
     let scoped: AdminSession;
     beforeAll(async () => {
