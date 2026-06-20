@@ -10,6 +10,7 @@ import { EmailModule } from './email/email.module';
 import { AuthModule } from './auth/auth.module';
 import { SessionGuard } from './auth/session.guard';
 import { InvitationsModule } from './invitations/invitations.module';
+import { RolesModule } from './roles/roles.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -23,6 +24,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     EmailModule,
     AuthModule,
     InvitationsModule,
+    RolesModule,
   ],
   controllers: [HealthController],
   providers: [

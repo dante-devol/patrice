@@ -32,6 +32,7 @@ export const ACTIONS = {
   roleCreate: { action: 'role:create', resourceType: 'Organization' },
   roleUpdate: { action: 'role:update', resourceType: 'Organization' },
   roleRetire: { action: 'role:retire', resourceType: 'Organization' },
+  roleRevive: { action: 'role:revive', resourceType: 'Organization' },
 } as const satisfies Record<string, ActionDef>;
 
 export type ActionKey = keyof typeof ACTIONS;
@@ -68,5 +69,9 @@ export const EFFECTIVE_ADMIN_ACTIONS: readonly string[] = [
 export const ADMIN_SEED_ACTIONS: readonly string[] = [
   'invite:create',
   'invite:retire',
+  // `*:revive` actions are seeded with global-scoped Admin grants by default
+  // (docs/slices/02 action vocabulary); narrower revive authority is delegated
+  // via the matrix. Slice 2 seeds role/division/team revive.
+  'role:revive',
   ...EFFECTIVE_ADMIN_ACTIONS,
 ];

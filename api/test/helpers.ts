@@ -1,6 +1,7 @@
 /* eslint-disable */
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
@@ -125,4 +126,69 @@ export function cookieValue(setCookie: string[] | undefined, name: string): stri
 export function cookieHeader(setCookie: string[] | undefined): string {
   if (!setCookie) return '';
   return setCookie.map((c) => c.split(';')[0]).join('; ');
+}
+
+export interface AdminSession {
+  cookies: string;
+  csrf: string;
+}
+
+/**
+ * Redeem the bootstrap invite to mint the first effective admin and return its
+ * session artefacts (cookie header + CSRF token). The shared starting point for
+ * every Slice 2+ test that needs an authenticated admin.
+ */
+export async function bootstrapAdmin(
+  booted: BootedApp,
+  email = 'admin@example.com',
+): Promise<AdminSession> {
+  const http = () => request(booted.app.getHttpServer());
+  const status = await http().get('/bootstrap');
+  const token = status.body.inviteToken as string;
+  const res = await http()
+    .post(`/invite/${token}/accept`)
+    .send({
+      passcode: booted.bootstrapKey,
+      email,
+      password: 'correct horse battery',
+      displayName: 'Admin',
+    });
+  const setCookie = res.headers['set-cookie'] as unknown as string[];
+  return {
+    cookies: cookieHeader(setCookie),
+    csrf: cookieValue(setCookie, 'patrice_csrf')!,
+  };
+}
+
+/**
+ * Create a second user via an admin-issued invite, optionally pre-assigning roles,
+ * and return its session. Used by membership/scope tests.
+ */
+export async function inviteAndAccept(
+  booted: BootedApp,
+  admin: AdminSession,
+  opts: { email: string; intendedRoleIds?: string[] },
+): Promise<{ userId: string; session: AdminSession }> {
+  const http = () => request(booted.app.getHttpServer());
+  const created = await http()
+    .post('/invitations')
+    .set('Cookie', admin.cookies)
+    .set('x-csrf-token', admin.csrf)
+    .send({ email: opts.email, intendedRoleIds: opts.intendedRoleIds ?? [] });
+  const token = created.body.token as string;
+  const accepted = await http()
+    .post(`/invite/${token}/accept`)
+    .send({
+      email: opts.email,
+      password: 'correct horse battery',
+      displayName: opts.email.split('@')[0],
+    });
+  const setCookie = accepted.headers['set-cookie'] as unknown as string[];
+  return {
+    userId: accepted.body.id as string,
+    session: {
+      cookies: cookieHeader(setCookie),
+      csrf: cookieValue(setCookie, 'patrice_csrf')!,
+    },
+  };
 }

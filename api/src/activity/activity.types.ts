@@ -46,6 +46,12 @@ export const activityPayloadSchemas = {
       identityProvider: z.enum(['password', 'google']),
     })
     .strict(),
+
+  // Slice 2 — org configuration. IDs-only (no names/PII; render by joining at read).
+  'role.created': z.object({ roleId: uuid }).strict(),
+  'role.updated': z.object({ roleId: uuid }).strict(),
+  'role.retired': z.object({ roleId: uuid }).strict(),
+  'role.revived': z.object({ roleId: uuid }).strict(),
 } as const;
 
 export type ActivityVerb = keyof typeof activityPayloadSchemas;
