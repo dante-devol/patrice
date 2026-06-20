@@ -212,11 +212,15 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
         intendedRoleIds: [reviewerRole.body.id],
       });
 
+      // Self-review = reviewing a submission you AUTHORED, so the forbid keys off the
+      // reviewed submission's `claimant` (Slice 5), not the requester. This task carries
+      // the reviewer as the claimant of the submission under review.
       const ownTask = {
         type: 'Task' as const,
         id: '00000000-0000-7000-8000-000000000001',
         attrs: {
           requester: { __entity: { type: 'Patrice::User', id: userId } },
+          claimant: { __entity: { type: 'Patrice::User', id: userId } },
           retired: false,
         },
       };
@@ -230,7 +234,8 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
         type: 'Task' as const,
         id: '00000000-0000-7000-8000-000000000002',
         attrs: {
-          requester: { __entity: { type: 'Patrice::User', id: adminUserId } },
+          requester: { __entity: { type: 'Patrice::User', id: userId } },
+          claimant: { __entity: { type: 'Patrice::User', id: adminUserId } },
           retired: false,
         },
       };

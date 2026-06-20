@@ -13,7 +13,12 @@ import { UnauthenticatedError } from '../common/errors';
 import { Authorize, submissionResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { SubmissionsService } from './submissions.service';
-import { reviewSchema, type ReviewDto } from './submissions.dto';
+import {
+  retireSubmissionSchema,
+  reviewSchema,
+  type ReviewDto,
+  type RetireSubmissionDto,
+} from './submissions.dto';
 
 interface AuthedRequest extends Request {
   user?: { id: string; organizationId: string };
@@ -45,5 +50,17 @@ export class SubmissionsByIdController {
   ) {
     if (!req.user) throw new UnauthenticatedError();
     return this.submissions.review(id, req.user.id, body);
+  }
+
+  @Post('retire')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskRetireSubmission.action, submissionResource)
+  async retire(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(retireSubmissionSchema)) body: RetireSubmissionDto,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.submissions.retireSubmission(id, req.user.id, body);
   }
 }

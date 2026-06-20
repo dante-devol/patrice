@@ -138,6 +138,14 @@ export class TasksController {
     return this.tasks.changeRequester(id, req.user.id, body);
   }
 
+  @Post(':id/complete')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskComplete.action, taskResource)
+  async complete(@Param('id') id: string, @Req() req: AuthedRequest) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.tasks.complete(id, req.user.id);
+  }
+
   @Get(':id/questionnaire')
   async getQuestionnaire(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();

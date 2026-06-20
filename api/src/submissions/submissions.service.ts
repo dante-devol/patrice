@@ -20,7 +20,11 @@ import {
   AttachmentLookupPort,
   QuestionnaireDef,
 } from '../questionnaires/questionnaire.types';
-import { ReviewDto, SubmitDto } from './submissions.dto';
+import {
+  ReviewDto,
+  RetireSubmissionDto,
+  SubmitDto,
+} from './submissions.dto';
 
 /** Decision → the resulting submission state + the past-tense word for the audit. */
 const DECISION_OUTCOME: Readonly<
@@ -394,6 +398,103 @@ export class SubmissionsService {
           submissionId,
           decision: dto.decision,
           statusCache: status,
+        },
+      });
+    });
+
+    return this.get(submissionId);
+  }
+
+  /**
+   * Retire a submission (`task:retire_submission`, requester own-family). Requires a
+   * 5..500-char reason (enforced at the DTO). In one transaction: writes a **task-level
+   * audit message** (`submission_id=NULL` so it survives submission GC), soft-retires
+   * the submission, **cascade-retires** its M1 + every reply (`submission_id=sub.id`),
+   * reverts the claimant slot (`has_submitted=false` → claimable again), recomputes
+   * `status_cache`, and logs the org-level `submission.retired` activity.
+   */
+  async retireSubmission(
+    submissionId: string,
+    actorUserId: string,
+    dto: RetireSubmissionDto,
+  ): Promise<SubmissionView> {
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: submissionId },
+      select: {
+        id: true,
+        taskId: true,
+        submissionNo: true,
+        claimantUserId: true,
+        lifecycleState: true,
+        task: { select: { organizationId: true } },
+      },
+    });
+    if (!submission) {
+      throw new NotFoundError('SUBMISSION_NOT_FOUND', 'Submission not found');
+    }
+    if (submission.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('ALREADY_RETIRED', 'Submission is already retired');
+    }
+
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Task-level audit message — submission_id NULL so the cascade (step 3) and
+      //    submission GC both leave it standing.
+      await tx.message.create({
+        data: {
+          taskId: submission.taskId,
+          kind: 'system',
+          senderUserId: null,
+          submissionId: null,
+          parentMessageId: null,
+          body: JSON.stringify({
+            verb: 'submission_retired',
+            submissionNo: submission.submissionNo,
+            claimantUserId: submission.claimantUserId,
+            retiredBy: actorUserId,
+            reason: dto.reason,
+          }),
+        },
+      });
+
+      // 2. Soft-retire the submission row.
+      await tx.submission.update({
+        where: { id: submissionId },
+        data: {
+          lifecycleState: LifecycleState.retired,
+          retiredAt: now,
+          version: { increment: 1 },
+        },
+      });
+
+      // 3. Cascade — soft-retire M1 + every reply bound to this submission's thread.
+      await tx.message.updateMany({
+        where: { submissionId, lifecycleState: LifecycleState.active },
+        data: { lifecycleState: LifecycleState.retired, retiredAt: now },
+      });
+
+      // 4. Revert the claimant slot — the spot is claimable again.
+      await tx.taskClaimant.updateMany({
+        where: { taskId: submission.taskId, userId: submission.claimantUserId },
+        data: { hasSubmitted: false },
+      });
+
+      // 5. Recompute status.
+      await this.status.recompute(tx, submission.taskId);
+
+      // 6. Org-level audit (distinct from the task-thread audit message in step 1).
+      await this.activity.logActivity({
+        tx,
+        organizationId: submission.task.organizationId,
+        actorUserId,
+        subjectType: 'submission',
+        subjectId: submissionId,
+        verb: 'submission.retired',
+        payload: {
+          taskId: submission.taskId,
+          submissionId,
+          claimantUserId: submission.claimantUserId,
+          reason: dto.reason,
         },
       });
     });

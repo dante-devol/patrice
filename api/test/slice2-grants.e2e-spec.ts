@@ -71,9 +71,11 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   });
 
   it('rejects a structurally impossible action/scope combo at 422 (own with no owner)', async () => {
+    // config:update targets the singleton org and has no ownership relation, so an
+    // `own` scope cannot project. (task:review IS own-scopable — own_as_requester.)
     const res = await auth(http().post('/api/grants')).send({
       roleId: leadRoleId,
-      action: 'task:review',
+      action: 'config:update',
       scopeKind: 'own',
     });
     expect(res.status).toBe(422);

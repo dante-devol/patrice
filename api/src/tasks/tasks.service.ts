@@ -483,6 +483,37 @@ export class TasksService {
     });
   }
 
+  /**
+   * Manually complete a task (`task:complete`, the **Manual Complete** bypass): force
+   * `status_cache` to `approved` regardless of slot/submission state. Outstanding
+   * submissions are left in place (the UI surfaces them as no longer required). Emits a
+   * system message + activity row.
+   */
+  async complete(taskId: string, actorUserId: string): Promise<TaskView> {
+    const task = await this.loadActiveTask(taskId);
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.task.update({
+        where: { id: taskId },
+        data: { statusCache: StatusCache.approved, version: { increment: 1 } },
+      });
+      await this.messages.createSystemMessage(
+        tx,
+        taskId,
+        `User ${actorUserId} marked this task complete.`,
+      );
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId,
+        subjectType: 'task',
+        subjectId: taskId,
+        verb: 'task.completed',
+        payload: { taskId, statusCache: StatusCache.approved },
+      });
+      return this.toView(row);
+    });
+  }
+
   /** Reassign the requester (`task:change_requester`). New requester must be active. */
   async changeRequester(
     taskId: string,
