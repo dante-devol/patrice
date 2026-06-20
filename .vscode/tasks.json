@@ -1,0 +1,129 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ─────────────────────────────────────────────────────────────────────────
+    // Path A — local dev (no Docker). Uses your local Postgres 18 + api/.env.
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      "label": "Dev: Start API + Web",
+      "detail": "Path A — launch both dev servers in their own terminals.",
+      "dependsOn": ["API: Start (dev)", "Web: Start (dev)"],
+      "dependsOrder": "parallel",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "API: Start (dev)",
+      "detail": "nest start --watch. Frees port 3000 first, then prints the BOOTSTRAP KEY.",
+      "type": "shell",
+      "command": "npm run start:dev",
+      "options": { "cwd": "${workspaceFolder}/api" },
+      "isBackground": true,
+      "dependsOn": ["Free port 3000"],
+      "presentation": { "panel": "dedicated", "group": "patrice-dev" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Free port 3000",
+      "detail": "Kill any leftover process holding the API port (fixes EADDRINUSE).",
+      "type": "shell",
+      "command": "npx --yes kill-port 3000",
+      "presentation": { "panel": "shared", "reveal": "silent", "close": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Free ports (3000 + 4200)",
+      "detail": "Kill leftover API (3000) and web (4200) dev servers.",
+      "type": "shell",
+      "command": "npx --yes kill-port 3000 4200",
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Web: Start (dev)",
+      "detail": "ng serve on http://localhost:4200 (proxies API calls to :3000).",
+      "type": "shell",
+      "command": "npm start",
+      "options": { "cwd": "${workspaceFolder}/web" },
+      "isBackground": true,
+      "presentation": { "panel": "dedicated", "group": "patrice-dev" },
+      "problemMatcher": []
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Database helpers (local, no Docker).
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      "label": "DB: Migrate (deploy)",
+      "detail": "Apply pending migrations to the patrice DB (from api/.env).",
+      "type": "shell",
+      "command": "npx prisma migrate deploy",
+      "options": { "cwd": "${workspaceFolder}/api" },
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "DB: Reset (DROPS DATA → fresh bootstrap key)",
+      "detail": "Wipe + re-migrate the patrice DB. Next API start prints a new bootstrap key.",
+      "type": "shell",
+      "command": "npx prisma migrate reset --force --skip-seed",
+      "options": { "cwd": "${workspaceFolder}/api" },
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // API-only checks.
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      "label": "API: e2e tests (acceptance suite)",
+      "detail": "Runs the Slice 1 acceptance suite against the patrice_test DB.",
+      "type": "shell",
+      "command": "npm run test:e2e",
+      "options": { "cwd": "${workspaceFolder}/api" },
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "API: Smoke check (health + bootstrap)",
+      "detail": "Curl /health and /bootstrap on a running API (:3000).",
+      "type": "shell",
+      "command": "curl -s http://localhost:3000/health && echo \"\" && curl -s http://localhost:3000/bootstrap && echo \"\"",
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Path B — full stack via Docker (includes Mailpit for email capture).
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      "label": "Docker: Up (build full stack)",
+      "detail": "Path B — db + mailpit + api + web. Web http://localhost:8080, Mailpit :8025.",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": { "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Down",
+      "detail": "Stop and remove the Docker stack (keeps the DB volume).",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Down + wipe volume",
+      "detail": "Stop the stack and delete the DB volume (next up gets a fresh bootstrap key).",
+      "type": "shell",
+      "command": "docker compose down -v",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}

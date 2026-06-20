@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "*",
-      "PowerShell($env:TEMP)"
-    ]
-  }
-}
