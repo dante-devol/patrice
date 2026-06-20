@@ -127,3 +127,58 @@ export interface CreatedInvitation {
 export interface ApiError {
   error: { code: string; message: string; details?: unknown };
 }
+
+// ---- Slice 3: questionnaires --------------------------------------------
+
+export type QuestionType =
+  | 'detail_text'
+  | 'multiline'
+  | 'text'
+  | 'numeric'
+  | 'dropdown'
+  | 'radio'
+  | 'attachment';
+
+export interface ChoiceOption {
+  value: string;
+  label: string;
+}
+
+/** Per-type constraint bag — only the keys relevant to a question's type are set. */
+export interface QuestionConstraints {
+  maxChars?: number;
+  minChars?: number;
+  kind?: 'integer' | 'float';
+  min?: number;
+  max?: number;
+  multi?: boolean;
+  options?: ChoiceOption[];
+  minSelect?: number;
+  maxSelect?: number;
+  allowedTypes?: string[];
+  maxBytes?: number;
+  maxFiles?: number;
+}
+
+export interface Question {
+  id?: string;
+  ordinal?: number;
+  type: QuestionType;
+  prompt: string;
+  required: boolean;
+  constraints: QuestionConstraints;
+}
+
+/** PUT body element — server derives `ordinal` from array order. */
+export interface QuestionInput {
+  type: QuestionType;
+  prompt: string;
+  required: boolean;
+  constraints: QuestionConstraints;
+}
+
+export interface Questionnaire {
+  id: string;
+  ownerDivisionId: string | null;
+  questions: Question[];
+}

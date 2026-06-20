@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -11,6 +11,8 @@ import {
   InvitationListItem,
   InviteView,
   OrgSettings,
+  Questionnaire,
+  QuestionInput,
   Role,
   ScopeKind,
   Team,
@@ -177,6 +179,31 @@ export class ApiService {
   }
   reactivateUser(userId: string): Promise<void> {
     return firstValueFrom(this.http.post<void>(`/api/users/${userId}/reactivate`, {}));
+  }
+
+  // ---- Slice 3: questionnaires -------------------------------------------
+
+  /** A division's default questionnaire, or null when it has none yet (404). */
+  async getQuestionnaire(divisionId: string): Promise<Questionnaire | null> {
+    try {
+      return await firstValueFrom(
+        this.http.get<Questionnaire>(`/api/divisions/${divisionId}/questionnaire`),
+      );
+    } catch (e) {
+      if (e instanceof HttpErrorResponse && e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  putQuestionnaire(
+    divisionId: string,
+    questions: QuestionInput[],
+  ): Promise<Questionnaire> {
+    return firstValueFrom(
+      this.http.put<Questionnaire>(`/api/divisions/${divisionId}/questionnaire`, {
+        questions,
+      }),
+    );
   }
 
   getConfig(): Promise<OrgSettings> {

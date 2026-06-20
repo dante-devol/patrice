@@ -3,12 +3,13 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { Division } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
+import { QuestionnaireBuilderComponent } from '../../features/questionnaire/questionnaire-builder.component';
 
 /** Divisions editor (Slice 2.2): name, default openings, openings-locked, restrict-claims. */
 @Component({
   selector: 'divisions-admin',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, QuestionnaireBuilderComponent],
   template: `
     <div class="panel">
       <h2>Divisions</h2>
@@ -35,6 +36,9 @@ import { errorMessage } from '../../core/errors';
                          (change)="save(d, { restrictClaims: d.restrictClaims })" /></td>
               <td>{{ d.lifecycleState }}</td>
               <td>
+                <button class="secondary" (click)="toggleQuestionnaire(d.id)">
+                  {{ openQuestionnaire() === d.id ? 'Hide questionnaire' : 'Questionnaire' }}
+                </button>
                 @if (d.lifecycleState === 'active') {
                   <button class="secondary" (click)="retire(d)">Retire</button>
                 } @else if (d.lifecycleState === 'retired') {
@@ -42,6 +46,9 @@ import { errorMessage } from '../../core/errors';
                 }
               </td>
             </tr>
+            @if (openQuestionnaire() === d.id) {
+              <tr><td colspan="6"><questionnaire-builder [divisionId]="d.id" /></td></tr>
+            }
           } @empty { <tr><td colspan="6" class="muted">No divisions.</td></tr> }
         </tbody>
       </table>
@@ -53,7 +60,13 @@ export class DivisionsAdminComponent {
   readonly divisions = signal<Division[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+  /** Id of the division whose questionnaire builder is expanded (one at a time). */
+  readonly openQuestionnaire = signal<string | null>(null);
   newName = '';
+
+  toggleQuestionnaire(id: string): void {
+    this.openQuestionnaire.update((cur) => (cur === id ? null : id));
+  }
 
   constructor() {
     void this.refresh();

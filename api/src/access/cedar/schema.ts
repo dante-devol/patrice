@@ -32,6 +32,9 @@ function actionDecls(): string {
  */
 export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
   entity Division {
+    // Self-reference so a 'specific_division'/'own_division' scope on a
+    // division-targeted action (division:update) can match resource.division.
+    division?: Division,
     restrictClaims?: Bool,
     retired?: Bool
   };

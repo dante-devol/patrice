@@ -70,6 +70,16 @@ enum ActivitySource {
   system
 }
 
+enum QuestionType {
+  detail_text
+  multiline
+  text
+  numeric
+  dropdown
+  radio
+  attachment
+}
+
 model Organization {
   id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   name          String
@@ -82,11 +92,12 @@ model Organization {
 
   users       AppUser[]
   invitations Invitation[]
-  roles       Role[]
-  grants      Grant[]
-  activities  Activity[]
-  divisions   Division[]
-  teams       Team[]
+  roles          Role[]
+  grants         Grant[]
+  activities     Activity[]
+  divisions      Division[]
+  teams          Team[]
+  questionnaires Questionnaire[]
 
   @@unique([singleton])
   @@map("organization")
@@ -108,6 +119,8 @@ model Division {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   // The atomically-created inherent role (kind='division'); UNIQUE role.division_id.
   inherentRole Role?
+  // The division's default questionnaire (0..1); UNIQUE questionnaire.owner_division_id.
+  questionnaire Questionnaire?
 
   @@index([organizationId])
   @@map("division")
@@ -324,4 +337,48 @@ model Activity {
   @@index([subjectType, subjectId, createdAt])
   @@index([createdAt])
   @@map("activity")
+}
+
+/// The always-present "ask" a task carries (Slice 3). A questionnaire is owned by
+/// **exactly one** of a division (the default) or a task (a per-task copy, Slice 4).
+/// Ownership exclusivity is schema-enforced (each owner column UNIQUE + a CHECK that
+/// exactly one is non-null — both hand-applied in the migration). `owner_task_id` is
+/// a bare column for now; its FK to `task` lands in Slice 4 with the task table.
+model Questionnaire {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  ownerDivisionId String?  @unique @map("owner_division_id") @db.Uuid
+  ownerTaskId     String?  @unique @map("owner_task_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ownerDivision Division?    @relation(fields: [ownerDivisionId], references: [id], onDelete: Restrict)
+  questions     Question[]
+
+  @@index([organizationId])
+  @@map("questionnaire")
+}
+
+/// One typed prompt in a questionnaire. `ordinal` orders the set (UNIQUE per
+/// questionnaire); `constraints` is the per-type quality bag (numeric range,
+/// options, allowed filetypes, char limits) — shape validated at the API boundary.
+/// Children of their questionnaire aggregate: ON DELETE CASCADE so a PUT can
+/// rewrite the question set in place.
+model Question {
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  questionnaireId String       @map("questionnaire_id") @db.Uuid
+  ordinal         Int
+  type            QuestionType
+  prompt          String
+  required        Boolean      @default(false)
+  constraints     Json         @default("{}")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  questionnaire Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+
+  @@unique([questionnaireId, ordinal])
+  @@index([questionnaireId])
+  @@map("question")
 }

@@ -16,7 +16,7 @@ import {
 } from '../access/cedar/policies';
 
 /** Resource types whose entities carry a `division`/`team` (group-scopable). */
-const GROUP_SCOPABLE = new Set(['Task', 'Message', 'Attachment']);
+const GROUP_SCOPABLE = new Set(['Task', 'Message', 'Attachment', 'Division']);
 /** Resource types whose entities carry a `targetRole` (role-scope). */
 const ROLE_SCOPABLE = new Set(['User']);
 import { ConflictError, NotFoundError, ValidationError } from '../common/errors';
