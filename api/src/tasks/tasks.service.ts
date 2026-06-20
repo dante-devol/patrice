@@ -5,6 +5,7 @@ import { ActivityService } from '../activity/activity.service';
 import { MessagesService } from '../messages/messages.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { computeStatusCache } from './task-status';
+import { TaskStatusService } from './task-status.service';
 import {
   ChangeRequesterDto,
   CreateTaskDto,
@@ -49,6 +50,7 @@ export class TasksService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly messages: MessagesService,
+    private readonly status: TaskStatusService,
   ) {}
 
   private toView(t: {
@@ -299,28 +301,15 @@ export class TasksService {
   }
 
   /**
-   * Recompute and persist `status_cache` from the task's current openings, closed
-   * flag, and active claimant count (Slice 4 subset). Runs inside the caller's tx so
-   * the status moves atomically with the claim/leave/openings change that triggered it.
+   * Recompute and persist `status_cache` via the full Status Min-Rule (Slice 5),
+   * which also accounts for claimant submissions. Runs inside the caller's tx so the
+   * status moves atomically with the claim/leave/openings change that triggered it.
    */
-  private async recomputeStatus(
+  private recomputeStatus(
     tx: Prisma.TransactionClient,
     taskId: string,
   ): Promise<StatusCache> {
-    const task = await tx.task.findUniqueOrThrow({
-      where: { id: taskId },
-      select: { openings: true, claimsClosed: true },
-    });
-    const activeClaimants = await tx.taskClaimant.count({
-      where: { taskId, leftAt: null },
-    });
-    const status = computeStatusCache({
-      activeClaimants,
-      openings: task.openings,
-      claimsClosed: task.claimsClosed,
-    }) as StatusCache;
-    await tx.task.update({ where: { id: taskId }, data: { statusCache: status } });
-    return status;
+    return this.status.recompute(tx, taskId);
   }
 
   /** Load an active (non-retired) task or throw 404/409. */
@@ -489,6 +478,37 @@ export class TasksService {
           claimsClosed: row.claimsClosed,
           statusCache: status,
         },
+      });
+      return this.toView(row);
+    });
+  }
+
+  /**
+   * Manually complete a task (`task:complete`, the **Manual Complete** bypass): force
+   * `status_cache` to `approved` regardless of slot/submission state. Outstanding
+   * submissions are left in place (the UI surfaces them as no longer required). Emits a
+   * system message + activity row.
+   */
+  async complete(taskId: string, actorUserId: string): Promise<TaskView> {
+    const task = await this.loadActiveTask(taskId);
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.task.update({
+        where: { id: taskId },
+        data: { statusCache: StatusCache.approved, version: { increment: 1 } },
+      });
+      await this.messages.createSystemMessage(
+        tx,
+        taskId,
+        `User ${actorUserId} marked this task complete.`,
+      );
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId,
+        subjectType: 'task',
+        subjectId: taskId,
+        verb: 'task.completed',
+        payload: { taskId, statusCache: StatusCache.approved },
       });
       return this.toView(row);
     });

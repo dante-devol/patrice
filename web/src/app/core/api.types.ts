@@ -253,3 +253,38 @@ export interface MessageListResult {
   items: Message[];
   nextCursor: string | null;
 }
+
+// ---- Slice 5: submissions & review lifecycle ----------------------------
+
+export type SubmissionState = 'review' | 'revising' | 'approved' | 'rejected';
+
+export interface AnswerView {
+  id: string;
+  questionId: string;
+  value: unknown;
+  attachmentIds: string[];
+}
+
+export interface Submission {
+  id: string;
+  taskId: string;
+  claimantUserId: string;
+  submissionNo: number;
+  prevSubmissionId: string | null;
+  state: SubmissionState;
+  submittedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  lifecycleState: Lifecycle;
+  version: number;
+  answers: AnswerView[];
+}
+
+export type ReviewDecision = 'approve' | 'return' | 'reject';
+
+/** One submitted answer in a `task:submit` payload. */
+export interface SubmitAnswer {
+  questionId: string;
+  value?: string | number | string[] | null;
+  attachmentIds?: string[];
+}

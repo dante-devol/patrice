@@ -121,6 +121,87 @@ export const taskResource: ResourceResolver = async (req, prisma) => {
 };
 
 /**
+ * The task named by `:id` is the resource for `task:submit` — the actor is the
+ * `own_as_claimant` owner, so `claimant` is set to the actor **only when they hold an
+ * active slot** on the task. A non-claimant (or a claimant who has left) yields no
+ * `claimant` attr → the `own` submit grant can't match → Cedar 403. Carries
+ * division/team/retired like {@link taskResource}. 404 if the task is missing.
+ */
+export const taskSubmitResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      divisionId: true,
+      teamId: true,
+      lifecycleState: true,
+    },
+  });
+  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+  const user = (req as Request & { user?: { id: string } }).user;
+  const slot = user
+    ? await prisma.taskClaimant.findUnique({
+        where: { taskId_userId: { taskId: id, userId: user.id } },
+        select: { leftAt: true },
+      })
+    : null;
+  const isActiveClaimant = !!slot && slot.leftAt === null;
+  return {
+    type: 'Task',
+    id: task.id,
+    attrs: {
+      division: divisionEntity(task.divisionId),
+      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
+      ...(isActiveClaimant && user ? { claimant: userEntity(user.id) } : {}),
+      retired: task.lifecycleState === 'retired',
+    },
+  };
+};
+
+/**
+ * The submission named by `:id` resolves to its task as the resource — for
+ * `task:review` and `task:retire_submission` (own_as_requester). Carries `requester`
+ * (the own-family owner), `claimant` (the reviewed submission's author — drives the
+ * self-review forbid), division/team, and `retired` (Retired-as-Hard-Deny over a
+ * retired *task*; a retired submission is guarded in the service). 404 if missing.
+ */
+export const submissionResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const submission = await prisma.submission.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      claimantUserId: true,
+      task: {
+        select: {
+          id: true,
+          divisionId: true,
+          teamId: true,
+          requesterUserId: true,
+          lifecycleState: true,
+        },
+      },
+    },
+  });
+  if (!submission) {
+    throw new NotFoundError('SUBMISSION_NOT_FOUND', 'Submission not found');
+  }
+  const task = submission.task;
+  return {
+    type: 'Task',
+    id: task.id,
+    attrs: {
+      division: divisionEntity(task.divisionId),
+      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
+      requester: userEntity(task.requesterUserId),
+      claimant: userEntity(submission.claimantUserId),
+      retired: task.lifecycleState === 'retired',
+    },
+  };
+};
+
+/**
  * A **prospective** message is the resource for `message:create` — the task named by
  * `:id` supplies division/team (specific/own group scopes) and the actor is the
  * sender (own_as_sender). 404 if the task is missing.

@@ -1,5 +1,6 @@
 import { CedarEngine } from './engine';
-import { grantToPolicy, ProjectableGrant } from './policies';
+import { grantToPolicy, ProjectableGrant, staticPolicies } from './policies';
+import { ALL_ACTION_STRINGS } from '../actions';
 
 /**
  * Projection-level checks for the Slice 4 task grants — especially the Claim
@@ -64,5 +65,47 @@ describe('grantToPolicy — Slice 4 task scopes', () => {
     );
     expect(policy).toContain('resource.uploader == principal');
     expect(engine.validationErrors(policy)).toEqual([]);
+  });
+
+  it('projects task:submit @ own as a claimant-ownership clause', () => {
+    const policy = grantToPolicy(
+      baseGrant({ action: 'task:submit', scopeKind: 'own' }),
+    );
+    expect(policy).toContain('resource.claimant == principal');
+    expect(engine.validationErrors(policy)).toEqual([]);
+  });
+
+  it('projects task:review @ own as a requester-ownership clause', () => {
+    const policy = grantToPolicy(
+      baseGrant({ action: 'task:review', scopeKind: 'own' }),
+    );
+    expect(policy).toContain('resource.requester == principal');
+    expect(engine.validationErrors(policy)).toEqual([]);
+  });
+});
+
+describe('staticPolicies — self-review forbid (Slice 5)', () => {
+  const engine = new CedarEngine();
+
+  it('emits a claimant-keyed task:review forbid when self-review is disabled', () => {
+    const policies = staticPolicies({
+      selfReviewAllowed: false,
+      registeredActions: ALL_ACTION_STRINGS,
+    });
+    const forbid = policies.find((p) => p.includes('static_self_review_forbid'));
+    expect(forbid).toBeDefined();
+    // Keys off the reviewed submission's claimant — never the requester (which would
+    // wrongly block reviewing other claimants' work).
+    expect(forbid).toContain('resource.claimant == principal');
+    expect(forbid).not.toContain('resource.requester == principal');
+    expect(engine.parseErrors(forbid!)).toEqual([]);
+  });
+
+  it('omits the forbid when self-review is allowed', () => {
+    const policies = staticPolicies({
+      selfReviewAllowed: true,
+      registeredActions: ALL_ACTION_STRINGS,
+    });
+    expect(policies.some((p) => p.includes('static_self_review_forbid'))).toBe(false);
   });
 });
