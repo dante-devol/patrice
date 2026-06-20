@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
   AdminUser,
+  Attachment,
   BootstrapStatus,
   CreatedInvitation,
   CurrentUser,
@@ -10,11 +11,16 @@ import {
   Grant,
   InvitationListItem,
   InviteView,
+  Message,
+  MessageListResult,
   OrgSettings,
   Questionnaire,
   QuestionInput,
   Role,
   ScopeKind,
+  Task,
+  TaskFilters,
+  TaskListResult,
   Team,
 } from './api.types';
 
@@ -211,5 +217,120 @@ export class ApiService {
   }
   updateConfig(body: Partial<OrgSettings>): Promise<OrgSettings> {
     return firstValueFrom(this.http.patch<OrgSettings>('/api/config', body));
+  }
+
+  // ---- Slice 4: tasks -----------------------------------------------------
+
+  listTasks(
+    filters: TaskFilters = {},
+    opts: { after?: string; limit?: number } = {},
+  ): Promise<TaskListResult> {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v) params.set(k, v);
+    }
+    if (opts.after) params.set('after', opts.after);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return firstValueFrom(
+      this.http.get<TaskListResult>(`/api/tasks${qs ? `?${qs}` : ''}`),
+    );
+  }
+
+  getTask(id: string): Promise<Task> {
+    return firstValueFrom(this.http.get<Task>(`/api/tasks/${id}`));
+  }
+
+  createTask(body: {
+    name: string;
+    description?: string;
+    divisionId: string;
+    teamId?: string;
+  }): Promise<Task> {
+    return firstValueFrom(this.http.post<Task>('/api/tasks', body));
+  }
+
+  updateTask(id: string, body: { name?: string; description?: string }): Promise<Task> {
+    return firstValueFrom(this.http.patch<Task>(`/api/tasks/${id}`, body));
+  }
+
+  retireTask(id: string): Promise<Task> {
+    return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/retire`, {}));
+  }
+
+  claimTask(id: string): Promise<Task> {
+    return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/claim`, {}));
+  }
+  leaveTask(id: string): Promise<Task> {
+    return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/leave`, {}));
+  }
+  manageClaims(
+    id: string,
+    body: { openingsDelta?: number; claimsClosed?: boolean },
+  ): Promise<Task> {
+    return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/claims`, body));
+  }
+  changeRequester(id: string, userId: string): Promise<Task> {
+    return firstValueFrom(
+      this.http.post<Task>(`/api/tasks/${id}/requester`, { userId }),
+    );
+  }
+
+  /** A task's own questionnaire copy, or null when absent (404). */
+  async getTaskQuestionnaire(taskId: string): Promise<Questionnaire | null> {
+    try {
+      return await firstValueFrom(
+        this.http.get<Questionnaire>(`/api/tasks/${taskId}/questionnaire`),
+      );
+    } catch (e) {
+      if (e instanceof HttpErrorResponse && e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  // ---- Slice 4: messages + attachments ------------------------------------
+
+  listMessages(
+    taskId: string,
+    opts: { after?: string; limit?: number } = {},
+  ): Promise<MessageListResult> {
+    const params = new URLSearchParams();
+    if (opts.after) params.set('after', opts.after);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return firstValueFrom(
+      this.http.get<MessageListResult>(
+        `/api/tasks/${taskId}/messages${qs ? `?${qs}` : ''}`,
+      ),
+    );
+  }
+
+  createMessage(
+    taskId: string,
+    body: { body: string; parentMessageId?: string },
+  ): Promise<Message> {
+    return firstValueFrom(
+      this.http.post<Message>(`/api/tasks/${taskId}/messages`, body),
+    );
+  }
+  updateMessage(id: string, body: string): Promise<Message> {
+    return firstValueFrom(this.http.patch<Message>(`/api/messages/${id}`, { body }));
+  }
+  retireMessage(id: string): Promise<Message> {
+    return firstValueFrom(this.http.post<Message>(`/api/messages/${id}/retire`, {}));
+  }
+
+  /** Upload a file against an existing message (multipart). */
+  uploadAttachment(messageId: string, file: File): Promise<Attachment> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return firstValueFrom(
+      this.http.post<Attachment>(`/api/messages/${messageId}/attachments`, form),
+    );
+  }
+
+  /** The ungated download URL for an attachment (use as an anchor href). */
+  attachmentUrl(id: string): string {
+    return `/api/attachments/${id}`;
   }
 }

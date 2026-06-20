@@ -30,6 +30,18 @@ export const routes: Routes = [
       import('./pages/invitations.component').then((m) => m.InvitationsComponent),
   },
   {
+    path: 'tasks',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/tasks/task-list.component').then((m) => m.TaskListComponent),
+  },
+  {
+    path: 'tasks/:id',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/tasks/task-detail.component').then((m) => m.TaskDetailComponent),
+  },
+  {
     path: 'admin',
     canActivate: [authGuard, adminGuard],
     loadComponent: () =>

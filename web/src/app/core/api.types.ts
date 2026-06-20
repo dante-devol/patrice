@@ -180,5 +180,76 @@ export interface QuestionInput {
 export interface Questionnaire {
   id: string;
   ownerDivisionId: string | null;
+  ownerTaskId: string | null;
   questions: Question[];
+}
+
+// ---- Slice 4: tasks, messages, attachments ------------------------------
+
+export type TaskStatus = 'open' | 'claimed' | 'review' | 'revising' | 'approved';
+
+export interface Task {
+  id: string;
+  name: string;
+  description: string;
+  divisionId: string;
+  teamId: string | null;
+  requesterUserId: string;
+  openings: number;
+  claimsClosed: boolean;
+  statusCache: TaskStatus | null;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskListResult {
+  items: Task[];
+  nextCursor: string | null;
+}
+
+/** Typed facets for the task list; each may be a single value (multi-value via the
+ *  `in:` API convention is not surfaced in the UI yet). */
+export interface TaskFilters {
+  division?: string;
+  team?: string;
+  status?: TaskStatus;
+  requester?: string;
+  claimant?: string;
+}
+
+export interface Attachment {
+  id: string;
+  messageId: string | null;
+  filename: string;
+  contentType: string;
+  byteSize: number;
+  kind: string;
+  uploaderUserId: string;
+  createdAt: string;
+}
+
+export type MessageKind = 'comment' | 'system';
+
+export interface Message {
+  id: string;
+  taskId: string;
+  kind: MessageKind;
+  senderUserId: string | null;
+  parentMessageId: string | null;
+  body: string;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  editedAt: string | null;
+  version: number;
+  createdAt: string;
+  attachments: Attachment[];
+  replies?: Message[];
+}
+
+export interface MessageListResult {
+  items: Message[];
+  nextCursor: string | null;
 }

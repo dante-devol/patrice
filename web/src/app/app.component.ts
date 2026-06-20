@@ -11,6 +11,7 @@ import { AuthStore } from './core/auth.store';
       <strong>Patrice</strong>
       @if (auth.isAuthenticated()) {
         <a routerLink="/home">Home</a>
+        <a routerLink="/tasks">Tasks</a>
         @if (auth.canInvite()) {
           <a routerLink="/invitations">Invitations</a>
         }
