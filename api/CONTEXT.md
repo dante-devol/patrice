@@ -86,6 +86,17 @@ _Avoid_: Retention Window, Soft-Delete TTL
 The permanent user-erasure operation. Keeps the `app_user` row (preserving FK validity) with `id` + `display_name` only; purges PII and satellites; auto-revokes invitations the user issued. Patrice's GDPR-style erasure path.
 _Avoid_: User Deletion, Account Removal
 
+### Questionnaires
+
+**Questionnaire Ownership Exclusivity**:
+A `questionnaire` row is owned by **exactly one** of a division (`owner_division_id`) or
+a task (`owner_task_id`) — each column UNIQUE, with a CHECK that exactly one is non-null.
+The schema is the backstop behind "editing a division default never mutates existing
+tasks": a task copy is always a separate row. `PUT /divisions/:id/questionnaire` is
+**upsert-in-place** — first call inserts the division-owned row, later calls rewrite the
+`question` children under the same stable id (the UNIQUE prevents a sibling).
+_Avoid_: Default Questionnaire Link (there is no `division.default_questionnaire_id`)
+
 ### Cross-cutting
 
 **Config Version**:
