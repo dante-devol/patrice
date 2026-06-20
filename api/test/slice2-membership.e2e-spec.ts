@@ -34,9 +34,9 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
     prisma = new PrismaClient();
     access = app.get(AccessService);
 
-    const me = await http().get('/me').set('Cookie', admin.cookies);
+    const me = await http().get('/api/me').set('Cookie', admin.cookies);
     adminUserId = me.body.id;
-    const lead = await auth(http().post('/roles')).send({ name: 'WritingLead' });
+    const lead = await auth(http().post('/api/roles')).send({ name: 'WritingLead' });
     leadRoleId = lead.body.id;
   });
 
@@ -53,7 +53,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
     const { userId } = await inviteAndAccept(booted, admin, {
       email: 'member@example.com',
     });
-    const res = await auth(http().post(`/users/${userId}/roles`)).send({
+    const res = await auth(http().post(`/api/users/${userId}/roles`)).send({
       roleId: leadRoleId,
     });
     expect(res.status).toBe(204);
@@ -63,21 +63,21 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
     expect(ur).toBeTruthy();
 
     // Revoke it again.
-    const del = await auth(http().delete(`/users/${userId}/roles/${leadRoleId}`));
+    const del = await auth(http().delete(`/api/users/${userId}/roles/${leadRoleId}`));
     expect(del.status).toBe(204);
   });
 
   it('grant is refused when the granted role exceeds the actor’s grantable set (403)', async () => {
     // A delegated user with user:grant_role scoped to ONLY leadRole.
-    const delegateRole = await auth(http().post('/roles')).send({ name: 'Delegate' });
+    const delegateRole = await auth(http().post('/api/roles')).send({ name: 'Delegate' });
     const delegateRoleId = delegateRole.body.id;
-    await auth(http().post('/grants')).send({
+    await auth(http().post('/api/grants')).send({
       roleId: delegateRoleId,
       action: 'user:grant_role',
       scopeKind: 'role',
       scopeRoleId: leadRoleId,
     });
-    const otherRole = await auth(http().post('/roles')).send({ name: 'OtherRole' });
+    const otherRole = await auth(http().post('/api/roles')).send({ name: 'OtherRole' });
 
     const { userId: delegateUserId, session: delegateSession } =
       await inviteAndAccept(booted, admin, {
@@ -90,7 +90,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
 
     // The delegate may grant leadRole…
     const ok = await http()
-      .post(`/users/${targetId}/roles`)
+      .post(`/api/users/${targetId}/roles`)
       .set('Cookie', delegateSession.cookies)
       .set('x-csrf-token', delegateSession.csrf)
       .send({ roleId: leadRoleId });
@@ -98,7 +98,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
 
     // …but NOT otherRole (outside its grantable set).
     const denied = await http()
-      .post(`/users/${targetId}/roles`)
+      .post(`/api/users/${targetId}/roles`)
       .set('Cookie', delegateSession.cookies)
       .set('x-csrf-token', delegateSession.csrf)
       .send({ roleId: otherRole.body.id });
@@ -112,7 +112,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
         select: { id: true },
       });
       const res = await auth(
-        http().delete(`/users/${adminUserId}/roles/${adminRole.id}`),
+        http().delete(`/api/users/${adminUserId}/roles/${adminRole.id}`),
       );
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('LAST_ADMIN');
@@ -130,7 +130,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
     });
 
     it('deactivating the last admin is refused with 409 LAST_ADMIN', async () => {
-      const res = await auth(http().post(`/users/${adminUserId}/deactivate`));
+      const res = await auth(http().post(`/api/users/${adminUserId}/deactivate`));
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('LAST_ADMIN');
     });
@@ -140,7 +140,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
         where: { name: 'Admin', kind: 'standalone' },
         select: { id: true },
       });
-      const res = await auth(http().post(`/roles/${adminRole.id}/retire`));
+      const res = await auth(http().post(`/api/roles/${adminRole.id}/retire`));
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('LAST_ADMIN');
     });
@@ -189,7 +189,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
 
   describe('organization.settings editor', () => {
     it('GET /config returns defaults', async () => {
-      const res = await auth(http().get('/config'));
+      const res = await auth(http().get('/api/config'));
       expect(res.status).toBe(200);
       expect(res.body.selfReviewAllowed).toBe(false);
       expect(res.body.sessionAbsoluteDays).toBe(30);
@@ -199,10 +199,10 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
       // Seed a task:review grant + a requester-owned task so the self-review
       // forbid is observable: with selfReviewAllowed=false the requester is denied
       // reviewing their own task; flipping to true permits it.
-      const reviewerRole = await auth(http().post('/roles')).send({
+      const reviewerRole = await auth(http().post('/api/roles')).send({
         name: 'Reviewer',
       });
-      await auth(http().post('/grants')).send({
+      await auth(http().post('/api/grants')).send({
         roleId: reviewerRole.body.id,
         action: 'task:review',
         scopeKind: 'global',
@@ -242,7 +242,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
         await access.decide({ userId, action: 'task:review', resource: ownTask }),
       ).toBe(false);
 
-      const patch = await auth(http().patch('/config')).send({
+      const patch = await auth(http().patch('/api/config')).send({
         selfReviewAllowed: true,
       });
       expect(patch.status).toBe(200);
@@ -260,15 +260,15 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
     });
 
     it('flipping requireVerifiedEmailToLogIn does NOT invalidate existing sessions', async () => {
-      await auth(http().patch('/config')).send({
+      await auth(http().patch('/api/config')).send({
         requireVerifiedEmailToLogIn: true,
       });
-      const me = await http().get('/me').set('Cookie', admin.cookies);
+      const me = await http().get('/api/me').set('Cookie', admin.cookies);
       expect(me.status).toBe(200); // admin's existing session still valid
     });
 
     it('PATCH /config rejects an unknown field with 422', async () => {
-      const res = await auth(http().patch('/config')).send({ bogus: true });
+      const res = await auth(http().patch('/api/config')).send({ bogus: true });
       expect(res.status).toBe(422);
     });
   });

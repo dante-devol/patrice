@@ -35,12 +35,12 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
     prisma = new PrismaClient();
     access = app.get(AccessService);
 
-    const w = await auth(http().post('/divisions')).send({ name: 'Writing' });
+    const w = await auth(http().post('/api/divisions')).send({ name: 'Writing' });
     writingId = w.body.id;
     writingRoleId = w.body.inherentRoleId;
-    const a = await auth(http().post('/divisions')).send({ name: 'Art' });
+    const a = await auth(http().post('/api/divisions')).send({ name: 'Art' });
     artId = a.body.id;
-    const lead = await auth(http().post('/roles')).send({ name: 'WritingLead' });
+    const lead = await auth(http().post('/api/roles')).send({ name: 'WritingLead' });
     leadRoleId = lead.body.id;
   });
 
@@ -54,7 +54,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
     r.set('Cookie', admin.cookies).set('x-csrf-token', admin.csrf);
 
   it('GET /actions exposes the full closed vocabulary', async () => {
-    const res = await auth(http().get('/actions'));
+    const res = await auth(http().get('/api/actions'));
     expect(res.status).toBe(200);
     expect(res.body.actions).toEqual(
       expect.arrayContaining(['task:review', 'grant:create', 'config:update']),
@@ -62,7 +62,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   });
 
   it('rejects an unknown action with 422', async () => {
-    const res = await auth(http().post('/grants')).send({
+    const res = await auth(http().post('/api/grants')).send({
       roleId: leadRoleId,
       action: 'task:teleport',
       scopeKind: 'global',
@@ -71,7 +71,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   });
 
   it('rejects a structurally impossible action/scope combo at 422 (own with no owner)', async () => {
-    const res = await auth(http().post('/grants')).send({
+    const res = await auth(http().post('/api/grants')).send({
       roleId: leadRoleId,
       action: 'task:review',
       scopeKind: 'own',
@@ -80,7 +80,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   });
 
   it('rejects scoping a governance action by division at 422 (schema validation)', async () => {
-    const res = await auth(http().post('/grants')).send({
+    const res = await auth(http().post('/api/grants')).send({
       roleId: leadRoleId,
       action: 'grant:create',
       scopeKind: 'specific_division',
@@ -98,7 +98,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
     });
     configVersionBefore = org.configVersion;
 
-    const res = await auth(http().post('/grants')).send({
+    const res = await auth(http().post('/api/grants')).send({
       roleId: leadRoleId,
       action: 'task:review',
       scopeKind: 'own_division',
@@ -154,7 +154,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   });
 
   it('retiring the grant removes it from projection (member no longer passes)', async () => {
-    const res = await auth(http().post(`/grants/${grantId}/retire`));
+    const res = await auth(http().post(`/api/grants/${grantId}/retire`));
     expect(res.status).toBe(201);
 
     const user = await prisma.appUser.findFirstOrThrow({
@@ -177,7 +177,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   });
 
   it('reviving the grant restores it', async () => {
-    const res = await auth(http().post(`/grants/${grantId}/revive`));
+    const res = await auth(http().post(`/api/grants/${grantId}/revive`));
     expect(res.status).toBe(201);
     const user = await prisma.appUser.findFirstOrThrow({
       where: { email: 'lead@example.com' },

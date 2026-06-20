@@ -88,6 +88,8 @@ export async function bootApp(options: BootOptions = {}): Promise<BootedApp> {
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication();
   app.use(cookieParser());
+  // Mirror main.ts: every route is served under the /api/* prefix.
+  app.setGlobalPrefix('api');
 
   const logs: string[] = [];
   const original = console.log.bind(console);
@@ -143,10 +145,10 @@ export async function bootstrapAdmin(
   email = 'admin@example.com',
 ): Promise<AdminSession> {
   const http = () => request(booted.app.getHttpServer());
-  const status = await http().get('/bootstrap');
+  const status = await http().get('/api/bootstrap');
   const token = status.body.inviteToken as string;
   const res = await http()
-    .post(`/invite/${token}/accept`)
+    .post(`/api/invite/${token}/accept`)
     .send({
       passcode: booted.bootstrapKey,
       email,
@@ -171,13 +173,13 @@ export async function inviteAndAccept(
 ): Promise<{ userId: string; session: AdminSession }> {
   const http = () => request(booted.app.getHttpServer());
   const created = await http()
-    .post('/invitations')
+    .post('/api/invitations')
     .set('Cookie', admin.cookies)
     .set('x-csrf-token', admin.csrf)
     .send({ email: opts.email, intendedRoleIds: opts.intendedRoleIds ?? [] });
   const token = created.body.token as string;
   const accepted = await http()
-    .post(`/invite/${token}/accept`)
+    .post(`/api/invite/${token}/accept`)
     .send({
       email: opts.email,
       password: 'correct horse battery',

@@ -36,19 +36,19 @@ describe('Slice 2.1 — Roles CRUD + Revive', () => {
   let roleId: string;
 
   it('creates a standalone role; it appears in GET /roles', async () => {
-    const res = await auth(http().post('/roles')).send({ name: 'WritingLead' });
+    const res = await auth(http().post('/api/roles')).send({ name: 'WritingLead' });
     expect(res.status).toBe(201);
     expect(res.body.kind).toBe('standalone');
     expect(res.body.lifecycleState).toBe('active');
     roleId = res.body.id;
 
-    const list = await auth(http().get('/roles'));
+    const list = await auth(http().get('/api/roles'));
     expect(list.status).toBe(200);
     expect(list.body.map((r: any) => r.name)).toContain('WritingLead');
   });
 
   it('PATCH /roles/:id updates the name', async () => {
-    const res = await auth(http().patch(`/roles/${roleId}`)).send({
+    const res = await auth(http().patch(`/api/roles/${roleId}`)).send({
       name: 'WritingLeadRenamed',
     });
     expect(res.status).toBe(200);
@@ -56,7 +56,7 @@ describe('Slice 2.1 — Roles CRUD + Revive', () => {
   });
 
   it('PATCH with any non-metadata field → 422', async () => {
-    const res = await auth(http().patch(`/roles/${roleId}`)).send({
+    const res = await auth(http().patch(`/api/roles/${roleId}`)).send({
       name: 'X',
       kind: 'division',
     });
@@ -64,18 +64,18 @@ describe('Slice 2.1 — Roles CRUD + Revive', () => {
   });
 
   it('retire then revive within grace → role returns to active', async () => {
-    const retire = await auth(http().post(`/roles/${roleId}/retire`));
+    const retire = await auth(http().post(`/api/roles/${roleId}/retire`));
     expect(retire.status).toBe(201);
     expect(retire.body.lifecycleState).toBe('retired');
 
-    const revive = await auth(http().post(`/roles/${roleId}/revive`));
+    const revive = await auth(http().post(`/api/roles/${roleId}/revive`));
     expect(revive.status).toBe(201);
     expect(revive.body.lifecycleState).toBe('active');
     expect(revive.body.retiredAt).toBeNull();
   });
 
   it('revive a non-retired role → 409 NOT_REVIVABLE', async () => {
-    const res = await auth(http().post(`/roles/${roleId}/revive`));
+    const res = await auth(http().post(`/api/roles/${roleId}/revive`));
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('NOT_REVIVABLE');
   });
@@ -107,11 +107,11 @@ describe('Slice 2.1 — Roles CRUD + Revive', () => {
 
   it('a non-admin (no grants) is denied POST /roles → 403', async () => {
     // Create a base user via invite, then attempt a role write.
-    const inv = await auth(http().post('/invitations')).send({
+    const inv = await auth(http().post('/api/invitations')).send({
       email: 'base-roles@example.com',
     });
     const token = inv.body.token as string;
-    const accepted = await http().post(`/invite/${token}/accept`).send({
+    const accepted = await http().post(`/api/invite/${token}/accept`).send({
       email: 'base-roles@example.com',
       password: 'correct horse battery',
       displayName: 'Base',
@@ -123,7 +123,7 @@ describe('Slice 2.1 — Roles CRUD + Revive', () => {
       .find(Boolean)!;
 
     const res = await http()
-      .post('/roles')
+      .post('/api/roles')
       .set('Cookie', cookies)
       .set('x-csrf-token', csrf)
       .send({ name: 'Nope' });
