@@ -13,6 +13,7 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { RolesModule } from './roles/roles.module';
 import { DivisionsModule } from './divisions/divisions.module';
 import { TeamsModule } from './teams/teams.module';
+import { GrantsModule } from './grants/grants.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -29,6 +30,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     RolesModule,
     DivisionsModule,
     TeamsModule,
+    GrantsModule,
   ],
   controllers: [HealthController],
   providers: [

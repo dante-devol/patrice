@@ -30,6 +30,7 @@ export class AdministrabilityService {
       WHERE u.organization_id = ${organizationId}::uuid
         AND u.lifecycle_state = 'active'
         AND r.lifecycle_state = 'active'
+        AND g.lifecycle_state = 'active'
         AND g.effect = 'permit'
         AND g.scope_kind = 'global'
         AND g.action = ANY(${EFFECTIVE_ADMIN_ACTIONS})

@@ -76,7 +76,11 @@ export class AccessService {
     const selfReviewAllowed = settings.selfReviewAllowed === true;
 
     const grants = await this.prisma.grant.findMany({
-      where: { organizationId: orgId, role: { lifecycleState: 'active' } },
+      where: {
+        organizationId: orgId,
+        lifecycleState: 'active',
+        role: { lifecycleState: 'active' },
+      },
       select: {
         id: true,
         roleId: true,

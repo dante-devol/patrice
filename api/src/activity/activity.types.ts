@@ -60,6 +60,10 @@ export const activityPayloadSchemas = {
   'team.updated': z.object({ teamId: uuid }).strict(),
   'team.retired': z.object({ teamId: uuid }).strict(),
   'team.revived': z.object({ teamId: uuid }).strict(),
+  'grant.created': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'grant.updated': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'grant.retired': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'grant.revived': z.object({ grantId: uuid, roleId: uuid }).strict(),
 } as const;
 
 export type ActivityVerb = keyof typeof activityPayloadSchemas;

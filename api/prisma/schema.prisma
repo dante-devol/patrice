@@ -293,6 +293,9 @@ model Grant {
   scopeDivisionId  String?     @map("scope_division_id") @db.Uuid
   scopeTeamId      String?     @map("scope_team_id") @db.Uuid
   scopeRoleId      String?     @map("scope_role_id") @db.Uuid
+  lifecycleState   LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt        DateTime?   @map("retired_at") @db.Timestamptz(6)
+  version          Int         @default(0)
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
