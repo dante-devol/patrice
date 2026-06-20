@@ -8,18 +8,18 @@ import { errorMessage } from '../../core/errors';
 const CELL_SCOPES: ScopeKind[] = ['global', 'own_division', 'own_team', 'own'];
 
 /**
- * Permission Matrix editor (Slice 2.3): a role × action grid. Each cell carries a
- * scope picker for the id-less Scope Shapes (global / own_division / own_team /
+ * Permissions editor (Slice 2.3): a role × action grid of grants. Each cell carries
+ * a scope picker for the id-less Scope Shapes (global / own_division / own_team /
  * own); targeted shapes (specific_division/team, role) are authored via the form
  * below, which also surfaces the API's validate-before-activate refusals inline.
  */
 @Component({
-  selector: 'matrix-admin',
+  selector: 'permissions-admin',
   standalone: true,
   imports: [FormsModule],
   template: `
     <div class="panel">
-      <h2>Permission Matrix</h2>
+      <h2>Permissions</h2>
       @if (error()) { <p class="error">{{ error() }}</p> }
       <div style="overflow:auto; max-height:60vh">
         <table>
@@ -93,7 +93,7 @@ const CELL_SCOPES: ScopeKind[] = ['global', 'own_division', 'own_team', 'own'];
     </div>
   `,
 })
-export class MatrixAdminComponent {
+export class PermissionsAdminComponent {
   readonly api = inject(ApiService);
   readonly cellScopes = CELL_SCOPES;
 
