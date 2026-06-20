@@ -46,6 +46,37 @@ export const activityPayloadSchemas = {
       identityProvider: z.enum(['password', 'google']),
     })
     .strict(),
+
+  // Slice 2 — org configuration. IDs-only (no names/PII; render by joining at read).
+  'role.created': z.object({ roleId: uuid }).strict(),
+  'role.updated': z.object({ roleId: uuid }).strict(),
+  'role.retired': z.object({ roleId: uuid }).strict(),
+  'role.revived': z.object({ roleId: uuid }).strict(),
+  'division.created': z.object({ divisionId: uuid }).strict(),
+  'division.updated': z.object({ divisionId: uuid }).strict(),
+  'division.retired': z.object({ divisionId: uuid }).strict(),
+  'division.revived': z.object({ divisionId: uuid }).strict(),
+  'team.created': z.object({ teamId: uuid }).strict(),
+  'team.updated': z.object({ teamId: uuid }).strict(),
+  'team.retired': z.object({ teamId: uuid }).strict(),
+  'team.revived': z.object({ teamId: uuid }).strict(),
+  'grant.created': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'grant.updated': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'grant.retired': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'grant.revived': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'user_role.granted': z.object({ userId: uuid, roleId: uuid }).strict(),
+  'user_role.revoked': z.object({ userId: uuid, roleId: uuid }).strict(),
+  'user.updated': z.object({ userId: uuid }).strict(),
+  'user.deactivated': z.object({ userId: uuid }).strict(),
+  'user.reactivated': z.object({ userId: uuid }).strict(),
+  'config.updated': z
+    .object({ changedKeys: z.array(z.string()) })
+    .strict(),
+  // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
+  // `subjectId` name the attempted target; the payload stays IDs-only.
+  'last_admin_refused': z
+    .object({ path: z.string(), subjectId: uuid })
+    .strict(),
 } as const;
 
 export type ActivityVerb = keyof typeof activityPayloadSchemas;

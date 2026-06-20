@@ -22,6 +22,9 @@ export const envSchema = z.object({
   ARGON2_MEMORY_COST: z.coerce.number().int().positive().optional(),
   ARGON2_TIME_COST: z.coerce.number().int().positive().optional(),
   ARGON2_PARALLELISM: z.coerce.number().int().positive().optional(),
+  // Restore window after `retired_at` during which Revive is allowed (and, in
+  // Slice 7, GC will not collect). A revive attempt past this window → 409.
+  RETIREMENT_GRACE_DAYS: z.coerce.number().int().positive().default(30),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cedar from '@cedar-policy/cedar-wasm/nodejs';
-import { CEDAR_NAMESPACE } from './schema';
+import { CEDAR_NAMESPACE, CEDAR_SCHEMA_TEXT } from './schema';
 
 export interface CedarUid {
   type: string;
@@ -37,6 +37,26 @@ export class CedarEngine {
     const ans = cedar.checkParsePolicySet({ staticPolicies: policiesText });
     if (ans.type === 'success') return [];
     return ans.errors.map((e) => e.message);
+  }
+
+  /**
+   * Schema-validate a policy set against the Patrice Cedar schema (strict mode).
+   * Used for **validate-before-activate** on grant writes: a projected grant whose
+   * action/scope combination is structurally impossible (e.g. scoping a governance
+   * action by division, or `own` on a resource with no owner relation) surfaces here
+   * as a validation error and is refused at the boundary before the row is written.
+   * Returns the error messages (empty = valid).
+   */
+  validationErrors(policiesText: string): string[] {
+    const parse = this.parseErrors(policiesText);
+    if (parse.length > 0) return parse;
+    const ans = cedar.validate({
+      validationSettings: { mode: 'strict' },
+      schema: CEDAR_SCHEMA_TEXT as unknown as cedar.Schema,
+      policies: { staticPolicies: policiesText },
+    });
+    if (ans.type === 'failure') return ans.errors.map((e) => e.message);
+    return (ans.validationErrors ?? []).map((e) => e.error.message);
   }
 
   /** Authorize a single request. Returns true iff the decision is `allow`. */

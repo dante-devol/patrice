@@ -1,0 +1,6 @@
+# Angular build/compilation cache — machine-local, regenerated every build.
+.angular/
+
+# Build output and dependencies (also covered by the root .gitignore backstop).
+dist/
+node_modules/

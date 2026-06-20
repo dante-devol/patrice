@@ -22,17 +22,60 @@ function actionDecls(): string {
     .join('\n');
 }
 
+/**
+ * Resource attributes are declared **optional** (`?`) because resources are
+ * heterogeneous and the templates guard every access with `has`. The set is the
+ * union of what the five Scope-Shape templates read: `division`/`team` (specific_*
+ * / own_*), `targetRole` (role scope), the Own-Family owner relations, and
+ * `retired` (the hard-deny). This schema is used for **projection-time validation**
+ * only (validate-before-activate); request-time authorization stays schema-less.
+ */
 export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
-  entity Division;
-  entity Team;
-  entity Role;
+  entity Division {
+    restrictClaims?: Bool,
+    retired?: Bool
+  };
+  entity Team {
+    restrictClaims?: Bool,
+    retired?: Bool
+  };
+  entity Role {
+    retired?: Bool
+  };
   entity User in [Role] {
     memberDivisions: Set<Division>,
-    memberTeams: Set<Team>
+    memberTeams: Set<Team>,
+    targetRole?: Role,
+    retired?: Bool
   };
-  entity Organization;
+  entity Organization {
+    retired?: Bool
+  };
   entity Invitation {
-    retired: Bool
+    retired?: Bool
+  };
+  entity Session {
+    owner?: User,
+    retired?: Bool
+  };
+  entity Task {
+    division?: Division,
+    team?: Team,
+    requester?: User,
+    claimant?: User,
+    retired?: Bool
+  };
+  entity Message {
+    division?: Division,
+    team?: Team,
+    sender?: User,
+    retired?: Bool
+  };
+  entity Attachment {
+    division?: Division,
+    team?: Team,
+    uploader?: User,
+    retired?: Bool
   };
 ${actionDecls()}
 }`;

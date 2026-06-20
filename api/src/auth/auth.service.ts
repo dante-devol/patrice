@@ -14,6 +14,8 @@ import { PasswordService } from './password';
 export interface UserCapabilities {
   /** May create invitations (also gates the invitations management page). */
   inviteCreate: boolean;
+  /** May author org config — gates the admin area (roles/divisions/teams/matrix). */
+  manageOrg: boolean;
 }
 
 export interface AuthenticatedUser {
@@ -104,11 +106,22 @@ export class AuthService {
     // Reflect the user's UI-relevant capabilities by asking the access engine the
     // same questions the guards will ask. invite:create is a global action, so the
     // organization is the resource.
-    const inviteCreate = await this.access.decide({
-      userId: user.id,
-      action: ACTIONS.inviteCreate.action,
-      resource: { type: 'Organization', id: user.organizationId },
-    });
+    const orgResource = {
+      type: 'Organization' as const,
+      id: user.organizationId,
+    };
+    const [inviteCreate, manageOrg] = await Promise.all([
+      this.access.decide({
+        userId: user.id,
+        action: ACTIONS.inviteCreate.action,
+        resource: orgResource,
+      }),
+      this.access.decide({
+        userId: user.id,
+        action: ACTIONS.grantCreate.action,
+        resource: orgResource,
+      }),
+    ]);
 
     return {
       id: user.id,
@@ -116,7 +129,7 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       emailVerified: user.identities[0]?.verifiedAt != null,
-      capabilities: { inviteCreate },
+      capabilities: { inviteCreate, manageOrg },
     };
   }
 

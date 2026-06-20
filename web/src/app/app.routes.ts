@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { inviteManageGuard } from './core/invite.guard';
+import { adminGuard } from './core/admin.guard';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'home' },
@@ -27,6 +28,12 @@ export const routes: Routes = [
     canActivate: [authGuard, inviteManageGuard],
     loadComponent: () =>
       import('./pages/invitations.component').then((m) => m.InvitationsComponent),
+  },
+  {
+    path: 'admin',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () =>
+      import('./pages/admin/admin.component').then((m) => m.AdminComponent),
   },
   {
     path: 'forgot-password',

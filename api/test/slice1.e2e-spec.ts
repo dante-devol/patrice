@@ -47,24 +47,24 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   });
 
   it('GET /health pings the DB', async () => {
-    const res = await http().get('/health');
+    const res = await http().get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'ok', db: 'ok' });
   });
 
   it('GET /bootstrap reports open with an invite token', async () => {
-    const res = await http().get('/bootstrap');
+    const res = await http().get('/api/bootstrap');
     expect(res.status).toBe(200);
     expect(res.body.open).toBe(true);
     expect(typeof res.body.inviteToken).toBe('string');
   });
 
   it('accepts the bootstrap invite → first admin, httpOnly session cookie', async () => {
-    const status = await http().get('/bootstrap');
+    const status = await http().get('/api/bootstrap');
     const token = status.body.inviteToken as string;
 
     const res = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({
         passcode: booted.bootstrapKey,
         email: 'admin@example.com',
@@ -84,7 +84,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   });
 
   it('GET /me returns the authenticated admin (auto-verified, can create invites)', async () => {
-    const res = await http().get('/me').set('Cookie', adminCookies);
+    const res = await http().get('/api/me').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
     expect(res.body.email).toBe('admin@example.com');
     expect(res.body.emailVerified).toBe(true); // bootstrap auto-verifies
@@ -92,13 +92,13 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   });
 
   it('GET /bootstrap now reports closed (effective admin exists)', async () => {
-    const res = await http().get('/bootstrap');
+    const res = await http().get('/api/bootstrap');
     expect(res.body.open).toBe(false);
   });
 
   it('admin can POST /invitations (holds invite:create) → 201', async () => {
     const res = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({ email: 'base@example.com' });
@@ -108,26 +108,26 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
 
   it('GET /invite/:token does NOT consume the invite', async () => {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({});
     const token = created.body.token as string;
 
-    await http().get(`/invite/${token}`);
-    await http().get(`/invite/${token}`);
+    await http().get(`/api/invite/${token}`);
+    await http().get(`/api/invite/${token}`);
 
-    const view = await http().get(`/invite/${token}`);
+    const view = await http().get(`/api/invite/${token}`);
     expect(view.body.status).toBe('pending'); // still redeemable
   });
 
   it('an email-gated invite never reveals its bound email', async () => {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({ email: 'bound@example.com' });
-    const view = await http().get(`/invite/${created.body.token}`);
+    const view = await http().get(`/api/invite/${created.body.token}`);
     expect(view.status).toBe(200);
     expect(view.body.requiresEmail).toBe(true);
     expect(view.body.email).toBeUndefined(); // the value is not leaked
@@ -135,35 +135,35 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
 
   it('rejects redeeming an email-gated invite with the wrong email → 403', async () => {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({ email: 'gated@example.com' });
     const token = created.body.token as string;
 
     const wrong = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({ email: 'attacker@example.com', password: 'a fine passphrase', displayName: 'X' });
     expect(wrong.status).toBe(403);
     expect(wrong.body.error.code).toBe('EMAIL_MISMATCH');
 
     // The legitimate recipient (case-insensitive match) still succeeds.
     const right = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({ email: 'GATED@example.com', password: 'a fine passphrase', displayName: 'Recipient' });
     expect(right.status).toBe(201);
   });
 
   it('a base user (no grants) is denied POST /invitations → 403', async () => {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({ email: 'nobody@example.com' });
     const token = created.body.token as string;
 
     const accept = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({
         email: 'nobody@example.com',
         password: 'another good passphrase',
@@ -176,11 +176,11 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     const baseCsrf = cookieValue(baseSetCookie, 'patrice_csrf')!;
 
     // The reflected capability matches the engine: base user cannot create invites.
-    const baseMe = await http().get('/me').set('Cookie', baseCookies);
+    const baseMe = await http().get('/api/me').set('Cookie', baseCookies);
     expect(baseMe.body.capabilities.inviteCreate).toBe(false);
 
     const denied = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', baseCookies)
       .set('x-csrf-token', baseCsrf)
       .send({ email: 'x@example.com' });
@@ -189,41 +189,41 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
 
   it('a revoked invite cannot be redeemed → 410', async () => {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({});
     const { id, token } = created.body;
 
     const rev = await http()
-      .post(`/invitations/${id}/revoke`)
+      .post(`/api/invitations/${id}/revoke`)
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf);
     expect(rev.status).toBe(204);
 
     const accept = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({ email: 'r@example.com', password: 'passphrase here ok', displayName: 'R' });
     expect(accept.status).toBe(410);
   });
 
   it('an expired invite cannot be redeemed → 410', async () => {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({ expiresAt: new Date(Date.now() - 1000).toISOString() });
     const token = created.body.token as string;
 
     const accept = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({ email: 'e@example.com', password: 'passphrase here ok', displayName: 'E' });
     expect(accept.status).toBe(410);
   });
 
   it('FCFS single-use: concurrent accepts → exactly one wins', async () => {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({});
@@ -231,10 +231,10 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
 
     const [a, b] = await Promise.all([
       http()
-        .post(`/invite/${token}/accept`)
+        .post(`/api/invite/${token}/accept`)
         .send({ email: 'race1@example.com', password: 'passphrase here ok', displayName: 'One' }),
       http()
-        .post(`/invite/${token}/accept`)
+        .post(`/api/invite/${token}/accept`)
         .send({ email: 'race2@example.com', password: 'passphrase here ok', displayName: 'Two' }),
     ]);
     const statuses = [a.status, b.status].sort();
@@ -248,29 +248,29 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   it('logout revokes the session (subsequent /me → 401)', async () => {
     // Fresh login for an isolated session.
     const login = await http()
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email: 'admin@example.com', password: 'correct horse battery' });
     expect(login.status).toBe(200);
     const setCookie = login.headers['set-cookie'] as unknown as string[];
     const cookies = cookieHeader(setCookie);
     const csrf = cookieValue(setCookie, 'patrice_csrf')!;
 
-    const me1 = await http().get('/me').set('Cookie', cookies);
+    const me1 = await http().get('/api/me').set('Cookie', cookies);
     expect(me1.status).toBe(200);
 
     const out = await http()
-      .post('/auth/logout')
+      .post('/api/auth/logout')
       .set('Cookie', cookies)
       .set('x-csrf-token', csrf);
     expect(out.status).toBe(204);
 
-    const me2 = await http().get('/me').set('Cookie', cookies);
+    const me2 = await http().get('/api/me').set('Cookie', cookies);
     expect(me2.status).toBe(401);
   });
 
   async function freshInviteToken(): Promise<string> {
     const created = await http()
-      .post('/invitations')
+      .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
       .send({});
@@ -280,7 +280,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   it('rejects a too-short password with a specific, field-targeted message', async () => {
     const token = await freshInviteToken();
     const res = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({ email: 'shortpw@example.com', password: 'short', displayName: 'X' });
     expect(res.status).toBe(422);
     expect(res.body.error.message).toMatch(/at least 8 characters/i);
@@ -292,7 +292,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   it('rejects an invalid email with a specific message', async () => {
     const token = await freshInviteToken();
     const res = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({ email: 'not-an-email', password: 'a valid passphrase', displayName: 'X' });
     expect(res.status).toBe(422);
     expect(res.body.error.message).toMatch(/valid email/i);
@@ -304,7 +304,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   it('rejects a duplicate email with a clear "already exists" message', async () => {
     const token = await freshInviteToken();
     const res = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({
         email: 'admin@example.com', // already registered as the bootstrap admin
         password: 'a valid passphrase',
@@ -319,7 +319,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
 
   it('there is no open sign-up path (registration only via invite accept)', async () => {
     const res = await http()
-      .post('/auth/register')
+      .post('/api/auth/register')
       .send({ email: 'sneaky@example.com', password: 'passphrase here ok' });
     expect(res.status).toBe(404);
   });
@@ -337,7 +337,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   ): Promise<{ cookies: string }> {
     const token = await freshInviteToken();
     const res = await http()
-      .post(`/invite/${token}/accept`)
+      .post(`/api/invite/${token}/accept`)
       .send({ email, password, displayName: 'Reset Subject' });
     expect(res.status).toBe(201);
     return { cookies: cookieHeader(res.headers['set-cookie'] as unknown as string[]) };
@@ -347,18 +347,18 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   async function verifyEmail(email: string): Promise<void> {
     const token = emails.lastVerificationToken(email);
     expect(token).toBeTruthy();
-    const res = await http().post('/auth/verify-email/confirm').send({ token });
+    const res = await http().post('/api/auth/verify-email/confirm').send({ token });
     expect(res.status).toBe(200);
   }
 
   it('no enumeration oracle: resend + password-reset return 200 for an unknown email', async () => {
     const resend = await http()
-      .post('/auth/verify-email/resend')
+      .post('/api/auth/verify-email/resend')
       .send({ email: 'ghost@example.com' });
     expect(resend.status).toBe(200);
 
     const reset = await http()
-      .post('/auth/password-reset')
+      .post('/api/auth/password-reset')
       .send({ email: 'ghost@example.com' });
     expect(reset.status).toBe(200);
   });
@@ -369,14 +369,14 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
 
     // Fresh invite users start unverified (only bootstrap auto-verifies).
     const before = await http()
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email, password: 'a fine first passphrase' });
     expect(before.body.emailVerified).toBe(false);
 
     await verifyEmail(email);
 
     const after = await http()
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email, password: 'a fine first passphrase' });
     expect(after.status).toBe(200);
     expect(after.body.emailVerified).toBe(true);
@@ -386,14 +386,14 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     const email = 'unverified-reset@example.com';
     await acceptNewUser(email, 'original passphrase ok');
 
-    const req = await http().post('/auth/password-reset').send({ email });
+    const req = await http().post('/api/auth/password-reset').send({ email });
     expect(req.status).toBe(200);
 
     const token = emails.lastResetToken(email);
     expect(token).toBeTruthy();
 
     const confirm = await http()
-      .post('/auth/password-reset/confirm')
+      .post('/api/auth/password-reset/confirm')
       .send({ token, password: 'a brand new passphrase' });
     // Closes the unverified-email account-hijack-via-reset path.
     expect(confirm.status).toBe(422);
@@ -408,32 +408,32 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     const { cookies: oldSession } = await acceptNewUser(email, oldPassword);
     await verifyEmail(email);
 
-    const before = await http().get('/me').set('Cookie', oldSession);
+    const before = await http().get('/api/me').set('Cookie', oldSession);
     expect(before.status).toBe(200);
 
-    const req = await http().post('/auth/password-reset').send({ email });
+    const req = await http().post('/api/auth/password-reset').send({ email });
     expect(req.status).toBe(200);
     const token = emails.lastResetToken(email);
     expect(token).toBeTruthy();
 
     const confirm = await http()
-      .post('/auth/password-reset/confirm')
+      .post('/api/auth/password-reset/confirm')
       .send({ token, password: newPassword });
     expect(confirm.status).toBe(200);
 
     // The pre-reset session is revoked...
-    const after = await http().get('/me').set('Cookie', oldSession);
+    const after = await http().get('/api/me').set('Cookie', oldSession);
     expect(after.status).toBe(401);
 
     // ...the old password no longer works...
     const oldLogin = await http()
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email, password: oldPassword });
     expect(oldLogin.status).toBe(401);
 
     // ...and the new password does.
     const newLogin = await http()
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email, password: newPassword });
     expect(newLogin.status).toBe(200);
   });

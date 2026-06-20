@@ -24,6 +24,10 @@ async function bootstrap(): Promise<void> {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
   }
   app.use(cookieParser());
+  // All routes live under /api/* so the web tier's reverse proxy can forward a
+  // single prefix (and unknown /api paths return the API's JSON 404 rather than the
+  // SPA shell). The SPA itself is served at the origin root by nginx.
+  app.setGlobalPrefix('api');
   app.enableCors({
     origin: env.PUBLIC_BASE_URL,
     credentials: true,
