@@ -21,6 +21,11 @@ export class AuthStore {
    *  the API is the authority and may still 403. */
   readonly canInvite = computed(() => this._user()?.capabilities?.inviteCreate === true);
 
+  /** Reflected capability gating the admin area (org configuration). UX hint only. */
+  readonly canManageOrg = computed(
+    () => this._user()?.capabilities?.manageOrg === true,
+  );
+
   /** Load /me once (e.g. on app start / guard). Swallows 401 into a null user. */
   async ensureLoaded(): Promise<void> {
     if (this._loaded()) return;

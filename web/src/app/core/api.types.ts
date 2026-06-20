@@ -7,6 +7,81 @@
 
 export interface UserCapabilities {
   inviteCreate: boolean;
+  manageOrg: boolean;
+}
+
+export type Lifecycle = 'active' | 'deactivated' | 'retired';
+
+export interface Role {
+  id: string;
+  name: string;
+  kind: 'standalone' | 'division' | 'team';
+  divisionId: string | null;
+  teamId: string | null;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  version: number;
+}
+
+export interface Division {
+  id: string;
+  name: string;
+  defaultOpenings: number;
+  openingsLocked: boolean;
+  restrictClaims: boolean;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  version: number;
+  inherentRoleId: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  restrictClaims: boolean;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  version: number;
+  inherentRoleId: string;
+}
+
+export type ScopeKind =
+  | 'global'
+  | 'specific_division'
+  | 'specific_team'
+  | 'own_division'
+  | 'own_team'
+  | 'own'
+  | 'role';
+
+export interface Grant {
+  id: string;
+  roleId: string;
+  action: string;
+  effect: 'permit' | 'forbid';
+  scopeKind: ScopeKind;
+  scopeDivisionId: string | null;
+  scopeTeamId: string | null;
+  scopeRoleId: string | null;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  version: number;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  displayName: string;
+  lifecycleState: Lifecycle;
+  roleIds: string[];
+}
+
+export interface OrgSettings {
+  requireVerifiedEmailToLogIn: boolean;
+  selfReviewAllowed: boolean;
+  anonymizeLabel: boolean;
+  sessionAbsoluteDays: number;
+  sessionIdleDays: number;
 }
 
 export interface CurrentUser {

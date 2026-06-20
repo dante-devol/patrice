@@ -2,11 +2,18 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
+  AdminUser,
   BootstrapStatus,
   CreatedInvitation,
   CurrentUser,
+  Division,
+  Grant,
   InvitationListItem,
   InviteView,
+  OrgSettings,
+  Role,
+  ScopeKind,
+  Team,
 } from './api.types';
 
 /**
@@ -82,5 +89,100 @@ export class ApiService {
     return firstValueFrom(
       this.http.post<{ ok: boolean }>('/auth/verify-email/resend', { email }),
     );
+  }
+
+  // ---- Slice 2: org configuration ----------------------------------------
+
+  listRoles(): Promise<Role[]> {
+    return firstValueFrom(this.http.get<Role[]>('/roles'));
+  }
+  createRole(name: string): Promise<Role> {
+    return firstValueFrom(this.http.post<Role>('/roles', { name }));
+  }
+  updateRole(id: string, name: string): Promise<Role> {
+    return firstValueFrom(this.http.patch<Role>(`/roles/${id}`, { name }));
+  }
+  retireRole(id: string): Promise<Role> {
+    return firstValueFrom(this.http.post<Role>(`/roles/${id}/retire`, {}));
+  }
+  reviveRole(id: string): Promise<Role> {
+    return firstValueFrom(this.http.post<Role>(`/roles/${id}/revive`, {}));
+  }
+
+  listDivisions(): Promise<Division[]> {
+    return firstValueFrom(this.http.get<Division[]>('/divisions'));
+  }
+  createDivision(body: Partial<Division> & { name: string }): Promise<Division> {
+    return firstValueFrom(this.http.post<Division>('/divisions', body));
+  }
+  updateDivision(id: string, body: Partial<Division>): Promise<Division> {
+    return firstValueFrom(this.http.patch<Division>(`/divisions/${id}`, body));
+  }
+  retireDivision(id: string): Promise<Division> {
+    return firstValueFrom(this.http.post<Division>(`/divisions/${id}/retire`, {}));
+  }
+  reviveDivision(id: string): Promise<Division> {
+    return firstValueFrom(this.http.post<Division>(`/divisions/${id}/revive`, {}));
+  }
+
+  listTeams(): Promise<Team[]> {
+    return firstValueFrom(this.http.get<Team[]>('/teams'));
+  }
+  createTeam(body: { name: string; restrictClaims?: boolean }): Promise<Team> {
+    return firstValueFrom(this.http.post<Team>('/teams', body));
+  }
+  updateTeam(id: string, body: Partial<Team>): Promise<Team> {
+    return firstValueFrom(this.http.patch<Team>(`/teams/${id}`, body));
+  }
+  retireTeam(id: string): Promise<Team> {
+    return firstValueFrom(this.http.post<Team>(`/teams/${id}/retire`, {}));
+  }
+  reviveTeam(id: string): Promise<Team> {
+    return firstValueFrom(this.http.post<Team>(`/teams/${id}/revive`, {}));
+  }
+
+  listActions(): Promise<{ actions: string[] }> {
+    return firstValueFrom(this.http.get<{ actions: string[] }>('/actions'));
+  }
+  listGrants(): Promise<Grant[]> {
+    return firstValueFrom(this.http.get<Grant[]>('/grants'));
+  }
+  createGrant(body: {
+    roleId: string;
+    action: string;
+    scopeKind: ScopeKind;
+    scopeDivisionId?: string;
+    scopeTeamId?: string;
+    scopeRoleId?: string;
+  }): Promise<Grant> {
+    return firstValueFrom(this.http.post<Grant>('/grants', body));
+  }
+  retireGrant(id: string): Promise<Grant> {
+    return firstValueFrom(this.http.post<Grant>(`/grants/${id}/retire`, {}));
+  }
+
+  listUsers(): Promise<AdminUser[]> {
+    return firstValueFrom(this.http.get<AdminUser[]>('/users'));
+  }
+  grantUserRole(userId: string, roleId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(`/users/${userId}/roles`, { roleId }),
+    );
+  }
+  revokeUserRole(userId: string, roleId: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/users/${userId}/roles/${roleId}`));
+  }
+  deactivateUser(userId: string): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`/users/${userId}/deactivate`, {}));
+  }
+  reactivateUser(userId: string): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`/users/${userId}/reactivate`, {}));
+  }
+
+  getConfig(): Promise<OrgSettings> {
+    return firstValueFrom(this.http.get<OrgSettings>('/config'));
+  }
+  updateConfig(body: Partial<OrgSettings>): Promise<OrgSettings> {
+    return firstValueFrom(this.http.patch<OrgSettings>('/config', body));
   }
 }

@@ -48,6 +48,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .error { color: var(--danger); margin-top: 10px; white-space: pre-line; }
 .muted { color: var(--muted); }
 .row { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+nav.tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-start; }
 nav.appbar {
   display: flex; gap: 16px; align-items: center;
   padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel);

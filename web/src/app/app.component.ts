@@ -14,6 +14,9 @@ import { AuthStore } from './core/auth.store';
         @if (auth.canInvite()) {
           <a routerLink="/invitations">Invitations</a>
         }
+        @if (auth.canManageOrg()) {
+          <a routerLink="/admin">Admin</a>
+        }
       }
       <span class="spacer"></span>
       @if (auth.isAuthenticated()) {
