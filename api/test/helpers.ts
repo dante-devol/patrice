@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
+import { EmailService } from '../src/email/email.service';
 
 /** Truncate all Slice 1 tables for a clean run (before bootstrap seeds). */
 export async function resetDatabase(): Promise<void> {
@@ -19,15 +20,71 @@ export async function resetDatabase(): Promise<void> {
   }
 }
 
+/**
+ * A stand-in EmailService that records the plaintext token handed to each send
+ * call. Tokens are only ever stored hashed (`auth_token.token_hash`), so the
+ * confirm endpoints can only be exercised by capturing the plaintext here — at
+ * the one point it exists outside the request that generated it.
+ */
+export interface EmailCapture {
+  verifications: Array<{ to: string; token: string }>;
+  resets: Array<{ to: string; token: string }>;
+  /** Most-recent verification token issued to `to`, or null. */
+  lastVerificationToken(to: string): string | null;
+  /** Most-recent reset token issued to `to`, or null. */
+  lastResetToken(to: string): string | null;
+}
+
+function lastFor(
+  records: Array<{ to: string; token: string }>,
+  to: string,
+): string | null {
+  for (let i = records.length - 1; i >= 0; i--) {
+    if (records[i].to === to) return records[i].token;
+  }
+  return null;
+}
+
+/** Build a capturing EmailService stub + the capture it writes to. */
+export function createEmailCapture(): { stub: object; capture: EmailCapture } {
+  const verifications: Array<{ to: string; token: string }> = [];
+  const resets: Array<{ to: string; token: string }> = [];
+  const stub = {
+    async onModuleInit(): Promise<void> {},
+    async sendVerificationEmail(to: string, token: string): Promise<void> {
+      verifications.push({ to, token });
+    },
+    async sendPasswordResetEmail(to: string, token: string): Promise<void> {
+      resets.push({ to, token });
+    },
+  };
+  const capture: EmailCapture = {
+    verifications,
+    resets,
+    lastVerificationToken: (to) => lastFor(verifications, to),
+    lastResetToken: (to) => lastFor(resets, to),
+  };
+  return { stub, capture };
+}
+
 export interface BootedApp {
   app: INestApplication;
   logs: string[];
   bootstrapKey: string | null;
 }
 
+export interface BootOptions {
+  /** Override the EmailService with a capturing stub (see createEmailCapture). */
+  emailStub?: object;
+}
+
 /** Boot a Nest app, capturing stdout so the bootstrap key can be recovered. */
-export async function bootApp(): Promise<BootedApp> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+export async function bootApp(options: BootOptions = {}): Promise<BootedApp> {
+  let builder = Test.createTestingModule({ imports: [AppModule] });
+  if (options.emailStub) {
+    builder = builder.overrideProvider(EmailService).useValue(options.emailStub);
+  }
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication();
   app.use(cookieParser());
 

@@ -3,9 +3,11 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import {
   BootedApp,
+  EmailCapture,
   bootApp,
   cookieHeader,
   cookieValue,
+  createEmailCapture,
   resetDatabase,
 } from './helpers';
 
@@ -21,9 +23,14 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   let adminCookies: string;
   let adminCsrf: string;
 
+  // Records the plaintext verification/reset tokens (only ever stored hashed).
+  let emails: EmailCapture;
+
   beforeAll(async () => {
     await resetDatabase();
-    booted = await bootApp();
+    const { stub, capture } = createEmailCapture();
+    emails = capture;
+    booted = await bootApp({ emailStub: stub });
     app = booted.app;
   });
 
@@ -315,6 +322,120 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
       .post('/auth/register')
       .send({ email: 'sneaky@example.com', password: 'passphrase here ok' });
     expect(res.status).toBe(404);
+  });
+
+  // --- Slice 1.4: email verification + password reset (issue #6) ---------------
+  //
+  // Tokens are stored only as sha256(pepper + token), so these flows are driven
+  // through the captured plaintext (see helpers#createEmailCapture). NB: never run
+  // a reset against admin@example.com — later shared-state tests log in with it.
+
+  /** Accept a fresh (un-gated) invite as a brand-new, unverified user. */
+  async function acceptNewUser(
+    email: string,
+    password: string,
+  ): Promise<{ cookies: string }> {
+    const token = await freshInviteToken();
+    const res = await http()
+      .post(`/invite/${token}/accept`)
+      .send({ email, password, displayName: 'Reset Subject' });
+    expect(res.status).toBe(201);
+    return { cookies: cookieHeader(res.headers['set-cookie'] as unknown as string[]) };
+  }
+
+  /** Confirm the verification token that was emailed to `email`. */
+  async function verifyEmail(email: string): Promise<void> {
+    const token = emails.lastVerificationToken(email);
+    expect(token).toBeTruthy();
+    const res = await http().post('/auth/verify-email/confirm').send({ token });
+    expect(res.status).toBe(200);
+  }
+
+  it('no enumeration oracle: resend + password-reset return 200 for an unknown email', async () => {
+    const resend = await http()
+      .post('/auth/verify-email/resend')
+      .send({ email: 'ghost@example.com' });
+    expect(resend.status).toBe(200);
+
+    const reset = await http()
+      .post('/auth/password-reset')
+      .send({ email: 'ghost@example.com' });
+    expect(reset.status).toBe(200);
+  });
+
+  it('verify-email confirm stamps the identity as verified', async () => {
+    const email = 'verify-me@example.com';
+    await acceptNewUser(email, 'a fine first passphrase');
+
+    // Fresh invite users start unverified (only bootstrap auto-verifies).
+    const before = await http()
+      .post('/auth/login')
+      .send({ email, password: 'a fine first passphrase' });
+    expect(before.body.emailVerified).toBe(false);
+
+    await verifyEmail(email);
+
+    const after = await http()
+      .post('/auth/login')
+      .send({ email, password: 'a fine first passphrase' });
+    expect(after.status).toBe(200);
+    expect(after.body.emailVerified).toBe(true);
+  });
+
+  it('password-reset confirm is refused (422) for an unverified identity', async () => {
+    const email = 'unverified-reset@example.com';
+    await acceptNewUser(email, 'original passphrase ok');
+
+    const req = await http().post('/auth/password-reset').send({ email });
+    expect(req.status).toBe(200);
+
+    const token = emails.lastResetToken(email);
+    expect(token).toBeTruthy();
+
+    const confirm = await http()
+      .post('/auth/password-reset/confirm')
+      .send({ token, password: 'a brand new passphrase' });
+    // Closes the unverified-email account-hijack-via-reset path.
+    expect(confirm.status).toBe(422);
+  });
+
+  it('password-reset revokes all sessions; old cookie 401s, new password logs in', async () => {
+    const email = 'reset-me@example.com';
+    const oldPassword = 'the original passphrase';
+    const newPassword = 'a totally different passphrase';
+
+    // Verified user holding an active session (from invite acceptance).
+    const { cookies: oldSession } = await acceptNewUser(email, oldPassword);
+    await verifyEmail(email);
+
+    const before = await http().get('/me').set('Cookie', oldSession);
+    expect(before.status).toBe(200);
+
+    const req = await http().post('/auth/password-reset').send({ email });
+    expect(req.status).toBe(200);
+    const token = emails.lastResetToken(email);
+    expect(token).toBeTruthy();
+
+    const confirm = await http()
+      .post('/auth/password-reset/confirm')
+      .send({ token, password: newPassword });
+    expect(confirm.status).toBe(200);
+
+    // The pre-reset session is revoked...
+    const after = await http().get('/me').set('Cookie', oldSession);
+    expect(after.status).toBe(401);
+
+    // ...the old password no longer works...
+    const oldLogin = await http()
+      .post('/auth/login')
+      .send({ email, password: oldPassword });
+    expect(oldLogin.status).toBe(401);
+
+    // ...and the new password does.
+    const newLogin = await http()
+      .post('/auth/login')
+      .send({ email, password: newPassword });
+    expect(newLogin.status).toBe(200);
   });
 
   it('a restart with an admin present prints NO bootstrap key', async () => {
