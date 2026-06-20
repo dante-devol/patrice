@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
-import { NotFoundError } from '../common/errors';
+import { ConflictError, NotFoundError } from '../common/errors';
 import { PutQuestionnaireDto } from './questionnaires.dto';
 
 export interface QuestionView {
@@ -80,6 +80,18 @@ export class QuestionnairesService {
     });
     if (!questionnaire) {
       throw new NotFoundError('QUESTIONNAIRE_NOT_FOUND', 'This task has no questionnaire');
+    }
+
+    // Lock-at-first-submission (Slice 5): once any non-retired submission exists on the
+    // task, the questionnaire is frozen — editing it would orphan captured answers.
+    const submissionCount = await this.prisma.submission.count({
+      where: { taskId, lifecycleState: 'active' },
+    });
+    if (submissionCount > 0) {
+      throw new ConflictError(
+        'QUESTIONNAIRE_LOCKED',
+        'The questionnaire is locked once a submission exists',
+      );
     }
 
     const result = await this.prisma.$transaction(async (tx) => {

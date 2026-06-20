@@ -113,6 +113,35 @@ export const activityPayloadSchemas = {
   'attachment.created': z
     .object({ attachmentId: uuid, messageId: uuid })
     .strict(),
+  // Slice 5 — submission lifecycle. IDs + the (non-PII) submission_no/decision/status.
+  'submission.submitted': z
+    .object({
+      taskId: uuid,
+      submissionId: uuid,
+      claimantUserId: uuid,
+      submissionNo: z.number().int(),
+    })
+    .strict(),
+  'submission.reviewed': z
+    .object({
+      taskId: uuid,
+      submissionId: uuid,
+      decision: z.enum(['approve', 'return', 'reject']),
+      statusCache: z.string(),
+    })
+    .strict(),
+  // `reason` is moderation content (not PII) and is the audit's whole point; kept.
+  'submission.retired': z
+    .object({
+      taskId: uuid,
+      submissionId: uuid,
+      claimantUserId: uuid,
+      reason: z.string(),
+    })
+    .strict(),
+  'task.completed': z
+    .object({ taskId: uuid, statusCache: z.string() })
+    .strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z

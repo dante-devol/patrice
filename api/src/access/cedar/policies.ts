@@ -54,7 +54,12 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
   'message:retire': 'sender',
   'attachment:create': 'uploader',
   'attachment:retire': 'uploader',
-  // 'task:submit': 'claimant',
+  // Slice 5 — submission lifecycle. submit is the claimant own-family; review /
+  // retire_submission / complete are requester own-family (own_as_requester).
+  'task:submit': 'claimant',
+  'task:review': 'requester',
+  'task:retire_submission': 'requester',
+  'task:complete': 'requester',
 };
 
 /**
@@ -164,15 +169,16 @@ export function staticPolicies(opts: StaticPolicyOptions): string[] {
       )}, resource) when { principal == resource };`,
   );
 
-  // Self-review forbid (Slice 5): only meaningful once a `task:review` action and
-  // task ownership exist. Wired here so the toggle path is in place; emitted only
-  // when that action is registered AND self-review is disabled.
+  // Self-review forbid (Slice 5): when self-review is disabled, a requester may not
+  // review a submission they authored. The `task:review` resource carries `claimant`
+  // (the reviewed submission's author), so the forbid fires exactly when the reviewer
+  // is that claimant — never blocking review of *other* claimants' submissions.
   if (!opts.selfReviewAllowed && opts.registeredActions.includes('task:review')) {
     policies.push(
       `@id("static_self_review_forbid")\n` +
         `forbid(principal, action == ${actionRef(
           'task:review',
-        )}, resource) when { resource has requester && resource.requester == principal };`,
+        )}, resource) when { resource has claimant && resource.claimant == principal };`,
     );
   }
 

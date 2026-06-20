@@ -149,18 +149,33 @@ export class MessagesService {
   }
 
   /**
-   * Emit a senderless system message on a task's thread (claim/leave/requester change).
-   * Runs inside the caller's transaction so it's atomic with the triggering event.
-   * Body references the actor by id only — no PII (consistent with audit discipline).
+   * Emit a senderless system message on a task's thread (claim/leave/requester change,
+   * and the Slice 5 submission/review events). Runs inside the caller's transaction so
+   * it's atomic with the triggering event. Body references the actor by id only — no
+   * PII (consistent with audit discipline).
+   *
+   * `submissionId` hosts the message in a submission's thread (M1 "X submitted v{n}");
+   * `parentMessageId` threads a review reply under that top-level message. Returns the
+   * created message's id so a caller can thread replies beneath it.
    */
   async createSystemMessage(
     tx: Prisma.TransactionClient,
     taskId: string,
     body: string,
-  ): Promise<void> {
-    await tx.message.create({
-      data: { taskId, kind: MessageKind.system, senderUserId: null, body },
+    opts: { submissionId?: string | null; parentMessageId?: string | null } = {},
+  ): Promise<string> {
+    const message = await tx.message.create({
+      data: {
+        taskId,
+        kind: MessageKind.system,
+        senderUserId: null,
+        body,
+        submissionId: opts.submissionId ?? null,
+        parentMessageId: opts.parentMessageId ?? null,
+      },
+      select: { id: true },
     });
+    return message.id;
   }
 
   /** Top-level messages (oldest-first) with their one-level replies + attachments. */

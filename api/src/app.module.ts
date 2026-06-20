@@ -17,6 +17,7 @@ import { GrantsModule } from './grants/grants.module';
 import { UsersModule } from './users/users.module';
 import { QuestionnairesModule } from './questionnaires/questionnaires.module';
 import { TasksModule } from './tasks/tasks.module';
+import { SubmissionsModule } from './submissions/submissions.module';
 import { MessagesModule } from './messages/messages.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { StorageModule } from './storage/storage.module';
@@ -43,6 +44,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     MessagesModule,
     AttachmentsModule,
     TasksModule,
+    SubmissionsModule,
   ],
   controllers: [HealthController],
   providers: [
