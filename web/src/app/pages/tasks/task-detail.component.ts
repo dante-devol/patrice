@@ -7,17 +7,18 @@ import { LookupStore } from '../../core/lookup.store';
 import { Questionnaire, Task } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { MessageThreadComponent } from './message-thread.component';
+import { SubmissionPanelComponent } from './submission-panel.component';
 
 /**
- * Task detail (Slice 4): header (division/team/status/requester/openings), editable
- * metadata, the questionnaire shown read-only (answering arrives in Slice 5), the
- * claim/leave/close/add-opening + change-requester controls (which the API
- * re-authorizes — non-permitted actions surface a 403), and the message thread.
+ * Task detail (Slice 4–5): header (division/team/status/requester/openings), editable
+ * metadata, the questionnaire, the claim/leave/close/add-opening + change-requester +
+ * manual-complete controls (which the API re-authorizes — non-permitted actions
+ * surface a 403), the Slice 5 submission/review panel, and the message thread.
  */
 @Component({
   selector: 'task-detail',
   standalone: true,
-  imports: [FormsModule, RouterLink, DatePipe, MessageThreadComponent],
+  imports: [FormsModule, RouterLink, DatePipe, MessageThreadComponent, SubmissionPanelComponent],
   template: `
     <div class="panel">
       <a routerLink="/tasks">← All tasks</a>
@@ -44,6 +45,7 @@ import { MessageThreadComponent } from './message-thread.component';
           <button class="secondary" (click)="run(api.manageClaims(t.id, { claimsClosed: !t.claimsClosed }))">
             {{ t.claimsClosed ? 'Reopen claims' : 'Close claims' }}
           </button>
+          <button class="secondary" (click)="run(api.completeTask(t.id))">Complete</button>
           <button class="secondary" (click)="run(api.retireTask(t.id))">Retire task</button>
         </div>
 
@@ -75,8 +77,11 @@ import { MessageThreadComponent } from './message-thread.component';
             @if (qn.required) { <span class="req">*</span> }
           </div>
         } @empty { <p class="muted">Coordination-only task (no questions).</p> }
-        <p class="muted">Answering arrives in Slice 5.</p>
       </div>
+    }
+
+    @if (task(); as t) {
+      <submission-panel [taskId]="t.id" [questions]="questionnaire()?.questions ?? []" [onChanged]="refresh" />
     }
 
     @if (task(); as t) { <message-thread [taskId]="t.id" /> }
@@ -152,4 +157,15 @@ export class TaskDetailComponent implements OnInit {
       this.api.updateTask(t.id, { name: this.editName, description: this.editDescription }),
     );
   }
+
+  /** Re-fetch the task header (status reflects the min-rule after a submit/review). */
+  readonly refresh = async (): Promise<void> => {
+    const id = this.task()?.id;
+    if (!id) return;
+    try {
+      this.task.set(await this.api.getTask(id));
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    }
+  };
 }

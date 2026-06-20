@@ -16,8 +16,11 @@ import {
   OrgSettings,
   Questionnaire,
   QuestionInput,
+  ReviewDecision,
   Role,
   ScopeKind,
+  Submission,
+  SubmitAnswer,
   Task,
   TaskFilters,
   TaskListResult,
@@ -332,5 +335,47 @@ export class ApiService {
   /** The ungated download URL for an attachment (use as an anchor href). */
   attachmentUrl(id: string): string {
     return `/api/attachments/${id}`;
+  }
+
+  // ---- Slice 5: submissions & review lifecycle ----------------------------
+
+  listSubmissions(taskId: string): Promise<Submission[]> {
+    return firstValueFrom(
+      this.http.get<Submission[]>(`/api/tasks/${taskId}/submissions`),
+    );
+  }
+
+  getSubmission(id: string): Promise<Submission> {
+    return firstValueFrom(this.http.get<Submission>(`/api/submissions/${id}`));
+  }
+
+  /** Submit (or resubmit) a claimant's answers (`task:submit`). */
+  submit(taskId: string, answers: SubmitAnswer[]): Promise<Submission> {
+    return firstValueFrom(
+      this.http.post<Submission>(`/api/tasks/${taskId}/submissions`, { answers }),
+    );
+  }
+
+  /** Approve / return / reject a submission (`task:review`). */
+  reviewSubmission(
+    id: string,
+    decision: ReviewDecision,
+    comment?: string,
+  ): Promise<Submission> {
+    return firstValueFrom(
+      this.http.post<Submission>(`/api/submissions/${id}/review`, { decision, comment }),
+    );
+  }
+
+  /** Retire a submission with a required reason (`task:retire_submission`). */
+  retireSubmission(id: string, reason: string): Promise<Submission> {
+    return firstValueFrom(
+      this.http.post<Submission>(`/api/submissions/${id}/retire`, { reason }),
+    );
+  }
+
+  /** Manually complete a task → approved (`task:complete`). */
+  completeTask(id: string): Promise<Task> {
+    return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/complete`, {}));
   }
 }
