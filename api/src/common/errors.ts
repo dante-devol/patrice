@@ -33,6 +33,13 @@ export class ValidationError extends CodedException {
   }
 }
 
+/** A 422 carrying a domain-specific code (e.g. NO_DEFAULT_QUESTIONNAIRE). */
+export class UnprocessableError extends CodedException {
+  constructor(code = 'UNPROCESSABLE', message = 'Unprocessable entity', details?: unknown) {
+    super(HttpStatus.UNPROCESSABLE_ENTITY, code, message, details);
+  }
+}
+
 export class DeniedError extends CodedException {
   constructor(code = 'FORBIDDEN', message = 'Forbidden') {
     super(HttpStatus.FORBIDDEN, code, message);

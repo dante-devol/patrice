@@ -16,6 +16,7 @@ import { TeamsModule } from './teams/teams.module';
 import { GrantsModule } from './grants/grants.module';
 import { UsersModule } from './users/users.module';
 import { QuestionnairesModule } from './questionnaires/questionnaires.module';
+import { TasksModule } from './tasks/tasks.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -35,6 +36,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     GrantsModule,
     UsersModule,
     QuestionnairesModule,
+    TasksModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -17,6 +17,7 @@ export interface QuestionView {
 export interface QuestionnaireView {
   id: string;
   ownerDivisionId: string | null;
+  ownerTaskId: string | null;
   questions: QuestionView[];
 }
 
@@ -45,12 +46,22 @@ export class QuestionnairesService {
     return qn ? this.toView(qn) : null;
   }
 
+  /** A task's own questionnaire copy (Slice 4), or null if the task has none. */
+  async getForTask(taskId: string): Promise<QuestionnaireView | null> {
+    const qn = await this.prisma.questionnaire.findUnique({
+      where: { ownerTaskId: taskId },
+      include: { questions: { orderBy: { ordinal: 'asc' } } },
+    });
+    return qn ? this.toView(qn) : null;
+  }
+
   private toView(
     qn: Prisma.QuestionnaireGetPayload<{ include: { questions: true } }>,
   ): QuestionnaireView {
     return {
       id: qn.id,
       ownerDivisionId: qn.ownerDivisionId,
+      ownerTaskId: qn.ownerTaskId,
       questions: qn.questions
         .slice()
         .sort((a, b) => a.ordinal - b.ordinal)

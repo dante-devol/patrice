@@ -76,6 +76,17 @@ export const activityPayloadSchemas = {
   'questionnaire.updated': z
     .object({ questionnaireId: uuid, divisionId: uuid, questionCount: z.number().int() })
     .strict(),
+  // Slice 4.1 — tasks. IDs only (no name/description PII; render by joining at read).
+  'task.created': z
+    .object({
+      taskId: uuid,
+      divisionId: uuid,
+      teamId: uuid.nullable(),
+      questionnaireId: uuid,
+    })
+    .strict(),
+  'task.updated': z.object({ taskId: uuid }).strict(),
+  'task.retired': z.object({ taskId: uuid }).strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z

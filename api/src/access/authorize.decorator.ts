@@ -59,3 +59,56 @@ export const divisionResource: ResourceResolver = async (req, prisma) => {
     },
   };
 };
+
+const divisionEntity = (id: string) => ({
+  __entity: { type: 'Patrice::Division', id },
+});
+const teamEntity = (id: string) => ({ __entity: { type: 'Patrice::Team', id } });
+const userEntity = (id: string) => ({ __entity: { type: 'Patrice::User', id } });
+
+/**
+ * A **prospective** task is the resource for `task:create` — there is no row yet, so
+ * the division/team come from the request body and the requester is the actor. This
+ * lets `specific_division`/`own_division`/`own` (own_as_requester) create grants match
+ * before the task exists. The guard runs before body validation, so fields are read
+ * defensively; a missing division simply fails to match a scoped grant (→ 403).
+ */
+export const taskCreateResource: ResourceResolver = async (req) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const user = (req as Request & { user?: { id: string } }).user;
+  const attrs: Record<string, unknown> = {};
+  if (typeof body.divisionId === 'string') attrs.division = divisionEntity(body.divisionId);
+  if (typeof body.teamId === 'string') attrs.team = teamEntity(body.teamId);
+  if (user) attrs.requester = userEntity(user.id);
+  return { type: 'Task', id: 'new', attrs };
+};
+
+/**
+ * The task named by `:id` is the resource — for `task:update`/`task:retire` and the
+ * own-family (`own_as_requester`) scopes. Carries division/team (specific/own group
+ * scopes), requester (own), and retired (Retired-as-Hard-Deny). 404 if it's missing.
+ */
+export const taskResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      divisionId: true,
+      teamId: true,
+      requesterUserId: true,
+      lifecycleState: true,
+    },
+  });
+  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+  return {
+    type: 'Task',
+    id: task.id,
+    attrs: {
+      division: divisionEntity(task.divisionId),
+      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
+      requester: userEntity(task.requesterUserId),
+      retired: task.lifecycleState === 'retired',
+    },
+  };
+};

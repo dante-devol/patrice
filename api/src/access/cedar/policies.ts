@@ -40,6 +40,11 @@ const NS = CEDAR_NAMESPACE;
  * actions arrive (Slices 4–5).
  */
 const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
+  // Slice 4.1 — requester own-family (own_as_requester).
+  'task:update': 'requester',
+  'task:retire': 'requester',
+  'task:revive': 'requester',
+  'task:configure_questionnaire': 'requester',
   // 'task:submit': 'claimant', 'task:review': 'requester',
   // 'message:create': 'sender', 'attachment:create': 'uploader', ...
 };
