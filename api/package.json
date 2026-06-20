@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
-    "test:e2e": "jest --config test/jest-e2e.json --runInBand"
+    "test:e2e": "jest --config test/jest-e2e.json --runInBand",
+    "challenge:invites": "node scripts/challenge-invites.mjs"
   },
   "dependencies": {
     "@cedar-policy/cedar-wasm": "^4.4.0",
