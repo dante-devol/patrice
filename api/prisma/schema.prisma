@@ -95,6 +95,17 @@ enum MessageKind {
   system
 }
 
+/// A submission's per-version review state (Slice 5). The lifecycle min-rule rolls
+/// these up into a task's `status_cache`. `rejected` submissions are excluded from
+/// the roll-up (set aside, no resubmit); a `revising` submission invites a resubmit
+/// (a new row with the next `submission_no`).
+enum SubmissionState {
+  review
+  revising
+  approved
+  rejected
+}
+
 enum AttachmentKind {
   image
   text
@@ -192,6 +203,7 @@ model AppUser {
   invitationUses InvitationUse[]
   requestedTasks Task[]
   taskClaimants  TaskClaimant[]
+  submissions    Submission[]
   messages       Message[]
   attachments    Attachment[]
 
@@ -409,6 +421,7 @@ model Question {
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   questionnaire Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  answers       Answer[]
 
   @@unique([questionnaireId, ordinal])
   @@index([questionnaireId])
@@ -444,6 +457,7 @@ model Task {
   // The task's own questionnaire copy (0..1); UNIQUE questionnaire.owner_task_id.
   questionnaire Questionnaire?
   claimants     TaskClaimant[]
+  submissions   Submission[]
   messages      Message[]
 
   @@index([divisionId])
@@ -498,11 +512,66 @@ model Message {
   sender   AppUser?  @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
   parent   Message?  @relation("MessageThread", fields: [parentMessageId], references: [id], onDelete: Restrict)
   replies  Message[] @relation("MessageThread")
+  // A system message hosting a submission's thread (Slice 5); NULL on comments and
+  // on task-level audit messages (e.g. the retire-submission audit, which survives GC).
+  submission  Submission?  @relation(fields: [submissionId], references: [id], onDelete: Restrict)
   attachments Attachment[]
 
   @@index([taskId, createdAt])
   @@index([parentMessageId])
+  @@index([submissionId])
   @@map("message")
+}
+
+/// A claimant's answers to the task's questionnaire (Slice 5), versioned across
+/// resubmissions by `submission_no` (part of identity — never changes after insert).
+/// `version` is the separate optimistic-lock counter: `task:review` writes are
+/// version-guarded and return 409 STALE_SUBMISSION on a lost update. `prev_submission_id`
+/// chains a resubmission to the returned version it supersedes.
+model Submission {
+  id               String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  taskId           String          @map("task_id") @db.Uuid
+  claimantUserId   String          @map("claimant_user_id") @db.Uuid
+  submissionNo     Int             @map("submission_no")
+  prevSubmissionId String?         @map("prev_submission_id") @db.Uuid
+  state            SubmissionState @default(review)
+  submittedAt      DateTime        @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  reviewedBy       String?         @map("reviewed_by") @db.Uuid
+  reviewedAt       DateTime?       @map("reviewed_at") @db.Timestamptz(6)
+  lifecycleState   LifecycleState  @default(active) @map("lifecycle_state")
+  retiredAt        DateTime?       @map("retired_at") @db.Timestamptz(6)
+  version          Int             @default(0)
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task            Task         @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  claimant        AppUser      @relation(fields: [claimantUserId], references: [id], onDelete: Restrict)
+  prevSubmission  Submission?  @relation("SubmissionChain", fields: [prevSubmissionId], references: [id], onDelete: Restrict)
+  nextSubmissions Submission[] @relation("SubmissionChain")
+  answers         Answer[]
+  messages        Message[]
+
+  @@unique([taskId, claimantUserId, submissionNo])
+  @@index([taskId])
+  @@index([claimantUserId])
+  @@map("submission")
+}
+
+/// One answer in a submission — a scalar `value` (text/number/choice, as jsonb) and/or
+/// referenced attachments (via `attachment.answer_id`). Children of their submission
+/// aggregate (ON DELETE CASCADE) so a hard-delete of the submission collects them.
+model Answer {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  submissionId String   @map("submission_id") @db.Uuid
+  questionId   String   @map("question_id") @db.Uuid
+  value        Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  submission  Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question    Question     @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  attachments Attachment[]
+
+  @@index([submissionId])
+  @@map("answer")
 }
 
 /// An uploaded file (Slice 4.3), stored via the StoragePort (S3 or local-fs) and
@@ -528,6 +597,7 @@ model Attachment {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   message      Message?     @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  answer       Answer?      @relation(fields: [answerId], references: [id], onDelete: Restrict)
   uploader     AppUser      @relation(fields: [uploaderUserId], references: [id], onDelete: Restrict)
 
   @@index([messageId])
