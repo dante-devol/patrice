@@ -72,6 +72,10 @@ export const activityPayloadSchemas = {
   'config.updated': z
     .object({ changedKeys: z.array(z.string()) })
     .strict(),
+  // Slice 3 — questionnaire authoring. IDs + the (non-PII) question count only.
+  'questionnaire.updated': z
+    .object({ questionnaireId: uuid, divisionId: uuid, questionCount: z.number().int() })
+    .strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z
