@@ -17,9 +17,9 @@ export class AuthStore {
   readonly loaded = this._loaded.asReadonly();
   readonly isAuthenticated = computed(() => this._user() !== null);
 
-  /** Reflected capability: only the admin holds invite:create in Slice 1. The API
-   *  is the authority; this is a UX hint and may be overridden by a 403. */
-  readonly canInvite = computed(() => this._user() !== null);
+  /** Reflected capability for `invite:create`, sourced from the API. UX hint only —
+   *  the API is the authority and may still 403. */
+  readonly canInvite = computed(() => this._user()?.capabilities?.inviteCreate === true);
 
   /** Load /me once (e.g. on app start / guard). Swallows 401 into a null user. */
   async ensureLoaded(): Promise<void> {

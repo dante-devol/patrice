@@ -76,11 +76,12 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     expect(adminCsrf).toBeTruthy();
   });
 
-  it('GET /me returns the authenticated admin (email auto-verified)', async () => {
+  it('GET /me returns the authenticated admin (auto-verified, can create invites)', async () => {
     const res = await http().get('/me').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
     expect(res.body.email).toBe('admin@example.com');
     expect(res.body.emailVerified).toBe(true); // bootstrap auto-verifies
+    expect(res.body.capabilities.inviteCreate).toBe(true); // reflected capability
   });
 
   it('GET /bootstrap now reports closed (effective admin exists)', async () => {
@@ -113,6 +114,39 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     expect(view.body.status).toBe('pending'); // still redeemable
   });
 
+  it('an email-gated invite never reveals its bound email', async () => {
+    const created = await http()
+      .post('/invitations')
+      .set('Cookie', adminCookies)
+      .set('x-csrf-token', adminCsrf)
+      .send({ email: 'bound@example.com' });
+    const view = await http().get(`/invite/${created.body.token}`);
+    expect(view.status).toBe(200);
+    expect(view.body.requiresEmail).toBe(true);
+    expect(view.body.email).toBeUndefined(); // the value is not leaked
+  });
+
+  it('rejects redeeming an email-gated invite with the wrong email → 403', async () => {
+    const created = await http()
+      .post('/invitations')
+      .set('Cookie', adminCookies)
+      .set('x-csrf-token', adminCsrf)
+      .send({ email: 'gated@example.com' });
+    const token = created.body.token as string;
+
+    const wrong = await http()
+      .post(`/invite/${token}/accept`)
+      .send({ email: 'attacker@example.com', password: 'a fine passphrase', displayName: 'X' });
+    expect(wrong.status).toBe(403);
+    expect(wrong.body.error.code).toBe('EMAIL_MISMATCH');
+
+    // The legitimate recipient (case-insensitive match) still succeeds.
+    const right = await http()
+      .post(`/invite/${token}/accept`)
+      .send({ email: 'GATED@example.com', password: 'a fine passphrase', displayName: 'Recipient' });
+    expect(right.status).toBe(201);
+  });
+
   it('a base user (no grants) is denied POST /invitations → 403', async () => {
     const created = await http()
       .post('/invitations')
@@ -133,6 +167,10 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     const baseSetCookie = accept.headers['set-cookie'] as unknown as string[];
     const baseCookies = cookieHeader(baseSetCookie);
     const baseCsrf = cookieValue(baseSetCookie, 'patrice_csrf')!;
+
+    // The reflected capability matches the engine: base user cannot create invites.
+    const baseMe = await http().get('/me').set('Cookie', baseCookies);
+    expect(baseMe.body.capabilities.inviteCreate).toBe(false);
 
     const denied = await http()
       .post('/invitations')

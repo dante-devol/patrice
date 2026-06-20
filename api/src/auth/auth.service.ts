@@ -2,7 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { AuthMethod, AuthProvider } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeniedError, UnauthenticatedError } from '../common/errors';
+import { AccessService } from '../access/access.service';
+import { ACTIONS } from '../access/actions';
 import { PasswordService } from './password';
+
+/**
+ * Reflected capabilities for UX (web "Permission Reflection"). These are hints the
+ * client uses to show/hide controls — the API still re-authorizes every action, so
+ * a stale or spoofed capability changes nothing server-side.
+ */
+export interface UserCapabilities {
+  /** May create invitations (also gates the invitations management page). */
+  inviteCreate: boolean;
+}
 
 export interface AuthenticatedUser {
   id: string;
@@ -10,6 +22,7 @@ export interface AuthenticatedUser {
   email: string | null;
   displayName: string;
   emailVerified: boolean;
+  capabilities: UserCapabilities;
 }
 
 /**
@@ -22,6 +35,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
+    private readonly access: AccessService,
   ) {}
 
   /** Verify credentials; throws 401 on failure, 403 EMAIL_NOT_VERIFIED when gated. */
@@ -86,12 +100,23 @@ export class AuthService {
       },
     });
     if (!user) throw new UnauthenticatedError();
+
+    // Reflect the user's UI-relevant capabilities by asking the access engine the
+    // same questions the guards will ask. invite:create is a global action, so the
+    // organization is the resource.
+    const inviteCreate = await this.access.decide({
+      userId: user.id,
+      action: ACTIONS.inviteCreate.action,
+      resource: { type: 'Organization', id: user.organizationId },
+    });
+
     return {
       id: user.id,
       organizationId: user.organizationId,
       email: user.email,
       displayName: user.displayName,
       emailVerified: user.identities[0]?.verifiedAt != null,
+      capabilities: { inviteCreate },
     };
   }
 

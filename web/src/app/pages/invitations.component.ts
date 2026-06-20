@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../core/api.service';
+import { AuthStore } from '../core/auth.store';
 import { InvitationListItem } from '../core/api.types';
 import { errorMessage } from '../core/errors';
 
@@ -9,16 +10,18 @@ import { errorMessage } from '../core/errors';
   standalone: true,
   imports: [FormsModule, DatePipe],
   template: `
-    <div class="panel">
-      <h2>Invitations</h2>
-      <label>Email (optional)</label>
-      <input type="email" [(ngModel)]="email" placeholder="invitee@example.com" />
-      <button [disabled]="busy()" (click)="create()">Create invitation</button>
-      @if (lastUrl()) {
-        <p class="muted">Share this link: <code>{{ lastUrl() }}</code></p>
-      }
-      @if (error()) { <p class="error">{{ error() }}</p> }
-    </div>
+    @if (auth.canInvite()) {
+      <div class="panel">
+        <h2>Create invitation</h2>
+        <label>Email (optional — binds the invite to this address)</label>
+        <input type="email" [(ngModel)]="email" placeholder="invitee@example.com" />
+        <button [disabled]="busy()" (click)="create()">Create invitation</button>
+        @if (lastUrl()) {
+          <p class="muted">Share this link: <code>{{ lastUrl() }}</code></p>
+        }
+        @if (error()) { <p class="error">{{ error() }}</p> }
+      </div>
+    }
 
     <div class="panel">
       <table>
@@ -48,6 +51,7 @@ import { errorMessage } from '../core/errors';
 })
 export class InvitationsComponent {
   private readonly api = inject(ApiService);
+  readonly auth = inject(AuthStore);
 
   email = '';
   readonly invites = signal<InvitationListItem[]>([]);

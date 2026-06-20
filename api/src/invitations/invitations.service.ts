@@ -24,7 +24,10 @@ import { deriveInvitationStatus, InvitationStatus } from './invitation-status';
 const DEFAULT_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export interface InviteView {
-  email: string | null;
+  // Whether the invite is bound to a specific email. The bound *value* is never
+  // exposed — the redeemer must already know it (knowledge factor against link
+  // leakage), and the server enforces the match on accept.
+  requiresEmail: boolean;
   requiresPasscode: boolean;
   status: InvitationStatus;
   isBootstrap: boolean;
@@ -107,7 +110,7 @@ export class InvitationsService {
     const inv = await this.findByToken(token);
     if (!inv) throw new NotFoundError('INVITE_NOT_FOUND', 'Invitation not found');
     return {
-      email: inv.email,
+      requiresEmail: inv.email != null,
       requiresPasscode: inv.passcodeHash != null,
       status: deriveInvitationStatus(inv),
       isBootstrap: inv.createdBy == null,
@@ -185,6 +188,18 @@ export class InvitationsService {
       if (!provided || !safeEqualHex(provided, inv.passcodeHash)) {
         throw new DeniedError('INVALID_PASSCODE', 'Invalid bootstrap passcode');
       }
+    }
+
+    // Email gate: an invite bound to a specific email may only be redeemed with
+    // that email. The bound value is never exposed by the API, so the redeemer must
+    // already know it — this is the knowledge factor that makes email-gating
+    // meaningful against a leaked invite link. (Binding to a *verified* email —
+    // proving control, not just knowledge — remains a deferred hardening.)
+    if (inv.email && args.email.toLowerCase() !== inv.email.toLowerCase()) {
+      throw new DeniedError(
+        'EMAIL_MISMATCH',
+        'This invitation was issued to a different email address',
+      );
     }
 
     // Friendly, field-targeted message for the common duplicate-email case (the DB

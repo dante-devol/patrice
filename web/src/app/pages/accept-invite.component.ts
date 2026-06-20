@@ -26,8 +26,10 @@ import { errorMessage } from '../core/errors';
         <label>Display name</label>
         <input [(ngModel)]="displayName" />
         <label>Email</label>
-        <input type="email" [(ngModel)]="email" autocomplete="username"
-               [readonly]="!!invite()!.email" />
+        <input type="email" [(ngModel)]="email" autocomplete="username" />
+        @if (invite()!.requiresEmail) {
+          <p class="muted">Enter the email address this invitation was sent to.</p>
+        }
         <label>Password</label>
         <input type="password" [(ngModel)]="password" autocomplete="new-password" />
         @if (error()) { <p class="error">{{ error() }}</p> }
@@ -62,7 +64,8 @@ export class AcceptInviteComponent {
     try {
       const view = await this.api.viewInvite(this.token);
       this.invite.set(view);
-      if (view.email) this.email = view.email;
+      // Intentionally do NOT pre-fill the email — for an email-gated invite the
+      // redeemer must supply the address themselves (the server enforces it).
     } catch (e) {
       this.error.set(errorMessage(e));
     } finally {

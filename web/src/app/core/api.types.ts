@@ -5,12 +5,17 @@
 // runnable; wiring code-first OpenAPI emission (from the API's Zod schemas) and
 // the generated client is a follow-up tracked against the Slice 1 umbrella.
 
+export interface UserCapabilities {
+  inviteCreate: boolean;
+}
+
 export interface CurrentUser {
   id: string;
   organizationId: string;
   email: string | null;
   displayName: string;
   emailVerified: boolean;
+  capabilities: UserCapabilities;
 }
 
 export interface BootstrapStatus {
@@ -19,7 +24,9 @@ export interface BootstrapStatus {
 }
 
 export interface InviteView {
-  email: string | null;
+  // True when the invite is bound to a specific email. The value is intentionally
+  // never sent — the redeemer must know it; the server enforces the match.
+  requiresEmail: boolean;
   requiresPasscode: boolean;
   status: 'pending' | 'revoked' | 'exhausted' | 'expired';
   isBootstrap: boolean;
