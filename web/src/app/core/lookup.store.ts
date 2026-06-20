@@ -24,8 +24,21 @@ export class LookupStore {
   private readonly userNames = signal<Map<string, string>>(new Map());
   private loading: Promise<void> | null = null;
 
+  /** Load once and cache for the session (cheap name resolution on every page). */
   ensureLoaded(): Promise<void> {
     if (!this.loading) this.loading = this.load();
+    return this.loading;
+  }
+
+  /**
+   * Force a re-fetch of the division/team/user lists. The store is a session-lived
+   * singleton, so a list mutated elsewhere in the SPA (e.g. a division added in the
+   * Admin pane) is otherwise invisible until a hard reload. Pages that present those
+   * lists as live options (the task create form) call this on entry. (Cross-client
+   * live updates are a separate concern — the future notifications slice, not this.)
+   */
+  refresh(): Promise<void> {
+    this.loading = this.load();
     return this.loading;
   }
 

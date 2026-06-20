@@ -107,7 +107,10 @@ export class TaskListComponent {
   newTask = { name: '', description: '', divisionId: '', teamId: '' };
 
   constructor() {
-    void this.lookup.ensureLoaded().then(() => this.reload());
+    // Refresh (not ensureLoaded) so a division/team added elsewhere in the session
+    // — e.g. just now in the Admin pane — shows up in the create-form options
+    // without a hard reload.
+    void this.lookup.refresh().then(() => this.reload());
   }
 
   async reload(): Promise<void> {
