@@ -3,6 +3,7 @@ import { LifecycleState, RoleKind } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
+import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError, ValidationError } from '../common/errors';
 import { isRevivable } from '../common/lifecycle';
@@ -37,6 +38,7 @@ export class RolesService {
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
+    private readonly admin: AdministrabilityService,
     private readonly activity: ActivityService,
   ) {}
 
@@ -115,27 +117,34 @@ export class RolesService {
     if (role.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('ALREADY_RETIRED', 'Role is already retired');
     }
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const r = await tx.role.update({
-        where: { id: role.id },
-        data: {
-          lifecycleState: LifecycleState.retired,
-          retiredAt: new Date(),
-          version: { increment: 1 },
-        },
-      });
-      await this.activity.logActivity({
-        tx,
-        organizationId: role.organizationId,
-        actorUserId,
-        subjectType: 'role',
-        subjectId: role.id,
-        verb: 'role.retired',
-        payload: { roleId: role.id },
-      });
-      await this.access.bumpConfigVersion(role.organizationId, tx);
-      return r;
-    });
+    // Retiring a role drops its grants from the projection — if it carried the last
+    // global governance grant, the admin floor would hit zero. Guarded.
+    const updated = await this.admin.withAdminFloor(
+      role.organizationId,
+      actorUserId,
+      { type: 'role', id: role.id, path: 'role.retire' },
+      async (tx) => {
+        const r = await tx.role.update({
+          where: { id: role.id },
+          data: {
+            lifecycleState: LifecycleState.retired,
+            retiredAt: new Date(),
+            version: { increment: 1 },
+          },
+        });
+        await this.activity.logActivity({
+          tx,
+          organizationId: role.organizationId,
+          actorUserId,
+          subjectType: 'role',
+          subjectId: role.id,
+          verb: 'role.retired',
+          payload: { roleId: role.id },
+        });
+        await this.access.bumpConfigVersion(role.organizationId, tx);
+        return r;
+      },
+    );
     return this.toView(updated);
   }
 

@@ -14,6 +14,7 @@ import { RolesModule } from './roles/roles.module';
 import { DivisionsModule } from './divisions/divisions.module';
 import { TeamsModule } from './teams/teams.module';
 import { GrantsModule } from './grants/grants.module';
+import { UsersModule } from './users/users.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -31,6 +32,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     DivisionsModule,
     TeamsModule,
     GrantsModule,
+    UsersModule,
   ],
   controllers: [HealthController],
   providers: [

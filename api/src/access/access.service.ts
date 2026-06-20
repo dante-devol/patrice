@@ -175,6 +175,25 @@ export class AccessService {
     return { principal, entities };
   }
 
+  /** Merge entities sharing a UID (last-write-wins on attrs; union of parents). */
+  private dedupeEntities(list: CedarEntity[]): CedarEntity[] {
+    const byKey = new Map<string, CedarEntity>();
+    for (const e of list) {
+      const key = `${e.uid.type}::${e.uid.id}`;
+      const prior = byKey.get(key);
+      if (!prior) {
+        byKey.set(key, { uid: e.uid, attrs: { ...e.attrs }, parents: [...e.parents] });
+        continue;
+      }
+      prior.attrs = { ...prior.attrs, ...e.attrs };
+      const seen = new Set(prior.parents.map((p) => `${p.type}::${p.id}`));
+      for (const p of e.parents) {
+        if (!seen.has(`${p.type}::${p.id}`)) prior.parents.push(p);
+      }
+    }
+    return [...byKey.values()];
+  }
+
   /** Evaluate one authorization request. Returns true iff Cedar decides `allow`. */
   async decide(args: DecideArgs): Promise<boolean> {
     const org = await this.readOrg();
@@ -191,12 +210,18 @@ export class AccessService {
       parents: [],
     };
 
+    // A self-targeting request (e.g. an admin revoking their own role) makes the
+    // resource UID collide with the principal UID. Cedar rejects duplicate entity
+    // entries, so merge same-UID entities — the principal's role membership and the
+    // resource's own attributes (targetRole/retired) must both be present.
+    const merged = this.dedupeEntities([...entities, resourceEntity]);
+
     return this.cedar.authorize({
       principal,
       action: { type: CedarEngine.actionType(), id: args.action },
       resource: resourceUid,
       context: args.context,
-      entities: [...entities, resourceEntity],
+      entities: merged,
       policiesText,
     });
   }

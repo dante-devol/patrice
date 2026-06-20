@@ -5,6 +5,7 @@ import { Inject } from '@nestjs/common';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
+import { AdministrabilityService } from '../access/administrability.service';
 import { CedarEngine } from '../access/cedar/engine';
 import { ActivityService } from '../activity/activity.service';
 import { ALL_ACTION_STRINGS, RESOURCE_TYPE_BY_ACTION } from '../access/actions';
@@ -56,6 +57,7 @@ export class GrantsService {
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
+    private readonly admin: AdministrabilityService,
     private readonly cedar: CedarEngine,
     private readonly activity: ActivityService,
   ) {}
@@ -318,32 +320,38 @@ export class GrantsService {
     };
     await this.validateActivation(existing.organizationId, candidate, existing.id);
 
-    const grant = await this.prisma.$transaction(async (tx) => {
-      const g = await tx.grant.update({
-        where: { id: existing.id },
-        data: {
-          action: merged.action,
-          effect: merged.effect,
-          scopeKind: merged.scopeKind,
-          scopeDivisionId: merged.scopeDivisionId ?? null,
-          scopeTeamId: merged.scopeTeamId ?? null,
-          scopeRoleId: merged.scopeRoleId ?? null,
-          version: { increment: 1 },
-        },
-        select: this.viewSelect(),
-      });
-      await this.activity.logActivity({
-        tx,
-        organizationId: existing.organizationId,
-        actorUserId,
-        subjectType: 'grant',
-        subjectId: g.id,
-        verb: 'grant.updated',
-        payload: { grantId: g.id, roleId: g.roleId },
-      });
-      await this.access.bumpConfigVersion(existing.organizationId, tx);
-      return g;
-    });
+    // Editing a governance grant can revoke admin authority — guard the floor.
+    const grant = await this.admin.withAdminFloor(
+      existing.organizationId,
+      actorUserId,
+      { type: 'grant', id: existing.id, path: 'grant.update' },
+      async (tx) => {
+        const g = await tx.grant.update({
+          where: { id: existing.id },
+          data: {
+            action: merged.action,
+            effect: merged.effect,
+            scopeKind: merged.scopeKind,
+            scopeDivisionId: merged.scopeDivisionId ?? null,
+            scopeTeamId: merged.scopeTeamId ?? null,
+            scopeRoleId: merged.scopeRoleId ?? null,
+            version: { increment: 1 },
+          },
+          select: this.viewSelect(),
+        });
+        await this.activity.logActivity({
+          tx,
+          organizationId: existing.organizationId,
+          actorUserId,
+          subjectType: 'grant',
+          subjectId: g.id,
+          verb: 'grant.updated',
+          payload: { grantId: g.id, roleId: g.roleId },
+        });
+        await this.access.bumpConfigVersion(existing.organizationId, tx);
+        return g;
+      },
+    );
     return grant;
   }
 
@@ -352,28 +360,33 @@ export class GrantsService {
     if (existing.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('ALREADY_RETIRED', 'Grant is already retired');
     }
-    const grant = await this.prisma.$transaction(async (tx) => {
-      const g = await tx.grant.update({
-        where: { id: existing.id },
-        data: {
-          lifecycleState: LifecycleState.retired,
-          retiredAt: new Date(),
-          version: { increment: 1 },
-        },
-        select: this.viewSelect(),
-      });
-      await this.activity.logActivity({
-        tx,
-        organizationId: existing.organizationId,
-        actorUserId,
-        subjectType: 'grant',
-        subjectId: g.id,
-        verb: 'grant.retired',
-        payload: { grantId: g.id, roleId: g.roleId },
-      });
-      await this.access.bumpConfigVersion(existing.organizationId, tx);
-      return g;
-    });
+    const grant = await this.admin.withAdminFloor(
+      existing.organizationId,
+      actorUserId,
+      { type: 'grant', id: existing.id, path: 'grant.retire' },
+      async (tx) => {
+        const g = await tx.grant.update({
+          where: { id: existing.id },
+          data: {
+            lifecycleState: LifecycleState.retired,
+            retiredAt: new Date(),
+            version: { increment: 1 },
+          },
+          select: this.viewSelect(),
+        });
+        await this.activity.logActivity({
+          tx,
+          organizationId: existing.organizationId,
+          actorUserId,
+          subjectType: 'grant',
+          subjectId: g.id,
+          verb: 'grant.retired',
+          payload: { grantId: g.id, roleId: g.roleId },
+        });
+        await this.access.bumpConfigVersion(existing.organizationId, tx);
+        return g;
+      },
+    );
     return grant;
   }
 

@@ -64,6 +64,19 @@ export const activityPayloadSchemas = {
   'grant.updated': z.object({ grantId: uuid, roleId: uuid }).strict(),
   'grant.retired': z.object({ grantId: uuid, roleId: uuid }).strict(),
   'grant.revived': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'user_role.granted': z.object({ userId: uuid, roleId: uuid }).strict(),
+  'user_role.revoked': z.object({ userId: uuid, roleId: uuid }).strict(),
+  'user.updated': z.object({ userId: uuid }).strict(),
+  'user.deactivated': z.object({ userId: uuid }).strict(),
+  'user.reactivated': z.object({ userId: uuid }).strict(),
+  'config.updated': z
+    .object({ changedKeys: z.array(z.string()) })
+    .strict(),
+  // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
+  // `subjectId` name the attempted target; the payload stays IDs-only.
+  'last_admin_refused': z
+    .object({ path: z.string(), subjectId: uuid })
+    .strict(),
 } as const;
 
 export type ActivityVerb = keyof typeof activityPayloadSchemas;
