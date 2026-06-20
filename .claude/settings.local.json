@@ -1,8 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "*",
-      "PowerShell($env:TEMP)"
+      "PowerShell($env:TEMP)",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)",
+      "PowerShell(gh auth *)",
+      "PowerShell(gh *)",
+      "Bash(git mv *)",
+      "Bash(gh --version)",
+      "Bash(gh label *)",
+      "Bash(gh issue *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(gh issue create --repo dante-devol/patrice --title \"Slice 1: Foundation, Auth, Access Engine & Bootstrap\" --body-file \"$env:TEMP\\\\patrice-issues\\\\s1-umbrella.md\" --label ready-for-agent)",
+      "PowerShell(gh issue create *)",
+      "PowerShell(gh issue create --repo dante-devol/patrice --title \"Slice 1.2: Cedar access engine + seeded Admin + first gated endpoint\" --body-file \"$env:TEMP\\\\patrice-issues\\\\s1-2.md\" --label ready-for-agent)"
     ]
   }
 }
