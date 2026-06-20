@@ -4,3 +4,5 @@ dist/
 *.log
 coverage/
 .DS_Store
+# Local-fs object storage (STORAGE_DRIVER=local).
+var/

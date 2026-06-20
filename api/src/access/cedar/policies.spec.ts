@@ -49,4 +49,20 @@ describe('grantToPolicy — Slice 4 task scopes', () => {
     );
     expect(engine.validationErrors(policy)).toEqual([]);
   });
+
+  it('projects message:create @ own as a sender-ownership clause', () => {
+    const policy = grantToPolicy(
+      baseGrant({ action: 'message:create', scopeKind: 'own' }),
+    );
+    expect(policy).toContain('resource.sender == principal');
+    expect(engine.validationErrors(policy)).toEqual([]);
+  });
+
+  it('projects attachment:create @ own as an uploader-ownership clause', () => {
+    const policy = grantToPolicy(
+      baseGrant({ action: 'attachment:create', scopeKind: 'own' }),
+    );
+    expect(policy).toContain('resource.uploader == principal');
+    expect(engine.validationErrors(policy)).toEqual([]);
+  });
 });

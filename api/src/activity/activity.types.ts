@@ -100,6 +100,15 @@ export const activityPayloadSchemas = {
   'task.requester_changed': z
     .object({ taskId: uuid, requesterUserId: uuid })
     .strict(),
+  // Slice 4.3 — messages + attachments. IDs only.
+  'message.created': z
+    .object({ messageId: uuid, taskId: uuid, parentMessageId: uuid.nullable() })
+    .strict(),
+  'message.updated': z.object({ messageId: uuid, taskId: uuid }).strict(),
+  'message.retired': z.object({ messageId: uuid, taskId: uuid }).strict(),
+  'attachment.created': z
+    .object({ attachmentId: uuid, messageId: uuid })
+    .strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z

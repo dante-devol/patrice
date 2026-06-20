@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { LifecycleState, Prisma, QuestionType, StatusCache } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
+import { MessagesService } from '../messages/messages.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { computeStatusCache } from './task-status';
 import {
@@ -47,6 +48,7 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
+    private readonly messages: MessagesService,
   ) {}
 
   private toView(t: {
@@ -390,6 +392,7 @@ export class TasksService {
         verb: 'task.claimed',
         payload: { taskId, userId, statusCache: status },
       });
+      await this.messages.createSystemMessage(tx, taskId, `User ${userId} claimed this task.`);
       const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
       return this.toView(row);
     });
@@ -420,6 +423,7 @@ export class TasksService {
         verb: 'task.left',
         payload: { taskId, userId, statusCache: status },
       });
+      await this.messages.createSystemMessage(tx, taskId, `User ${userId} left this task.`);
       const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
       return this.toView(row);
     });
@@ -520,6 +524,11 @@ export class TasksService {
         verb: 'task.requester_changed',
         payload: { taskId, requesterUserId: dto.userId },
       });
+      await this.messages.createSystemMessage(
+        tx,
+        taskId,
+        `Requester changed to user ${dto.userId}.`,
+      );
       return this.toView(row);
     });
   }

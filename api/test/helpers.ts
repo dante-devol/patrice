@@ -14,7 +14,8 @@ export async function resetDatabase(): Promise<void> {
     await prisma.$executeRawUnsafe(
       `TRUNCATE organization, app_user, user_identity, session, invitation,
        invitation_use, auth_token, role, user_role, "grant", activity,
-       division, team, questionnaire, question, task
+       division, team, questionnaire, question, task, task_claimant,
+       message, attachment
        RESTART IDENTITY CASCADE;`,
     );
   } finally {

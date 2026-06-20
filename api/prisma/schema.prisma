@@ -90,6 +90,19 @@ enum StatusCache {
   approved
 }
 
+enum MessageKind {
+  comment
+  system
+}
+
+enum AttachmentKind {
+  image
+  text
+  audio
+  model
+  other
+}
+
 model Organization {
   id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   name          String
@@ -109,6 +122,7 @@ model Organization {
   teams          Team[]
   questionnaires Questionnaire[]
   tasks          Task[]
+  attachments    Attachment[]
 
   @@unique([singleton])
   @@map("organization")
@@ -178,6 +192,8 @@ model AppUser {
   invitationUses InvitationUse[]
   requestedTasks Task[]
   taskClaimants  TaskClaimant[]
+  messages       Message[]
+  attachments    Attachment[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -428,6 +444,7 @@ model Task {
   // The task's own questionnaire copy (0..1); UNIQUE questionnaire.owner_task_id.
   questionnaire Questionnaire?
   claimants     TaskClaimant[]
+  messages      Message[]
 
   @@index([divisionId])
   @@index([teamId])
@@ -456,4 +473,65 @@ model TaskClaimant {
   @@index([taskId])
   @@index([userId])
   @@map("task_claimant")
+}
+
+/// A message on a task's thread (Slice 4.3). `comment` messages are user-authored
+/// (markdown, optional attachments); senderless `system` messages are emitted for
+/// claim/leave/requester-change events. Threads are **one level deep**: a reply sets
+/// `parent_message_id` to a TOP-LEVEL message — a DB trigger + app guard reject a
+/// reply-to-reply. `submission_id` is a bare column until its FK lands in Slice 5.
+model Message {
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  taskId          String         @map("task_id") @db.Uuid
+  kind            MessageKind    @default(comment)
+  senderUserId    String?        @map("sender_user_id") @db.Uuid
+  parentMessageId String?        @map("parent_message_id") @db.Uuid
+  submissionId    String?        @map("submission_id") @db.Uuid
+  body            String         @db.Text
+  lifecycleState  LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt       DateTime?      @map("retired_at") @db.Timestamptz(6)
+  editedAt        DateTime?      @map("edited_at") @db.Timestamptz(6)
+  version         Int            @default(0)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task     Task      @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  sender   AppUser?  @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
+  parent   Message?  @relation("MessageThread", fields: [parentMessageId], references: [id], onDelete: Restrict)
+  replies  Message[] @relation("MessageThread")
+  attachments Attachment[]
+
+  @@index([taskId, createdAt])
+  @@index([parentMessageId])
+  @@map("message")
+}
+
+/// An uploaded file (Slice 4.3), stored via the StoragePort (S3 or local-fs) and
+/// referenced from EXACTLY ONE of a message (`message_id`) or an answer (`answer_id`,
+/// its FK arriving in Slice 5) — a CHECK enforces the exactly-one rule. `storage_key`
+/// locates the blob in the configured store; metadata (filename/type/size/checksum)
+/// is captured at upload. Download is ungated in v1.
+model Attachment {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  messageId      String?        @map("message_id") @db.Uuid
+  answerId       String?        @map("answer_id") @db.Uuid
+  uploaderUserId String         @map("uploader_user_id") @db.Uuid
+  storageKey     String         @map("storage_key") @db.Text
+  filename       String
+  contentType    String         @map("content_type")
+  byteSize       BigInt         @map("byte_size")
+  kind           AttachmentKind @default(other)
+  checksum       String?
+  lifecycleState LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  message      Message?     @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  uploader     AppUser      @relation(fields: [uploaderUserId], references: [id], onDelete: Restrict)
+
+  @@index([messageId])
+  @@index([answerId])
+  @@index([organizationId])
+  @@map("attachment")
 }

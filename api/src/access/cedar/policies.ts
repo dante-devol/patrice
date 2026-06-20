@@ -48,8 +48,13 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
   // Slice 4.2 — the requester manages claims / reassigns the requester.
   'task:manage_claims': 'requester',
   'task:change_requester': 'requester',
+  // Slice 4.3 — sender own-family (own_as_sender) + uploader (own_as_uploader).
+  'message:create': 'sender',
+  'message:update': 'sender',
+  'message:retire': 'sender',
+  'attachment:create': 'uploader',
+  'attachment:retire': 'uploader',
   // 'task:submit': 'claimant',
-  // 'message:create': 'sender', 'attachment:create': 'uploader', ...
 };
 
 /**
