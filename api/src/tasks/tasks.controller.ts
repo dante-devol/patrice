@@ -21,11 +21,15 @@ import { ACTIONS } from '../access/actions';
 import { TasksService } from './tasks.service';
 import { QuestionnairesService } from '../questionnaires/questionnaires.service';
 import {
+  changeRequesterSchema,
   createTaskSchema,
   listTasksQuerySchema,
+  manageClaimsSchema,
   updateTaskSchema,
+  type ChangeRequesterDto,
   type CreateTaskDto,
   type ListTasksQuery,
+  type ManageClaimsDto,
   type UpdateTaskDto,
 } from './tasks.dto';
 
@@ -87,6 +91,46 @@ export class TasksController {
   async retire(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
     return this.tasks.retire(id, req.user.id);
+  }
+
+  @Post(':id/claim')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskAssign.action, taskResource)
+  async claim(@Param('id') id: string, @Req() req: AuthedRequest) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.tasks.claim(id, req.user.id);
+  }
+
+  @Post(':id/leave')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskAssign.action, taskResource)
+  async leave(@Param('id') id: string, @Req() req: AuthedRequest) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.tasks.leave(id, req.user.id);
+  }
+
+  @Post(':id/claims')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskManageClaims.action, taskResource)
+  async manageClaims(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(manageClaimsSchema)) body: ManageClaimsDto,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.tasks.manageClaims(id, req.user.id, body);
+  }
+
+  @Post(':id/requester')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskChangeRequester.action, taskResource)
+  async changeRequester(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(changeRequesterSchema)) body: ChangeRequesterDto,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.tasks.changeRequester(id, req.user.id, body);
   }
 
   @Get(':id/questionnaire')

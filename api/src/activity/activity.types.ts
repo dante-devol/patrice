@@ -87,6 +87,19 @@ export const activityPayloadSchemas = {
     .strict(),
   'task.updated': z.object({ taskId: uuid }).strict(),
   'task.retired': z.object({ taskId: uuid }).strict(),
+  // Slice 4.2 — claiming / openings / requester. IDs + the new status only.
+  'task.claimed': z
+    .object({ taskId: uuid, userId: uuid, statusCache: z.string() })
+    .strict(),
+  'task.left': z
+    .object({ taskId: uuid, userId: uuid, statusCache: z.string() })
+    .strict(),
+  'task.claims_updated': z
+    .object({ taskId: uuid, openings: z.number().int(), claimsClosed: z.boolean(), statusCache: z.string() })
+    .strict(),
+  'task.requester_changed': z
+    .object({ taskId: uuid, requesterUserId: uuid })
+    .strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z

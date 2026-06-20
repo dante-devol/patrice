@@ -177,6 +177,7 @@ model AppUser {
   authTokens     AuthToken[]
   invitationUses InvitationUse[]
   requestedTasks Task[]
+  taskClaimants  TaskClaimant[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -426,6 +427,7 @@ model Task {
   requester    AppUser        @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
   // The task's own questionnaire copy (0..1); UNIQUE questionnaire.owner_task_id.
   questionnaire Questionnaire?
+  claimants     TaskClaimant[]
 
   @@index([divisionId])
   @@index([teamId])
@@ -433,4 +435,25 @@ model Task {
   @@index([requesterUserId])
   @@index([organizationId])
   @@map("task")
+}
+
+/// A claimant slot on a task (Slice 4.2). A user occupies a slot from `joined_at`
+/// until `left_at` (NULL = active). UNIQUE(task_id,user_id) keeps a user to at most
+/// one slot per task; re-claiming after leaving reactivates the same row. Eligibility
+/// to claim is decided in Cedar (`task:assign @ own_as_claimant`), never here.
+model TaskClaimant {
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  taskId       String    @map("task_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  joinedAt     DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+  hasSubmitted Boolean   @default(false) @map("has_submitted")
+  leftAt       DateTime? @map("left_at") @db.Timestamptz(6)
+
+  task Task    @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
+  @@map("task_claimant")
 }

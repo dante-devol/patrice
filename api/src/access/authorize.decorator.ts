@@ -98,6 +98,8 @@ export const taskResource: ResourceResolver = async (req, prisma) => {
       teamId: true,
       requesterUserId: true,
       lifecycleState: true,
+      division: { select: { restrictClaims: true } },
+      team: { select: { restrictClaims: true } },
     },
   });
   if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
@@ -106,6 +108,11 @@ export const taskResource: ResourceResolver = async (req, prisma) => {
     id: task.id,
     attrs: {
       division: divisionEntity(task.divisionId),
+      // Restrict flags drive Claim Eligibility AND-Composition (task:assign).
+      // teamRestrictsClaims is always present (false on a teamless task) so the
+      // eligibility clause short-circuits without dereferencing resource.team.
+      divisionRestrictsClaims: task.division.restrictClaims,
+      teamRestrictsClaims: task.team?.restrictClaims ?? false,
       ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
       requester: userEntity(task.requesterUserId),
       retired: task.lifecycleState === 'retired',

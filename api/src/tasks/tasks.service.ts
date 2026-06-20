@@ -4,7 +4,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { computeStatusCache } from './task-status';
-import { CreateTaskDto, ListTasksQuery, UpdateTaskDto } from './tasks.dto';
+import {
+  ChangeRequesterDto,
+  CreateTaskDto,
+  ListTasksQuery,
+  ManageClaimsDto,
+  UpdateTaskDto,
+} from './tasks.dto';
 
 export interface TaskView {
   id: string;
@@ -199,6 +205,12 @@ export class TasksService {
     if (query.team) where.teamId = { in: query.team };
     if (query.status) where.statusCache = { in: query.status as StatusCache[] };
     if (query.requester) where.requesterUserId = { in: query.requester };
+    if (query.claimant) {
+      // Tasks with at least one ACTIVE (not-left) slot held by a named claimant.
+      where.claimants = {
+        some: { userId: { in: query.claimant }, leftAt: null },
+      };
+    }
     // Newer UUIDv7 ids sort greater; newest-first ⇒ desc, cursor ⇒ id < after.
     if (query.after) where.id = { lt: query.after };
 
@@ -282,5 +294,233 @@ export class TasksService {
       return row;
     });
     return this.toView(updated);
+  }
+
+  /**
+   * Recompute and persist `status_cache` from the task's current openings, closed
+   * flag, and active claimant count (Slice 4 subset). Runs inside the caller's tx so
+   * the status moves atomically with the claim/leave/openings change that triggered it.
+   */
+  private async recomputeStatus(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+  ): Promise<StatusCache> {
+    const task = await tx.task.findUniqueOrThrow({
+      where: { id: taskId },
+      select: { openings: true, claimsClosed: true },
+    });
+    const activeClaimants = await tx.taskClaimant.count({
+      where: { taskId, leftAt: null },
+    });
+    const status = computeStatusCache({
+      activeClaimants,
+      openings: task.openings,
+      claimsClosed: task.claimsClosed,
+    }) as StatusCache;
+    await tx.task.update({ where: { id: taskId }, data: { statusCache: status } });
+    return status;
+  }
+
+  /** Load an active (non-retired) task or throw 404/409. */
+  private async loadActiveTask(id: string) {
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        organizationId: true,
+        openings: true,
+        claimsClosed: true,
+        lifecycleState: true,
+        divisionId: true,
+      },
+    });
+    if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+    if (task.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('TASK_RETIRED', 'Task is retired');
+    }
+    return task;
+  }
+
+  /**
+   * Self-claim (`task:assign`). Eligibility is decided by Cedar before this runs; the
+   * service only enforces the operational caps: claims not closed and a free opening.
+   * Re-claiming after leaving reactivates the same slot row (UNIQUE task_id,user_id).
+   */
+  async claim(taskId: string, userId: string): Promise<TaskView> {
+    const task = await this.loadActiveTask(taskId);
+    if (task.claimsClosed) {
+      throw new ConflictError('CLAIMS_CLOSED', 'This task is closed to new claims');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Serialize concurrent claims on this task so the capacity check is race-safe.
+      await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
+
+      const existing = await tx.taskClaimant.findUnique({
+        where: { taskId_userId: { taskId, userId } },
+        select: { id: true, leftAt: true },
+      });
+      if (existing && existing.leftAt === null) {
+        throw new ConflictError('ALREADY_CLAIMED', 'You already hold a slot');
+      }
+
+      const activeCount = await tx.taskClaimant.count({
+        where: { taskId, leftAt: null },
+      });
+      if (activeCount >= task.openings) {
+        throw new ConflictError('NO_OPENINGS', 'No openings remain on this task');
+      }
+
+      if (existing) {
+        await tx.taskClaimant.update({
+          where: { id: existing.id },
+          data: { leftAt: null, joinedAt: new Date(), hasSubmitted: false },
+        });
+      } else {
+        await tx.taskClaimant.create({ data: { taskId, userId } });
+      }
+
+      const status = await this.recomputeStatus(tx, taskId);
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId: userId,
+        subjectType: 'task',
+        subjectId: taskId,
+        verb: 'task.claimed',
+        payload: { taskId, userId, statusCache: status },
+      });
+      const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
+      return this.toView(row);
+    });
+  }
+
+  /** Leave a claim (`task:assign`, own slot). Frees the slot (no submits in Slice 4). */
+  async leave(taskId: string, userId: string): Promise<TaskView> {
+    const task = await this.loadActiveTask(taskId);
+    return this.prisma.$transaction(async (tx) => {
+      const slot = await tx.taskClaimant.findUnique({
+        where: { taskId_userId: { taskId, userId } },
+        select: { id: true, leftAt: true },
+      });
+      if (!slot || slot.leftAt !== null) {
+        throw new ConflictError('NOT_CLAIMED', 'You do not hold a slot on this task');
+      }
+      await tx.taskClaimant.update({
+        where: { id: slot.id },
+        data: { leftAt: new Date() },
+      });
+      const status = await this.recomputeStatus(tx, taskId);
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId: userId,
+        subjectType: 'task',
+        subjectId: taskId,
+        verb: 'task.left',
+        payload: { taskId, userId, statusCache: status },
+      });
+      const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
+      return this.toView(row);
+    });
+  }
+
+  /**
+   * Requester claim management (`task:manage_claims`): change the opening count
+   * and/or close the task to new claims. Adding openings is blocked when the division
+   * has `openings_locked`. Openings may not drop below the active claimant count.
+   */
+  async manageClaims(
+    taskId: string,
+    actorUserId: string,
+    dto: ManageClaimsDto,
+  ): Promise<TaskView> {
+    const task = await this.loadActiveTask(taskId);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
+
+      const data: Prisma.TaskUpdateInput = { version: { increment: 1 } };
+
+      if (dto.openingsDelta !== undefined && dto.openingsDelta !== 0) {
+        const division = await tx.division.findUniqueOrThrow({
+          where: { id: task.divisionId },
+          select: { openingsLocked: true },
+        });
+        if (division.openingsLocked) {
+          throw new ConflictError('OPENINGS_LOCKED', 'Openings are locked for this division');
+        }
+        const activeCount = await tx.taskClaimant.count({
+          where: { taskId, leftAt: null },
+        });
+        const newOpenings = task.openings + dto.openingsDelta;
+        if (newOpenings < 0) {
+          throw new ConflictError('INVALID_OPENINGS', 'Openings cannot be negative');
+        }
+        if (newOpenings < activeCount) {
+          throw new ConflictError(
+            'INVALID_OPENINGS',
+            'Openings cannot drop below current claimants',
+          );
+        }
+        data.openings = newOpenings;
+      }
+
+      if (dto.claimsClosed !== undefined) {
+        data.claimsClosed = dto.claimsClosed;
+      }
+
+      await tx.task.update({ where: { id: taskId }, data });
+      const status = await this.recomputeStatus(tx, taskId);
+      const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId,
+        subjectType: 'task',
+        subjectId: taskId,
+        verb: 'task.claims_updated',
+        payload: {
+          taskId,
+          openings: row.openings,
+          claimsClosed: row.claimsClosed,
+          statusCache: status,
+        },
+      });
+      return this.toView(row);
+    });
+  }
+
+  /** Reassign the requester (`task:change_requester`). New requester must be active. */
+  async changeRequester(
+    taskId: string,
+    actorUserId: string,
+    dto: ChangeRequesterDto,
+  ): Promise<TaskView> {
+    const task = await this.loadActiveTask(taskId);
+    const newRequester = await this.prisma.appUser.findFirst({
+      where: { id: dto.userId, organizationId: task.organizationId },
+      select: { id: true, lifecycleState: true },
+    });
+    if (!newRequester) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
+    if (newRequester.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('USER_RETIRED', 'User is retired');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.task.update({
+        where: { id: taskId },
+        data: { requesterUserId: dto.userId, version: { increment: 1 } },
+      });
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId,
+        subjectType: 'task',
+        subjectId: taskId,
+        verb: 'task.requester_changed',
+        payload: { taskId, requesterUserId: dto.userId },
+      });
+      return this.toView(row);
+    });
   }
 }

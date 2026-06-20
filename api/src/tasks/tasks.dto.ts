@@ -56,10 +56,30 @@ export const listTasksQuerySchema = z
     team: multiFacet(uuid),
     status: multiFacet(statusValue),
     requester: multiFacet(uuid),
-    // `claimant` facet is added in Slice 4.2 alongside the task_claimant table.
+    claimant: multiFacet(uuid),
     after: uuid.optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
   })
   .strip();
 
 export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
+
+/**
+ * Claiming DTOs (Slice 4.2). `/claims` (task:manage_claims) takes an openings delta
+ * and/or a claims-closed toggle — at least one must be present. `/requester`
+ * (task:change_requester) reassigns the requester to another user.
+ */
+export const manageClaimsSchema = z
+  .object({
+    openingsDelta: z.number().int().min(-10_000).max(10_000).optional(),
+    claimsClosed: z.boolean().optional(),
+  })
+  .strict()
+  .refine((o) => o.openingsDelta !== undefined || o.claimsClosed !== undefined, {
+    message: 'Provide openingsDelta and/or claimsClosed',
+  });
+
+export const changeRequesterSchema = z.object({ userId: uuid }).strict();
+
+export type ManageClaimsDto = z.infer<typeof manageClaimsSchema>;
+export type ChangeRequesterDto = z.infer<typeof changeRequesterSchema>;

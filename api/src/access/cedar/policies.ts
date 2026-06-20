@@ -45,9 +45,28 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
   'task:retire': 'requester',
   'task:revive': 'requester',
   'task:configure_questionnaire': 'requester',
-  // 'task:submit': 'claimant', 'task:review': 'requester',
+  // Slice 4.2 — the requester manages claims / reassigns the requester.
+  'task:manage_claims': 'requester',
+  'task:change_requester': 'requester',
+  // 'task:submit': 'claimant',
   // 'message:create': 'sender', 'attachment:create': 'uploader', ...
 };
+
+/**
+ * Claim Eligibility AND-Composition (api/CONTEXT.md): the `own_as_claimant` clause
+ * the `task:assign` permit carries. A principal may claim iff — for each of division
+ * and team — that group does NOT restrict claims, OR the principal is a member of it
+ * (its inherent role, surfaced as `memberDivisions`/`memberTeams`). Each side is
+ * independently `has`-guarded so the clause type-checks under strict validation and a
+ * teamless task (teamRestrictsClaims=false) never dereferences `resource.team`.
+ */
+const CLAIM_ELIGIBILITY_WHEN =
+  ' when { ' +
+  '(!(resource has divisionRestrictsClaims && resource.divisionRestrictsClaims) ' +
+  '|| (resource has division && principal.memberDivisions.contains(resource.division))) ' +
+  '&& ' +
+  '(!(resource has teamRestrictsClaims && resource.teamRestrictsClaims) ' +
+  '|| (resource has team && principal.memberTeams.contains(resource.team))) }';
 
 function roleRef(roleId: string): string {
   return `${NS}::Role::"${roleId}"`;
@@ -84,6 +103,12 @@ function scopeCondition(g: ProjectableGrant): string {
         g.scopeRoleId ?? '',
       )} }`;
     case 'own': {
+      // task:assign is the claimant own-family, but claiming is *becoming* a
+      // claimant — so its `own` clause is the eligibility AND-composition, not a
+      // `resource.claimant == principal` ownership check.
+      if (g.action === 'task:assign') {
+        return CLAIM_ELIGIBILITY_WHEN;
+      }
       const attr = OWN_ATTR_BY_ACTION[g.action];
       if (!attr) {
         throw new Error(
