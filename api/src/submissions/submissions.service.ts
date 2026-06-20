@@ -20,7 +20,16 @@ import {
   AttachmentLookupPort,
   QuestionnaireDef,
 } from '../questionnaires/questionnaire.types';
-import { SubmitDto } from './submissions.dto';
+import { ReviewDto, SubmitDto } from './submissions.dto';
+
+/** Decision → the resulting submission state + the past-tense word for the audit. */
+const DECISION_OUTCOME: Readonly<
+  Record<ReviewDto['decision'], { state: SubmissionState; verb: string }>
+> = {
+  approve: { state: SubmissionState.approved, verb: 'approved' },
+  return: { state: SubmissionState.revising, verb: 'returned' },
+  reject: { state: SubmissionState.rejected, verb: 'rejected' },
+};
 
 export interface AnswerView {
   id: string;
@@ -281,6 +290,115 @@ export class SubmissionsService {
       include: this.includeAnswers,
     });
     return rows.map((r) => this.toView(r));
+  }
+
+  /**
+   * Review a submission (`task:review`): approve / return / reject. Cedar has gated
+   * *who* (and the self-review forbid); here the **state-machine guard** gates the
+   * transition — only a submission in `review` may move — and the UPDATE is
+   * **version-guarded** (409 STALE_SUBMISSION on a lost optimistic-lock race). The
+   * decision is recorded as a system reply threaded under the submission's M1, an
+   * optional reviewer `comment` as a user reply, then `status_cache` is recomputed.
+   */
+  async review(
+    submissionId: string,
+    actorUserId: string,
+    dto: ReviewDto,
+  ): Promise<SubmissionView> {
+    const submission = await this.prisma.submission.findUnique({
+      where: { id: submissionId },
+      select: {
+        id: true,
+        taskId: true,
+        submissionNo: true,
+        state: true,
+        version: true,
+        lifecycleState: true,
+        task: { select: { organizationId: true } },
+      },
+    });
+    if (!submission) {
+      throw new NotFoundError('SUBMISSION_NOT_FOUND', 'Submission not found');
+    }
+    if (submission.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('SUBMISSION_RETIRED', 'Submission is retired');
+    }
+    // State-machine guard: a decision is only valid from `review`. Once a submission
+    // leaves `review` that row is terminal; further iteration is a new submission.
+    if (submission.state !== SubmissionState.review) {
+      throw new ConflictError(
+        'INVALID_TRANSITION',
+        `Cannot review a submission in state "${submission.state}"`,
+      );
+    }
+    const outcome = DECISION_OUTCOME[dto.decision];
+
+    await this.prisma.$transaction(async (tx) => {
+      // Version-guarded UPDATE — 0 rows means another writer moved it first.
+      const updated = await tx.submission.updateMany({
+        where: { id: submissionId, version: submission.version },
+        data: {
+          state: outcome.state,
+          reviewedBy: actorUserId,
+          reviewedAt: new Date(),
+          version: { increment: 1 },
+        },
+      });
+      if (updated.count === 0) {
+        throw new ConflictError(
+          'STALE_SUBMISSION',
+          'This submission changed since you loaded it; reload and retry',
+        );
+      }
+
+      // The decision is a system reply under the submission's M1 top-level message.
+      const m1 = await tx.message.findFirst({
+        where: {
+          taskId: submission.taskId,
+          submissionId,
+          parentMessageId: null,
+          kind: 'system',
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      await this.messages.createSystemMessage(
+        tx,
+        submission.taskId,
+        `Reviewer ${actorUserId} ${outcome.verb} version ${submission.submissionNo}.`,
+        { submissionId, parentMessageId: m1?.id ?? null },
+      );
+      if (dto.comment) {
+        await tx.message.create({
+          data: {
+            taskId: submission.taskId,
+            kind: 'comment',
+            senderUserId: actorUserId,
+            parentMessageId: m1?.id ?? null,
+            submissionId,
+            body: dto.comment,
+          },
+        });
+      }
+
+      const status = await this.status.recompute(tx, submission.taskId);
+      await this.activity.logActivity({
+        tx,
+        organizationId: submission.task.organizationId,
+        actorUserId,
+        subjectType: 'submission',
+        subjectId: submissionId,
+        verb: 'submission.reviewed',
+        payload: {
+          taskId: submission.taskId,
+          submissionId,
+          decision: dto.decision,
+          statusCache: status,
+        },
+      });
+    });
+
+    return this.get(submissionId);
   }
 
   async get(id: string): Promise<SubmissionView> {
