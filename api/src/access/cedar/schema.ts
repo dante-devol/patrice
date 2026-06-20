@@ -66,6 +66,10 @@ export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
     team?: Team,
     requester?: User,
     claimant?: User,
+    // Claim Eligibility AND-Composition (Slice 4.2): the restrict flags the
+    // task:assign @ own_as_claimant template reads alongside principal membership.
+    divisionRestrictsClaims?: Bool,
+    teamRestrictsClaims?: Bool,
     retired?: Bool
   };
   entity Message {

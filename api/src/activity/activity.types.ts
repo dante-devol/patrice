@@ -76,6 +76,43 @@ export const activityPayloadSchemas = {
   'questionnaire.updated': z
     .object({ questionnaireId: uuid, divisionId: uuid, questionCount: z.number().int() })
     .strict(),
+  // Slice 4.1 — per-task questionnaire copy edited via task:configure_questionnaire.
+  'task_questionnaire.updated': z
+    .object({ questionnaireId: uuid, taskId: uuid, questionCount: z.number().int() })
+    .strict(),
+  // Slice 4.1 — tasks. IDs only (no name/description PII; render by joining at read).
+  'task.created': z
+    .object({
+      taskId: uuid,
+      divisionId: uuid,
+      teamId: uuid.nullable(),
+      questionnaireId: uuid,
+    })
+    .strict(),
+  'task.updated': z.object({ taskId: uuid }).strict(),
+  'task.retired': z.object({ taskId: uuid }).strict(),
+  // Slice 4.2 — claiming / openings / requester. IDs + the new status only.
+  'task.claimed': z
+    .object({ taskId: uuid, userId: uuid, statusCache: z.string() })
+    .strict(),
+  'task.left': z
+    .object({ taskId: uuid, userId: uuid, statusCache: z.string() })
+    .strict(),
+  'task.claims_updated': z
+    .object({ taskId: uuid, openings: z.number().int(), claimsClosed: z.boolean(), statusCache: z.string() })
+    .strict(),
+  'task.requester_changed': z
+    .object({ taskId: uuid, requesterUserId: uuid })
+    .strict(),
+  // Slice 4.3 — messages + attachments. IDs only.
+  'message.created': z
+    .object({ messageId: uuid, taskId: uuid, parentMessageId: uuid.nullable() })
+    .strict(),
+  'message.updated': z.object({ messageId: uuid, taskId: uuid }).strict(),
+  'message.retired': z.object({ messageId: uuid, taskId: uuid }).strict(),
+  'attachment.created': z
+    .object({ attachmentId: uuid, messageId: uuid })
+    .strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z

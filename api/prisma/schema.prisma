@@ -80,6 +80,29 @@ enum QuestionType {
   attachment
 }
 
+/// A task's rolled-up status (Slice 4 subset: open|claimed; review/revising/approved
+/// arrive with submissions in Slice 5). Nullable until first computed at create time.
+enum StatusCache {
+  open
+  claimed
+  review
+  revising
+  approved
+}
+
+enum MessageKind {
+  comment
+  system
+}
+
+enum AttachmentKind {
+  image
+  text
+  audio
+  model
+  other
+}
+
 model Organization {
   id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   name          String
@@ -98,6 +121,8 @@ model Organization {
   divisions      Division[]
   teams          Team[]
   questionnaires Questionnaire[]
+  tasks          Task[]
+  attachments    Attachment[]
 
   @@unique([singleton])
   @@map("organization")
@@ -121,6 +146,7 @@ model Division {
   inherentRole Role?
   // The division's default questionnaire (0..1); UNIQUE questionnaire.owner_division_id.
   questionnaire Questionnaire?
+  tasks         Task[]
 
   @@index([organizationId])
   @@map("division")
@@ -139,6 +165,7 @@ model Team {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   inherentRole Role?
+  tasks        Task[]
 
   @@index([organizationId])
   @@map("team")
@@ -163,6 +190,10 @@ model AppUser {
   userRoles      UserRole[]
   authTokens     AuthToken[]
   invitationUses InvitationUse[]
+  requestedTasks Task[]
+  taskClaimants  TaskClaimant[]
+  messages       Message[]
+  attachments    Attachment[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -354,6 +385,7 @@ model Questionnaire {
 
   organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   ownerDivision Division?    @relation(fields: [ownerDivisionId], references: [id], onDelete: Restrict)
+  ownerTask     Task?        @relation(fields: [ownerTaskId], references: [id], onDelete: Restrict)
   questions     Question[]
 
   @@index([organizationId])
@@ -381,4 +413,125 @@ model Question {
   @@unique([questionnaireId, ordinal])
   @@index([questionnaireId])
   @@map("question")
+}
+
+/// A unit of work (Slice 4). Created in a division (optionally a team), it deep-copies
+/// the division's default questionnaire into its own `questionnaire` row (reached via
+/// the inverse `questionnaire.owner_task_id` — there is no `task.questionnaire_id`).
+/// `status_cache` is the rolled-up status (Slice 4: open|claimed). Metadata edits go
+/// through PATCH (name/description only); authority/structure changes via named actions.
+model Task {
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId  String         @map("organization_id") @db.Uuid
+  name            String
+  description     String         @default("") @db.Text
+  divisionId      String         @map("division_id") @db.Uuid
+  teamId          String?        @map("team_id") @db.Uuid
+  requesterUserId String         @map("requester_user_id") @db.Uuid
+  openings        Int            @default(1)
+  claimsClosed    Boolean        @default(false) @map("claims_closed")
+  statusCache     StatusCache?   @map("status_cache")
+  lifecycleState  LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt       DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version         Int            @default(0)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  division     Division       @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  team         Team?          @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  requester    AppUser        @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
+  // The task's own questionnaire copy (0..1); UNIQUE questionnaire.owner_task_id.
+  questionnaire Questionnaire?
+  claimants     TaskClaimant[]
+  messages      Message[]
+
+  @@index([divisionId])
+  @@index([teamId])
+  @@index([statusCache])
+  @@index([requesterUserId])
+  @@index([organizationId])
+  @@map("task")
+}
+
+/// A claimant slot on a task (Slice 4.2). A user occupies a slot from `joined_at`
+/// until `left_at` (NULL = active). UNIQUE(task_id,user_id) keeps a user to at most
+/// one slot per task; re-claiming after leaving reactivates the same row. Eligibility
+/// to claim is decided in Cedar (`task:assign @ own_as_claimant`), never here.
+model TaskClaimant {
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  taskId       String    @map("task_id") @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  joinedAt     DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+  hasSubmitted Boolean   @default(false) @map("has_submitted")
+  leftAt       DateTime? @map("left_at") @db.Timestamptz(6)
+
+  task Task    @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
+  @@map("task_claimant")
+}
+
+/// A message on a task's thread (Slice 4.3). `comment` messages are user-authored
+/// (markdown, optional attachments); senderless `system` messages are emitted for
+/// claim/leave/requester-change events. Threads are **one level deep**: a reply sets
+/// `parent_message_id` to a TOP-LEVEL message — a DB trigger + app guard reject a
+/// reply-to-reply. `submission_id` is a bare column until its FK lands in Slice 5.
+model Message {
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  taskId          String         @map("task_id") @db.Uuid
+  kind            MessageKind    @default(comment)
+  senderUserId    String?        @map("sender_user_id") @db.Uuid
+  parentMessageId String?        @map("parent_message_id") @db.Uuid
+  submissionId    String?        @map("submission_id") @db.Uuid
+  body            String         @db.Text
+  lifecycleState  LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt       DateTime?      @map("retired_at") @db.Timestamptz(6)
+  editedAt        DateTime?      @map("edited_at") @db.Timestamptz(6)
+  version         Int            @default(0)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task     Task      @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  sender   AppUser?  @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
+  parent   Message?  @relation("MessageThread", fields: [parentMessageId], references: [id], onDelete: Restrict)
+  replies  Message[] @relation("MessageThread")
+  attachments Attachment[]
+
+  @@index([taskId, createdAt])
+  @@index([parentMessageId])
+  @@map("message")
+}
+
+/// An uploaded file (Slice 4.3), stored via the StoragePort (S3 or local-fs) and
+/// referenced from EXACTLY ONE of a message (`message_id`) or an answer (`answer_id`,
+/// its FK arriving in Slice 5) — a CHECK enforces the exactly-one rule. `storage_key`
+/// locates the blob in the configured store; metadata (filename/type/size/checksum)
+/// is captured at upload. Download is ungated in v1.
+model Attachment {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  messageId      String?        @map("message_id") @db.Uuid
+  answerId       String?        @map("answer_id") @db.Uuid
+  uploaderUserId String         @map("uploader_user_id") @db.Uuid
+  storageKey     String         @map("storage_key") @db.Text
+  filename       String
+  contentType    String         @map("content_type")
+  byteSize       BigInt         @map("byte_size")
+  kind           AttachmentKind @default(other)
+  checksum       String?
+  lifecycleState LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  message      Message?     @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  uploader     AppUser      @relation(fields: [uploaderUserId], references: [id], onDelete: Restrict)
+
+  @@index([messageId])
+  @@index([answerId])
+  @@index([organizationId])
+  @@map("attachment")
 }

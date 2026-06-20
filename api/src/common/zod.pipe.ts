@@ -1,5 +1,5 @@
 import { ArgumentMetadata, Injectable, PipeTransform } from '@nestjs/common';
-import { ZodSchema } from 'zod';
+import { ZodTypeAny, infer as ZodInfer } from 'zod';
 import { ValidationError } from './errors';
 
 export interface FieldIssue {
@@ -15,10 +15,10 @@ export interface FieldIssue {
  * "validation failed".
  */
 @Injectable()
-export class ZodValidationPipe<T> implements PipeTransform {
-  constructor(private readonly schema: ZodSchema<T>) {}
+export class ZodValidationPipe<S extends ZodTypeAny> implements PipeTransform {
+  constructor(private readonly schema: S) {}
 
-  transform(value: unknown, _metadata: ArgumentMetadata): T {
+  transform(value: unknown, _metadata: ArgumentMetadata): ZodInfer<S> {
     const result = this.schema.safeParse(value);
     if (!result.success) {
       const issues: FieldIssue[] = result.error.issues.map((i) => ({

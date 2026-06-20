@@ -16,6 +16,10 @@ import { TeamsModule } from './teams/teams.module';
 import { GrantsModule } from './grants/grants.module';
 import { UsersModule } from './users/users.module';
 import { QuestionnairesModule } from './questionnaires/questionnaires.module';
+import { TasksModule } from './tasks/tasks.module';
+import { MessagesModule } from './messages/messages.module';
+import { AttachmentsModule } from './attachments/attachments.module';
+import { StorageModule } from './storage/storage.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -35,6 +39,10 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     GrantsModule,
     UsersModule,
     QuestionnairesModule,
+    StorageModule,
+    MessagesModule,
+    AttachmentsModule,
+    TasksModule,
   ],
   controllers: [HealthController],
   providers: [

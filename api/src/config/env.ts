@@ -25,6 +25,20 @@ export const envSchema = z.object({
   // Restore window after `retired_at` during which Revive is allowed (and, in
   // Slice 7, GC will not collect). A revive attempt past this window → 409.
   RETIREMENT_GRACE_DAYS: z.coerce.number().int().positive().default(30),
+
+  // Object storage (Slice 4.3). `local` writes blobs to STORAGE_LOCAL_DIR (single
+  // instance only — see the slice doc's multi-instance caveat); `s3` uses an
+  // S3-compatible store (AWS/MinIO) and serves downloads via pre-signed URLs.
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_DIR: z.string().default('./var/storage'),
+  S3_BUCKET: z.string().optional(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_ENDPOINT: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: boolFromString.default('false'),
+  // Upload cap enforced at the attachment boundary (default 25 MiB).
+  ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(26_214_400),
 });
 
 export type Env = z.infer<typeof envSchema>;
