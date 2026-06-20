@@ -15,7 +15,8 @@ export type CedarEntityType =
   | 'Session'
   | 'Task'
   | 'Message'
-  | 'Attachment';
+  | 'Attachment'
+  | 'Division';
 
 export interface ActionDef {
   /** `resource:verb` string — the Cedar action id and the grant.action value. */
@@ -74,11 +75,15 @@ export const ACTIONS = {
   roleUpdate: { action: 'role:update', resourceType: 'Organization' },
   roleRetire: { action: 'role:retire', resourceType: 'Organization' },
   roleRevive: { action: 'role:revive', resourceType: 'Organization' },
-  // Division/Team config (Slice 2.2). Governance-scoped: the singleton org is the
-  // resource for all of these (admin holds global grants), mirroring the role ops —
-  // keeps revive clear of the Retired-as-Hard-Deny that targets the entity itself.
+  // Division/Team config (Slice 2.2). create/retire/revive are governance-scoped:
+  // the singleton org is the resource (admin holds global grants), mirroring the
+  // role ops — keeps revive clear of the Retired-as-Hard-Deny that targets the
+  // entity itself. `division:update` is (S)-scopable per §2.3 (it gates the default
+  // questionnaire, Slice 3): its resource is the Division, so a `specific_division`
+  // grant lets a division admin edit only their own division. Global grants still
+  // match any Division resource, so the existing org-wide admin is unaffected.
   divisionCreate: { action: 'division:create', resourceType: 'Organization' },
-  divisionUpdate: { action: 'division:update', resourceType: 'Organization' },
+  divisionUpdate: { action: 'division:update', resourceType: 'Division' },
   divisionRetire: { action: 'division:retire', resourceType: 'Organization' },
   divisionRevive: { action: 'division:revive', resourceType: 'Organization' },
   teamCreate: { action: 'team:create', resourceType: 'Organization' },
