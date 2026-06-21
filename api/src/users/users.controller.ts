@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -54,9 +55,9 @@ export class UsersController {
 
   @Get()
   @Authorize(ACTIONS.userUpdate.action, orgResource)
-  async list(@Req() req: AuthedRequest) {
+  async list(@Query('include') include: string | undefined, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
-    return this.users.list(req.user.organizationId);
+    return this.users.list(req.user.organizationId, include === 'retired');
   }
 
   @Patch(':id')

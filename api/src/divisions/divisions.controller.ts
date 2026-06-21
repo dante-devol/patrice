@@ -6,12 +6,13 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodValidationPipe } from '../common/zod.pipe';
 import { UnauthenticatedError } from '../common/errors';
-import { Authorize, orgResource } from '../access/authorize.decorator';
+import { Authorize, divisionResource, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { DivisionsService } from './divisions.service';
 import {
@@ -31,9 +32,9 @@ export class DivisionsController {
 
   @Get()
   @Authorize(ACTIONS.divisionCreate.action, orgResource)
-  async list(@Req() req: AuthedRequest) {
+  async list(@Query('include') include: string | undefined, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
-    return this.divisions.list(req.user.organizationId);
+    return this.divisions.list(req.user.organizationId, include === 'retired');
   }
 
   @Post()
@@ -48,7 +49,10 @@ export class DivisionsController {
   }
 
   @Patch(':id')
-  @Authorize(ACTIONS.divisionUpdate.action, orgResource)
+  // division:update resolves the Division itself (not the org): carries `retired` so
+  // the Retired-as-Hard-Deny forbid blocks edits to a retired division, and the
+  // division self-ref so specific_division/own_division grants can scope (Slice 7.2).
+  @Authorize(ACTIONS.divisionUpdate.action, divisionResource)
   async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateDivisionSchema)) body: UpdateDivisionDto,

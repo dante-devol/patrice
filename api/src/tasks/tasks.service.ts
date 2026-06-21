@@ -1,12 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LifecycleState, Prisma, QuestionType, StatusCache } from '@prisma/client';
-import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { MessagesService } from '../messages/messages.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
-import { isRevivable } from '../common/lifecycle';
+import { GraceService } from '../common/grace.service';
+import { activeFilter, isRevivable } from '../common/lifecycle';
 import { computeStatusCache } from './task-status';
 import { TaskStatusService } from './task-status.service';
 import {
@@ -50,12 +50,12 @@ export interface TaskListResult {
 @Injectable()
 export class TasksService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly messages: MessagesService,
     private readonly notifications: NotificationsService,
     private readonly status: TaskStatusService,
+    private readonly grace: GraceService,
   ) {}
 
   private toView(t: {
@@ -209,7 +209,10 @@ export class TasksService {
     organizationId: string,
     query: ListTasksQuery,
   ): Promise<TaskListResult> {
-    const where: Prisma.TaskWhereInput = { organizationId };
+    const where: Prisma.TaskWhereInput = {
+      organizationId,
+      ...activeFilter(query.include === 'retired'),
+    };
     if (query.division) where.divisionId = { in: query.division };
     if (query.team) where.teamId = { in: query.team };
     if (query.status) where.statusCache = { in: query.status as StatusCache[] };
@@ -335,7 +338,8 @@ export class TasksService {
       },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
-    if (!isRevivable(task, this.env.RETIREMENT_GRACE_DAYS)) {
+    const graceMs = await this.grace.windowMs(task.organizationId);
+    if (!isRevivable(task, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
         'Task is not retired or its grace period has elapsed',

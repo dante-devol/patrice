@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { GrantEffect, LifecycleState, Prisma, ScopeKind } from '@prisma/client';
-import { Inject } from '@nestjs/common';
-import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
@@ -20,7 +18,8 @@ const GROUP_SCOPABLE = new Set(['Task', 'Message', 'Attachment', 'Division']);
 /** Resource types whose entities carry a `targetRole` (role-scope). */
 const ROLE_SCOPABLE = new Set(['User']);
 import { ConflictError, NotFoundError, ValidationError } from '../common/errors';
-import { isRevivable } from '../common/lifecycle';
+import { GraceService } from '../common/grace.service';
+import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateGrantDto, UpdateGrantDto } from './grants.dto';
 
 export interface GrantView {
@@ -54,12 +53,12 @@ interface ScopeFields {
 @Injectable()
 export class GrantsService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly admin: AdministrabilityService,
     private readonly cedar: CedarEngine,
     private readonly activity: ActivityService,
+    private readonly grace: GraceService,
   ) {}
 
   /** The closed action vocabulary, for the matrix UI. */
@@ -67,9 +66,9 @@ export class GrantsService {
     return ALL_ACTION_STRINGS;
   }
 
-  async list(organizationId: string): Promise<GrantView[]> {
+  async list(organizationId: string, includeRetired = false): Promise<GrantView[]> {
     return this.prisma.grant.findMany({
-      where: { organizationId },
+      where: { organizationId, ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
       select: this.viewSelect(),
     });
@@ -392,7 +391,8 @@ export class GrantsService {
 
   async revive(id: string, actorUserId: string): Promise<GrantView> {
     const existing = await this.load(id);
-    if (!isRevivable(existing, this.env.RETIREMENT_GRACE_DAYS)) {
+    const graceMs = await this.grace.windowMs(existing.organizationId);
+    if (!isRevivable(existing, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
         'Grant is not retired or its grace period has elapsed',

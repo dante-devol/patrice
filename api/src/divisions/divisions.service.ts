@@ -1,11 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LifecycleState, Prisma, RoleKind } from '@prisma/client';
-import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError } from '../common/errors';
-import { isRevivable } from '../common/lifecycle';
+import { GraceService } from '../common/grace.service';
+import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateDivisionDto, UpdateDivisionDto } from './divisions.dto';
 
 export interface DivisionView {
@@ -30,15 +30,18 @@ export interface DivisionView {
 @Injectable()
 export class DivisionsService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly activity: ActivityService,
+    private readonly grace: GraceService,
   ) {}
 
-  async list(organizationId: string): Promise<DivisionView[]> {
+  async list(
+    organizationId: string,
+    includeRetired = false,
+  ): Promise<DivisionView[]> {
     const rows = await this.prisma.division.findMany({
-      where: { organizationId },
+      where: { organizationId, ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
       include: { inherentRole: true },
     });
@@ -217,7 +220,8 @@ export class DivisionsService {
 
   async revive(id: string, actorUserId: string): Promise<DivisionView> {
     const division = await this.load(id);
-    if (!isRevivable(division, this.env.RETIREMENT_GRACE_DAYS)) {
+    const graceMs = await this.grace.windowMs(division.organizationId);
+    if (!isRevivable(division, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
         'Division is not retired or its grace period has elapsed',

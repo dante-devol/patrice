@@ -1,10 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LifecycleState, MessageKind, Prisma } from '@prisma/client';
-import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
+import { GraceService } from '../common/grace.service';
 import { isRevivable } from '../common/lifecycle';
 import { CreateMessageDto, ListMessagesQuery, UpdateMessageDto } from './messages.dto';
 
@@ -50,10 +50,10 @@ type MessageRow = Prisma.MessageGetPayload<{ include: { attachments: true } }>;
 @Injectable()
 export class MessagesService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly notifications: NotificationsService,
+    private readonly grace: GraceService,
   ) {}
 
   private attView(a: MessageRow['attachments'][number]): AttachmentView {
@@ -364,7 +364,8 @@ export class MessagesService {
       },
     });
     if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-    if (!isRevivable(message, this.env.RETIREMENT_GRACE_DAYS)) {
+    const graceMs = await this.grace.windowMs(message.task.organizationId);
+    if (!isRevivable(message, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
         'Message is not retired or its grace period has elapsed',

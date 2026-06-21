@@ -6,6 +6,7 @@ import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, DeniedError, NotFoundError } from '../common/errors';
+import { activeFilter } from '../common/lifecycle';
 import { UpdateUserDto } from './users.dto';
 
 export interface UserView {
@@ -32,9 +33,9 @@ export class UsersService {
     private readonly activity: ActivityService,
   ) {}
 
-  async list(organizationId: string): Promise<UserView[]> {
+  async list(organizationId: string, includeRetired = false): Promise<UserView[]> {
     const users = await this.prisma.appUser.findMany({
-      where: { organizationId },
+      where: { organizationId, ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true,

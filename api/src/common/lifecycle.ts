@@ -10,9 +10,24 @@ export interface RevivableRow {
   retiredAt: Date | null;
 }
 
-/** Whether a retired row is still within its grace window and may be revived. */
-export function isRevivable(row: RevivableRow, graceDays: number): boolean {
+/**
+ * Whether a retired row is still within its grace window and may be revived.
+ * `graceMs` is the window in milliseconds (resolved per-org from
+ * `organization.settings.gracePeriodHours`; see {@link GraceService}).
+ */
+export function isRevivable(row: RevivableRow, graceMs: number): boolean {
   if (row.lifecycleState !== 'retired' || row.retiredAt == null) return false;
-  const graceMs = graceDays * 24 * 60 * 60 * 1000;
   return Date.now() - row.retiredAt.getTime() <= graceMs;
+}
+
+/**
+ * The soft-retire default list filter (Slice 7.2): list queries exclude retired
+ * rows unless retired rows are explicitly opted in (`?include=retired`). Deactivated
+ * rows stay visible — the filter targets *retired* only, so deactivated users remain
+ * listable for reactivation. Returns a partial Prisma `where` fragment.
+ */
+export function activeFilter(
+  includeRetired?: boolean,
+): { lifecycleState?: { not: 'retired' } } {
+  return includeRetired ? {} : { lifecycleState: { not: 'retired' } };
 }

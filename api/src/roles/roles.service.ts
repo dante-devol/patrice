@@ -1,12 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { LifecycleState, RoleKind } from '@prisma/client';
-import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError, ValidationError } from '../common/errors';
-import { isRevivable } from '../common/lifecycle';
+import { GraceService } from '../common/grace.service';
+import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateRoleDto, UpdateRoleDto } from './roles.dto';
 
 export interface RoleView {
@@ -35,20 +35,20 @@ export interface RoleView {
 @Injectable()
 export class RolesService {
   constructor(
-    @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly admin: AdministrabilityService,
     private readonly activity: ActivityService,
+    private readonly grace: GraceService,
   ) {}
 
   private toView(r: RoleView): RoleView {
     return r;
   }
 
-  async list(organizationId: string): Promise<RoleView[]> {
+  async list(organizationId: string, includeRetired = false): Promise<RoleView[]> {
     return this.prisma.role.findMany({
-      where: { organizationId },
+      where: { organizationId, ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -150,7 +150,8 @@ export class RolesService {
 
   async revive(id: string, actorUserId: string): Promise<RoleView> {
     const role = await this.loadStandalone(id);
-    if (!isRevivable(role, this.env.RETIREMENT_GRACE_DAYS)) {
+    const graceMs = await this.grace.windowMs(role.organizationId);
+    if (!isRevivable(role, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
         'Role is not retired or its grace period has elapsed',
