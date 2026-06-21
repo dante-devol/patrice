@@ -1,0 +1,77 @@
+name: CI
+
+# Quality gates for both tiers (issue #34). Runs on PRs and pushes to main:
+# typecheck + lint + tests for api (with a real Postgres for the e2e suite) and web.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: api (typecheck · lint · unit · e2e)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        # The schema uses PostgreSQL 18's built-in uuidv7() default.
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: patrice_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/patrice_test?schema=public
+      # The e2e harness stubs email + disables pg-boss; provide the remaining required env.
+      PUBLIC_BASE_URL: http://localhost:4200
+      SESSION_SECRET: ci-session-secret-0123456789
+      TOKEN_PEPPER: ci-token-pepper-0123456789
+      SMTP_URL: smtp://localhost:1025
+      EMAIL_FROM: Patrice CI <ci@patrice.local>
+      DISABLE_QUEUE: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:e2e
+
+  web:
+    name: web (typecheck · lint · unit · build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
