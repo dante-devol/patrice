@@ -28,6 +28,11 @@ import {
   Team,
 } from './api.types';
 
+/** `?include=retired` opt-in for admin/history list views (Slice 7.2). */
+function retiredQuery(includeRetired: boolean): string {
+  return includeRetired ? '?include=retired' : '';
+}
+
 /**
  * The OpenAPI data layer (hand-written for Slice 1 — see api.types.ts note). All
  * calls are same-origin with credentials; the interceptors attach cookies + CSRF.
@@ -105,8 +110,8 @@ export class ApiService {
 
   // ---- Slice 2: org configuration ----------------------------------------
 
-  listRoles(): Promise<Role[]> {
-    return firstValueFrom(this.http.get<Role[]>('/api/roles'));
+  listRoles(includeRetired = false): Promise<Role[]> {
+    return firstValueFrom(this.http.get<Role[]>('/api/roles' + retiredQuery(includeRetired)));
   }
   createRole(name: string): Promise<Role> {
     return firstValueFrom(this.http.post<Role>('/api/roles', { name }));
@@ -121,8 +126,10 @@ export class ApiService {
     return firstValueFrom(this.http.post<Role>(`/api/roles/${id}/revive`, {}));
   }
 
-  listDivisions(): Promise<Division[]> {
-    return firstValueFrom(this.http.get<Division[]>('/api/divisions'));
+  listDivisions(includeRetired = false): Promise<Division[]> {
+    return firstValueFrom(
+      this.http.get<Division[]>('/api/divisions' + retiredQuery(includeRetired)),
+    );
   }
   createDivision(body: Partial<Division> & { name: string }): Promise<Division> {
     return firstValueFrom(this.http.post<Division>('/api/divisions', body));
@@ -137,8 +144,8 @@ export class ApiService {
     return firstValueFrom(this.http.post<Division>(`/api/divisions/${id}/revive`, {}));
   }
 
-  listTeams(): Promise<Team[]> {
-    return firstValueFrom(this.http.get<Team[]>('/api/teams'));
+  listTeams(includeRetired = false): Promise<Team[]> {
+    return firstValueFrom(this.http.get<Team[]>('/api/teams' + retiredQuery(includeRetired)));
   }
   createTeam(body: { name: string; restrictClaims?: boolean }): Promise<Team> {
     return firstValueFrom(this.http.post<Team>('/api/teams', body));
@@ -156,8 +163,8 @@ export class ApiService {
   listActions(): Promise<{ actions: string[] }> {
     return firstValueFrom(this.http.get<{ actions: string[] }>('/api/actions'));
   }
-  listGrants(): Promise<Grant[]> {
-    return firstValueFrom(this.http.get<Grant[]>('/api/grants'));
+  listGrants(includeRetired = false): Promise<Grant[]> {
+    return firstValueFrom(this.http.get<Grant[]>('/api/grants' + retiredQuery(includeRetired)));
   }
   createGrant(body: {
     roleId: string;
@@ -173,8 +180,10 @@ export class ApiService {
     return firstValueFrom(this.http.post<Grant>(`/api/grants/${id}/retire`, {}));
   }
 
-  listUsers(): Promise<AdminUser[]> {
-    return firstValueFrom(this.http.get<AdminUser[]>('/api/users'));
+  listUsers(includeRetired = false): Promise<AdminUser[]> {
+    return firstValueFrom(
+      this.http.get<AdminUser[]>('/api/users' + retiredQuery(includeRetired)),
+    );
   }
   grantUserRole(userId: string, roleId: string): Promise<void> {
     return firstValueFrom(
@@ -189,6 +198,12 @@ export class ApiService {
   }
   reactivateUser(userId: string): Promise<void> {
     return firstValueFrom(this.http.post<void>(`/api/users/${userId}/reactivate`, {}));
+  }
+  retireUser(userId: string): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`/api/users/${userId}/retire`, {}));
+  }
+  reviveUser(userId: string): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`/api/users/${userId}/revive`, {}));
   }
 
   // ---- Slice 3: questionnaires -------------------------------------------

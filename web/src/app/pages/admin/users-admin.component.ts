@@ -40,8 +40,12 @@ import { errorMessage } from '../../core/errors';
               <td>
                 @if (u.lifecycleState === 'active') {
                   <button class="secondary" (click)="deactivate(u)">Deactivate</button>
+                  <button class="secondary" (click)="retire(u)">Retire</button>
                 } @else if (u.lifecycleState === 'deactivated') {
                   <button class="secondary" (click)="reactivate(u)">Reactivate</button>
+                  <button class="secondary" (click)="retire(u)">Retire</button>
+                } @else if (u.lifecycleState === 'retired') {
+                  <button class="secondary" (click)="revive(u)">Revive</button>
                 }
               </td>
             </tr>
@@ -64,7 +68,9 @@ export class UsersAdminComponent {
   private async refresh(): Promise<void> {
     try {
       const [users, roles] = await Promise.all([
-        this.api.listUsers(),
+        // Include retired users so scrubbed tombstones (rendered "Former member"
+        // when anonymizeLabel is set) stay visible in the admin roster.
+        this.api.listUsers(true),
         this.api.listRoles(),
       ]);
       this.users.set(users);
@@ -96,6 +102,12 @@ export class UsersAdminComponent {
   }
   async reactivate(u: AdminUser): Promise<void> {
     await this.guard(() => this.api.reactivateUser(u.id));
+  }
+  async retire(u: AdminUser): Promise<void> {
+    await this.guard(() => this.api.retireUser(u.id));
+  }
+  async revive(u: AdminUser): Promise<void> {
+    await this.guard(() => this.api.reviveUser(u.id));
   }
 
   async guard(fn: () => Promise<unknown>): Promise<void> {

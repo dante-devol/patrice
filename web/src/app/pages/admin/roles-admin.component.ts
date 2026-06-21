@@ -60,7 +60,7 @@ export class RolesAdminComponent {
 
   private async refresh(): Promise<void> {
     try {
-      this.roles.set(await this.api.listRoles());
+      this.roles.set(await this.api.listRoles(true));
     } catch (e) {
       this.error.set(errorMessage(e));
     }
