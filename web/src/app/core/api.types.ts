@@ -288,3 +288,22 @@ export interface SubmitAnswer {
   value?: string | number | string[] | null;
   attachmentIds?: string[];
 }
+
+// ---- Slice 6: notifications ---------------------------------------------
+
+export interface Notification {
+  id: string;
+  type: string;
+  subjectType: string;
+  subjectId: string;
+  /** IDs + small enums only (no PII) — render names by joining via LookupStore. */
+  payload: Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListResult {
+  items: Notification[];
+  unreadCount: number;
+  nextCursor: string | null;
+}

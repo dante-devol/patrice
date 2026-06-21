@@ -1,11 +1,12 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterOutlet, Router } from '@angular/router';
 import { AuthStore } from './core/auth.store';
+import { NotificationBellComponent } from './features/notifications/notification-bell.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink],
+  imports: [RouterOutlet, RouterLink, NotificationBellComponent],
   template: `
     <nav class="appbar">
       <strong>Patrice</strong>
@@ -21,6 +22,7 @@ import { AuthStore } from './core/auth.store';
       }
       <span class="spacer"></span>
       @if (auth.isAuthenticated()) {
+        <app-notification-bell />
         <span class="muted">{{ auth.user()?.displayName }}</span>
         <button class="secondary" (click)="logout()">Log out</button>
       } @else {
