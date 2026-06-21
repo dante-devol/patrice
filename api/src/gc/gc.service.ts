@@ -11,10 +11,28 @@ export interface GcReport {
   divisions: string[];
   teams: string[];
   roles: string[];
+  /** History-bearing users scrubbed in place to a tombstone (id + display_name kept). */
+  usersScrubbed: string[];
+  /** History-less users deleted outright. */
+  usersDeleted: string[];
   /** Entities whose delete was attempted but left in place by a live reference. */
   blocked: { entityType: string; entityId: string }[];
   /** Orphaned blobs reconciled away (0 on dry-run). */
   orphanedBlobs: number;
+}
+
+/** A fresh, empty report. */
+function emptyReport(): GcReport {
+  return {
+    tasks: [],
+    divisions: [],
+    teams: [],
+    roles: [],
+    usersScrubbed: [],
+    usersDeleted: [],
+    blocked: [],
+    orphanedBlobs: 0,
+  };
 }
 
 /** Postgres foreign-key (RESTRICT) violation — the GC backstop signal. */
@@ -127,25 +145,57 @@ export class GcService {
     return inherentRoleId ? this.roleUnreferenced(inherentRoleId) : true;
   }
 
+  /** Retired-past-grace users, split by whether they bear authored history. */
+  private async collectableUsers(
+    orgId: string,
+    cutoff: Date,
+  ): Promise<{ scrub: string[]; delete: string[] }> {
+    const users = await this.prisma.appUser.findMany({
+      where: {
+        organizationId: orgId,
+        lifecycleState: 'retired',
+        retiredAt: { lt: cutoff },
+      },
+      select: { id: true },
+    });
+    const scrub: string[] = [];
+    const del: string[] = [];
+    for (const u of users) {
+      (await this.userHasHistory(u.id) ? scrub : del).push(u.id);
+    }
+    return { scrub, delete: del };
+  }
+
+  /** Whether a user authored content that must outlive them (→ scrub, not delete). */
+  private async userHasHistory(userId: string): Promise<boolean> {
+    const [messages, submissions, tasks, attachments, claims] = await Promise.all([
+      this.prisma.message.count({ where: { senderUserId: userId } }),
+      this.prisma.submission.count({ where: { claimantUserId: userId } }),
+      this.prisma.task.count({ where: { requesterUserId: userId } }),
+      this.prisma.attachment.count({ where: { uploaderUserId: userId } }),
+      this.prisma.taskClaimant.count({ where: { userId } }),
+    ]);
+    return messages + submissions + tasks + attachments + claims > 0;
+  }
+
   /** Report what a sweep would collect — no deletes, no blob removal. */
   async dryRun(): Promise<GcReport> {
     const { orgId, cutoff } = await this.sweepContext();
     const c = await this.collectable(orgId, cutoff);
-    return { ...c, blocked: [], orphanedBlobs: 0 };
+    const u = await this.collectableUsers(orgId, cutoff);
+    return {
+      ...emptyReport(),
+      ...c,
+      usersScrubbed: u.scrub,
+      usersDeleted: u.delete,
+    };
   }
 
   /** Run the sweep: delete collectable entities, remove blobs, reconcile orphans. */
   async sweep(): Promise<GcReport> {
     const { orgId, cutoff } = await this.sweepContext();
     const c = await this.collectable(orgId, cutoff);
-    const report: GcReport = {
-      tasks: [],
-      divisions: [],
-      teams: [],
-      roles: [],
-      blocked: [],
-      orphanedBlobs: 0,
-    };
+    const report = emptyReport();
 
     // Tasks first: deleting a retired task frees its references to retired
     // divisions/teams, so those can collect in this same sweep.
@@ -174,8 +224,149 @@ export class GcService {
       if (await this.deleteStandaloneRole(orgId, roleId, report)) report.roles.push(roleId);
     }
 
+    // Users last — the task deletes above may have removed the last claimant/message
+    // that kept a user history-bearing, so a re-checked history-less user can now
+    // fully delete instead of scrub.
+    const freshUsers = await this.collectableUsers(orgId, cutoff);
+    for (const userId of freshUsers.scrub) {
+      if (await this.scrubUser(orgId, userId, report)) report.usersScrubbed.push(userId);
+    }
+    for (const userId of freshUsers.delete) {
+      if (await this.deleteUser(orgId, userId, report)) report.usersDeleted.push(userId);
+    }
+
     report.orphanedBlobs = await this.reconcileOrphanedBlobs(orgId);
     return report;
+  }
+
+  /**
+   * Scrub-in-Place (api/CONTEXT.md): a history-bearing retired user is reduced to a
+   * tombstone — `id` + `display_name` kept (so every FK stays valid), `email`/PII
+   * nulled, satellites purged (`user_identity`/`session`/`auth_token`/`notification`),
+   * `user_role` stripped. Plus the cross-slice consequences: auto-revoke invitations
+   * the user *issued* and null `invitation.email` for invites they *received*.
+   */
+  private async scrubUser(
+    orgId: string,
+    userId: string,
+    report: GcReport,
+  ): Promise<boolean> {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await this.revokeIssuedInvitations(tx, orgId, userId);
+        await this.nullReceivedInvitationEmails(tx, userId);
+        await this.purgeUserSatellites(tx, userId);
+        await tx.appUser.update({
+          where: { id: userId },
+          data: { email: null, version: { increment: 1 } },
+        });
+        await this.activity.logActivity({
+          tx,
+          organizationId: orgId,
+          actorUserId: null,
+          subjectType: 'user',
+          subjectId: userId,
+          verb: 'gc.user_scrubbed',
+          payload: { userId },
+          source: ActivitySource.system,
+        });
+      });
+      return true;
+    } catch (err) {
+      this.handleDeleteFailure(orgId, 'user', userId, err, report);
+      return false;
+    }
+  }
+
+  /** Full delete of a history-less retired user (no authored content to preserve). */
+  private async deleteUser(
+    orgId: string,
+    userId: string,
+    report: GcReport,
+  ): Promise<boolean> {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await this.revokeIssuedInvitations(tx, orgId, userId);
+        await this.nullReceivedInvitationEmails(tx, userId);
+        await tx.invitationUse.deleteMany({ where: { createdUserId: userId } });
+        await this.purgeUserSatellites(tx, userId);
+        await tx.appUser.delete({ where: { id: userId } });
+        await this.activity.logActivity({
+          tx,
+          organizationId: orgId,
+          actorUserId: null,
+          subjectType: 'user',
+          subjectId: userId,
+          verb: 'gc.user_collected',
+          payload: { userId },
+          source: ActivitySource.system,
+        });
+      });
+      return true;
+    } catch (err) {
+      this.handleDeleteFailure(orgId, 'user', userId, err, report);
+      return false;
+    }
+  }
+
+  /** Delete the purgeable per-user satellites (identities, sessions, tokens, etc.). */
+  private async purgeUserSatellites(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    await tx.userIdentity.deleteMany({ where: { userId } });
+    await tx.session.deleteMany({ where: { userId } });
+    await tx.authToken.deleteMany({ where: { userId } });
+    await tx.notification.deleteMany({ where: { recipientUserId: userId } });
+    await tx.userRole.deleteMany({ where: { userId } });
+  }
+
+  /**
+   * Auto-revoke every still-pending invitation the user *issued* (one `activity` row
+   * per invite, system-actored). Bootstrap invites (`created_by IS NULL`) are immune.
+   */
+  private async revokeIssuedInvitations(
+    tx: Prisma.TransactionClient,
+    orgId: string,
+    userId: string,
+  ): Promise<void> {
+    const issued = await tx.invitation.findMany({
+      where: { createdBy: userId, revokedAt: null },
+      select: { id: true },
+    });
+    if (issued.length === 0) return;
+    await tx.invitation.updateMany({
+      where: { createdBy: userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    for (const inv of issued) {
+      await this.activity.logActivity({
+        tx,
+        organizationId: orgId,
+        actorUserId: null,
+        subjectType: 'invitation',
+        subjectId: inv.id,
+        verb: 'invite.auto_revoked_on_issuer_retired',
+        payload: { invitationId: inv.id, issuerUserId: userId },
+        source: ActivitySource.system,
+      });
+    }
+  }
+
+  /** Null `invitation.email` for every invite this user *received* (via its use). */
+  private async nullReceivedInvitationEmails(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    const uses = await tx.invitationUse.findMany({
+      where: { createdUserId: userId },
+      select: { invitationId: true },
+    });
+    if (uses.length === 0) return;
+    await tx.invitation.updateMany({
+      where: { id: { in: uses.map((u) => u.invitationId) } },
+      data: { email: null },
+    });
   }
 
   /**

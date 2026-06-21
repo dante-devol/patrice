@@ -69,6 +69,9 @@ export const activityPayloadSchemas = {
   'user.updated': z.object({ userId: uuid }).strict(),
   'user.deactivated': z.object({ userId: uuid }).strict(),
   'user.reactivated': z.object({ userId: uuid }).strict(),
+  // Slice 7 — user retirement lifecycle. IDs only.
+  'user.retired': z.object({ userId: uuid }).strict(),
+  'user.revived': z.object({ userId: uuid }).strict(),
   'config.updated': z
     .object({ changedKeys: z.array(z.string()) })
     .strict(),
@@ -153,6 +156,14 @@ export const activityPayloadSchemas = {
   'gc.team_collected': z.object({ teamId: uuid }).strict(),
   'gc.blocked': z.object({ entityType: z.string(), entityId: uuid }).strict(),
   'gc.blob_reconciled': z.object({ blobCount: z.number().int() }).strict(),
+  // Slice 7.4 — user GC. Scrub keeps the row (tombstone); collect deletes a
+  // history-less user outright. The auto-revoke of invitations issued by a scrubbed
+  // user is system-actored (actor_user_id NULL), one row per invite.
+  'gc.user_scrubbed': z.object({ userId: uuid }).strict(),
+  'gc.user_collected': z.object({ userId: uuid }).strict(),
+  'invite.auto_revoked_on_issuer_retired': z
+    .object({ invitationId: uuid, issuerUserId: uuid })
+    .strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z
