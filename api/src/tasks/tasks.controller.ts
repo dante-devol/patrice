@@ -17,6 +17,7 @@ import {
   Authorize,
   taskCreateResource,
   taskResource,
+  taskReviveResource,
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { TasksService } from './tasks.service';
@@ -96,6 +97,14 @@ export class TasksController {
   async retire(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
     return this.tasks.retire(id, req.user.id);
+  }
+
+  @Post(':id/revive')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskRevive.action, taskReviveResource)
+  async revive(@Param('id') id: string, @Req() req: AuthedRequest) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.tasks.revive(id, req.user.id);
   }
 
   @Post(':id/claim')

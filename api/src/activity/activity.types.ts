@@ -91,6 +91,7 @@ export const activityPayloadSchemas = {
     .strict(),
   'task.updated': z.object({ taskId: uuid }).strict(),
   'task.retired': z.object({ taskId: uuid }).strict(),
+  'task.revived': z.object({ taskId: uuid }).strict(),
   // Slice 4.2 — claiming / openings / requester. IDs + the new status only.
   'task.claimed': z
     .object({ taskId: uuid, userId: uuid, statusCache: z.string() })
@@ -110,6 +111,7 @@ export const activityPayloadSchemas = {
     .strict(),
   'message.updated': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'message.retired': z.object({ messageId: uuid, taskId: uuid }).strict(),
+  'message.revived': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'attachment.created': z
     .object({ attachmentId: uuid, messageId: uuid })
     .strict(),

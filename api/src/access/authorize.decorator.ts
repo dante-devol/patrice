@@ -121,6 +121,31 @@ export const taskResource: ResourceResolver = async (req, prisma) => {
 };
 
 /**
+ * The task named by `:id` is the resource for `task:revive` — like {@link taskResource}
+ * but **without** the `retired` attribute. Revive is the one action that legitimately
+ * targets a retired task, so it must not trip the Retired-as-Hard-Deny forbid (which
+ * fires `when resource has retired && resource.retired`). Scope attrs (division/team,
+ * requester for own_as_requester) are still carried so scoped revive grants match.
+ */
+export const taskReviveResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: { id: true, divisionId: true, teamId: true, requesterUserId: true },
+  });
+  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+  return {
+    type: 'Task',
+    id: task.id,
+    attrs: {
+      division: divisionEntity(task.divisionId),
+      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
+      requester: userEntity(task.requesterUserId),
+    },
+  };
+};
+
+/**
  * The task named by `:id` is the resource for `task:submit` — the actor is the
  * `own_as_claimant` owner, so `claimant` is set to the actor **only when they hold an
  * active slot** on the task. A non-claimant (or a claimant who has left) yields no
@@ -249,6 +274,34 @@ export const messageResource: ResourceResolver = async (req, prisma) => {
       ...(message.task.teamId ? { team: teamEntity(message.task.teamId) } : {}),
       ...(message.senderUserId ? { sender: userEntity(message.senderUserId) } : {}),
       retired: message.lifecycleState === 'retired',
+    },
+  };
+};
+
+/**
+ * The message named by `:id` is the resource for `message:revive` — like
+ * {@link messageResource} but **without** the `retired` attribute, so reviving a
+ * retired message doesn't trip the Retired-as-Hard-Deny forbid. Carries its task's
+ * division/team and the sender (own_as_sender) for scoped revive grants.
+ */
+export const messageReviveResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const message = await prisma.message.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      senderUserId: true,
+      task: { select: { divisionId: true, teamId: true } },
+    },
+  });
+  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
+  return {
+    type: 'Message',
+    id: message.id,
+    attrs: {
+      division: divisionEntity(message.task.divisionId),
+      ...(message.task.teamId ? { team: teamEntity(message.task.teamId) } : {}),
+      ...(message.senderUserId ? { sender: userEntity(message.senderUserId) } : {}),
     },
   };
 };

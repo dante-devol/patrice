@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { LifecycleState, MessageKind, Prisma } from '@prisma/client';
+import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
+import { isRevivable } from '../common/lifecycle';
 import { CreateMessageDto, ListMessagesQuery, UpdateMessageDto } from './messages.dto';
 
 export interface AttachmentView {
@@ -48,6 +50,7 @@ type MessageRow = Prisma.MessageGetPayload<{ include: { attachments: true } }>;
 @Injectable()
 export class MessagesService {
   constructor(
+    @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly notifications: NotificationsService,
@@ -338,6 +341,53 @@ export class MessagesService {
         subjectType: 'message',
         subjectId: id,
         verb: 'message.retired',
+        payload: { messageId: id, taskId: message.taskId },
+      });
+      return row;
+    });
+    return this.toView(updated);
+  }
+
+  /**
+   * Revive a retired message (`message:revive`), the inverse of {@link retire}. Valid
+   * only while `retired` AND inside the grace window; otherwise `409 NOT_REVIVABLE`.
+   */
+  async revive(id: string, actorUserId: string): Promise<MessageView> {
+    const message = await this.prisma.message.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        taskId: true,
+        lifecycleState: true,
+        retiredAt: true,
+        task: { select: { organizationId: true } },
+      },
+    });
+    if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
+    if (!isRevivable(message, this.env.RETIREMENT_GRACE_DAYS)) {
+      throw new ConflictError(
+        'NOT_REVIVABLE',
+        'Message is not retired or its grace period has elapsed',
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.message.update({
+        where: { id },
+        data: {
+          lifecycleState: LifecycleState.active,
+          retiredAt: null,
+          version: { increment: 1 },
+        },
+        include: { attachments: true },
+      });
+      await this.activity.logActivity({
+        tx,
+        organizationId: message.task.organizationId,
+        actorUserId,
+        subjectType: 'message',
+        subjectId: id,
+        verb: 'message.revived',
         payload: { messageId: id, taskId: message.taskId },
       });
       return row;
