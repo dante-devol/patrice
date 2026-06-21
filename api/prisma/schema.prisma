@@ -134,6 +134,7 @@ model Organization {
   questionnaires Questionnaire[]
   tasks          Task[]
   attachments    Attachment[]
+  notifications  Notification[]
 
   @@unique([singleton])
   @@map("organization")
@@ -206,6 +207,7 @@ model AppUser {
   submissions    Submission[]
   messages       Message[]
   attachments    Attachment[]
+  notifications  Notification[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -604,4 +606,34 @@ model Attachment {
   @@index([answerId])
   @@index([organizationId])
   @@map("attachment")
+}
+
+/// A per-recipient awareness row (Slice 6). One notification is inserted per
+/// recipient when a domain event fires; the recipient cohort is resolved and
+/// **snapshotted** into `payload` at event time (never re-resolved at delivery).
+/// `event_seq` is monotonic per `(subject_type, subject_id, type)` and, with the
+/// UNIQUE below, makes insertion **idempotent** — a retry carrying the same
+/// `(recipient_user_id, type, subject_id, event_seq)` collides and no-ops. The
+/// `payload` carries IDs + small denormalized facts only (Activity Payload
+/// Discipline): never PII strings. SSE delivery rides a thin "sync" ping; the
+/// durable row is always pulled from here, never from the stream.
+model Notification {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  recipientUserId String    @map("recipient_user_id") @db.Uuid
+  type            String
+  subjectType     String    @map("subject_type")
+  subjectId       String    @map("subject_id") @db.Uuid
+  payload         Json      @default("{}")
+  eventSeq        BigInt    @map("event_seq")
+  readAt          DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  recipient    AppUser      @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+
+  @@unique([recipientUserId, type, subjectId, eventSeq])
+  @@index([recipientUserId, readAt, createdAt])
+  @@index([organizationId])
+  @@map("notification")
 }
