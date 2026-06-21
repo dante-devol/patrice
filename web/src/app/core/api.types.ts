@@ -82,6 +82,8 @@ export interface OrgSettings {
   anonymizeLabel: boolean;
   sessionAbsoluteDays: number;
   sessionIdleDays: number;
+  /** Retire→revive grace window in hours (Slice 7.2); 0 disables the window. */
+  gracePeriodHours: number;
 }
 
 export interface CurrentUser {

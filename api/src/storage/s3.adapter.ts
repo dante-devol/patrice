@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
+  ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -87,5 +88,25 @@ export class S3StorageAdapter implements StoragePort {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
+  }
+
+  /** Enumerate object keys under `prefix`, following continuation tokens. */
+  async list(prefix?: string): Promise<string[]> {
+    const keys: string[] = [];
+    let token: string | undefined;
+    do {
+      const out = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          ...(prefix ? { Prefix: prefix } : {}),
+          ...(token ? { ContinuationToken: token } : {}),
+        }),
+      );
+      for (const obj of out.Contents ?? []) {
+        if (obj.Key) keys.push(obj.Key);
+      }
+      token = out.IsTruncated ? out.NextContinuationToken : undefined;
+    } while (token);
+    return keys;
   }
 }

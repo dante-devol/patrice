@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -99,12 +98,12 @@ export async function bootApp(options: BootOptions = {}): Promise<BootedApp> {
     logs.push(args.map(String).join(' '));
     // Keep quiet during tests but retain capture.
   };
-  // eslint-disable-next-line no-console
+   
   console.log = spy as typeof console.log;
   try {
     await app.init();
   } finally {
-    // eslint-disable-next-line no-console
+     
     console.log = original;
   }
 

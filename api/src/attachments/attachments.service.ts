@@ -7,6 +7,8 @@ import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
+import { GraceService } from '../common/grace.service';
+import { isRevivable } from '../common/lifecycle';
 import { STORAGE_PORT, StoragePort } from '../storage/storage.port';
 import { attachmentKindFor } from './attachment-kind';
 
@@ -26,6 +28,8 @@ export interface AttachmentMetaView {
   kind: string;
   checksum: string | null;
   uploaderUserId: string;
+  lifecycleState: LifecycleState;
+  retiredAt: Date | null;
   createdAt: Date;
 }
 
@@ -50,6 +54,7 @@ export class AttachmentsService {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
+    private readonly grace: GraceService,
   ) {}
 
   private toMeta(a: {
@@ -61,6 +66,8 @@ export class AttachmentsService {
     kind: string;
     checksum: string | null;
     uploaderUserId: string;
+    lifecycleState: LifecycleState;
+    retiredAt: Date | null;
     createdAt: Date;
   }): AttachmentMetaView {
     return {
@@ -72,6 +79,8 @@ export class AttachmentsService {
       kind: a.kind,
       checksum: a.checksum,
       uploaderUserId: a.uploaderUserId,
+      lifecycleState: a.lifecycleState,
+      retiredAt: a.retiredAt,
       createdAt: a.createdAt,
     };
   }
@@ -142,6 +151,79 @@ export class AttachmentsService {
       await this.storage.delete(storageKey).catch(() => undefined);
       throw err;
     }
+  }
+
+  /** Load an attachment's lifecycle facts (org for the activity row, grace check). */
+  private async loadLifecycle(id: string) {
+    const att = await this.prisma.attachment.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        organizationId: true,
+        lifecycleState: true,
+        retiredAt: true,
+      },
+    });
+    if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
+    return att;
+  }
+
+  /**
+   * Retire a single attachment (`attachment:retire`) — soft-removes one file without
+   * touching its parent message/answer. Download already 404s a retired attachment;
+   * GC collects it with its parent aggregate. Idempotency: a second retire → 409.
+   */
+  async retire(id: string, actorUserId: string): Promise<AttachmentMetaView> {
+    const att = await this.loadLifecycle(id);
+    if (att.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('ALREADY_RETIRED', 'Attachment is already retired');
+    }
+    const row = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.attachment.update({
+        where: { id },
+        data: { lifecycleState: LifecycleState.retired, retiredAt: new Date() },
+      });
+      await this.activity.logActivity({
+        tx,
+        organizationId: att.organizationId,
+        actorUserId,
+        subjectType: 'attachment',
+        subjectId: id,
+        verb: 'attachment.retired',
+        payload: { attachmentId: id },
+      });
+      return updated;
+    });
+    return this.toMeta(row);
+  }
+
+  /** Revive a retired attachment (`attachment:revive`) within the grace window. */
+  async revive(id: string, actorUserId: string): Promise<AttachmentMetaView> {
+    const att = await this.loadLifecycle(id);
+    const graceMs = await this.grace.windowMs(att.organizationId);
+    if (!isRevivable(att, graceMs)) {
+      throw new ConflictError(
+        'NOT_REVIVABLE',
+        'Attachment is not retired or its grace period has elapsed',
+      );
+    }
+    const row = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.attachment.update({
+        where: { id },
+        data: { lifecycleState: LifecycleState.active, retiredAt: null },
+      });
+      await this.activity.logActivity({
+        tx,
+        organizationId: att.organizationId,
+        actorUserId,
+        subjectType: 'attachment',
+        subjectId: id,
+        verb: 'attachment.revived',
+        payload: { attachmentId: id },
+      });
+      return updated;
+    });
+    return this.toMeta(row);
   }
 
   /** Resolve where a download should come from (ungated read in v1). */

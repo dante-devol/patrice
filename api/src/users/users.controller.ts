@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -34,6 +35,17 @@ const targetUser = (req: Request) => ({
   attrs: { retired: false },
 });
 
+/**
+ * The target User for `user:revive` — **omits** `retired` so reviving a retired user
+ * doesn't trip the Retired-as-Hard-Deny forbid (mirrors the task/message revive
+ * resolvers). Revive is the one action that legitimately targets a retired user.
+ */
+const reviveUser = (req: Request) => ({
+  type: 'User' as const,
+  id: String(req.params.id),
+  attrs: {},
+});
+
 /** Resolve a User whose `targetRole` is the role being granted/revoked (role scope). */
 function userWithTargetRole(roleId: string) {
   return (req: Request) => ({
@@ -54,9 +66,9 @@ export class UsersController {
 
   @Get()
   @Authorize(ACTIONS.userUpdate.action, orgResource)
-  async list(@Req() req: AuthedRequest) {
+  async list(@Query('include') include: string | undefined, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
-    return this.users.list(req.user.organizationId);
+    return this.users.list(req.user.organizationId, include === 'retired');
   }
 
   @Patch(':id')
@@ -84,6 +96,22 @@ export class UsersController {
   async reactivate(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
     if (!req.user) throw new UnauthenticatedError();
     await this.users.reactivate(req.user.organizationId, id, req.user.id);
+  }
+
+  @Post(':id/retire')
+  @HttpCode(204)
+  @Authorize(ACTIONS.userRetire.action, targetUser)
+  async retire(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
+    if (!req.user) throw new UnauthenticatedError();
+    await this.users.retire(req.user.organizationId, id, req.user.id);
+  }
+
+  @Post(':id/revive')
+  @HttpCode(204)
+  @Authorize(ACTIONS.userRevive.action, reviveUser)
+  async revive(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
+    if (!req.user) throw new UnauthenticatedError();
+    await this.users.revive(req.user.organizationId, id, req.user.id);
   }
 
   @Post(':id/roles')

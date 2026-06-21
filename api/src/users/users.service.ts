@@ -6,6 +6,8 @@ import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, DeniedError, NotFoundError } from '../common/errors';
+import { GraceService } from '../common/grace.service';
+import { activeFilter, isRevivable } from '../common/lifecycle';
 import { UpdateUserDto } from './users.dto';
 
 export interface UserView {
@@ -30,24 +32,38 @@ export class UsersService {
     private readonly access: AccessService,
     private readonly admin: AdministrabilityService,
     private readonly activity: ActivityService,
+    private readonly grace: GraceService,
   ) {}
 
-  async list(organizationId: string): Promise<UserView[]> {
-    const users = await this.prisma.appUser.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        lifecycleState: true,
-        userRoles: { select: { roleId: true } },
-      },
-    });
+  async list(organizationId: string, includeRetired = false): Promise<UserView[]> {
+    const [org, users] = await Promise.all([
+      this.prisma.organization.findUniqueOrThrow({
+        where: { id: organizationId },
+        select: { settings: true },
+      }),
+      this.prisma.appUser.findMany({
+        where: { organizationId, ...activeFilter(includeRetired) },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          lifecycleState: true,
+          userRoles: { select: { roleId: true } },
+        },
+      }),
+    ]);
+    // anonymizeLabel (Slice 7.4): render a retired (scrubbed) user's stored display
+    // name as "Former member" without mutating the tombstone label in the DB.
+    const anonymize =
+      (org.settings as Record<string, unknown>)?.anonymizeLabel === true;
     return users.map((u) => ({
       id: u.id,
       email: u.email,
-      displayName: u.displayName,
+      displayName:
+        anonymize && u.lifecycleState === LifecycleState.retired
+          ? 'Former member'
+          : u.displayName,
       lifecycleState: u.lifecycleState,
       roleIds: u.userRoles.map((r) => r.roleId),
     }));
@@ -56,7 +72,12 @@ export class UsersService {
   private async loadUser(organizationId: string, id: string) {
     const user = await this.prisma.appUser.findFirst({
       where: { id, organizationId },
-      select: { id: true, organizationId: true, lifecycleState: true },
+      select: {
+        id: true,
+        organizationId: true,
+        lifecycleState: true,
+        retiredAt: true,
+      },
     });
     if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
     return user;
@@ -142,6 +163,94 @@ export class UsersService {
         subjectType: 'user',
         subjectId: user.id,
         verb: 'user.reactivated',
+        payload: { userId: user.id },
+      });
+      await this.access.bumpConfigVersion(organizationId, tx);
+    });
+  }
+
+  /**
+   * Retire a user (`user:retire`) — the irreversible path (the GC scrub follows once
+   * past grace). Sets `retired`, cascades to terminate the user's sessions (§2.11),
+   * and bumps `config_version` (their roles go inert). Guarded by the admin floor: the
+   * last Effective Admin cannot be retired. Roles are **not** stripped here — that
+   * happens at scrub time (api/CONTEXT.md "Scrub-in-Place").
+   */
+  async retire(
+    organizationId: string,
+    id: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const user = await this.loadUser(organizationId, id);
+    if (user.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('ALREADY_RETIRED', 'User is already retired');
+    }
+    await this.admin.withAdminFloor(
+      organizationId,
+      actorUserId,
+      { type: 'user', id: user.id, path: 'user.retire' },
+      async (tx) => {
+        await tx.appUser.update({
+          where: { id: user.id },
+          data: {
+            lifecycleState: LifecycleState.retired,
+            retiredAt: new Date(),
+            version: { increment: 1 },
+          },
+        });
+        // Retirement cascades to terminate the user's sessions.
+        await tx.session.updateMany({
+          where: { userId: user.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        await this.activity.logActivity({
+          tx,
+          organizationId,
+          actorUserId,
+          subjectType: 'user',
+          subjectId: user.id,
+          verb: 'user.retired',
+          payload: { userId: user.id },
+        });
+        await this.access.bumpConfigVersion(organizationId, tx);
+      },
+    );
+  }
+
+  /**
+   * Revive a retired user (`user:revive`) within the Grace Period — the inverse of
+   * {@link retire}, valid only while retired and pre-scrub (past grace → `409
+   * NOT_REVIVABLE`; the GC scrub is irreversible). Sessions stay revoked (re-login).
+   */
+  async revive(
+    organizationId: string,
+    id: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const user = await this.loadUser(organizationId, id);
+    const graceMs = await this.grace.windowMs(organizationId);
+    if (!isRevivable(user, graceMs)) {
+      throw new ConflictError(
+        'NOT_REVIVABLE',
+        'User is not retired or its grace period has elapsed',
+      );
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.appUser.update({
+        where: { id: user.id },
+        data: {
+          lifecycleState: LifecycleState.active,
+          retiredAt: null,
+          version: { increment: 1 },
+        },
+      });
+      await this.activity.logActivity({
+        tx,
+        organizationId,
+        actorUserId,
+        subjectType: 'user',
+        subjectId: user.id,
+        verb: 'user.revived',
         payload: { userId: user.id },
       });
       await this.access.bumpConfigVersion(organizationId, tx);

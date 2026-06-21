@@ -25,6 +25,8 @@ import { errorMessage } from '../../core/errors';
           <input type="number" min="1" [(ngModel)]="s.sessionAbsoluteDays" /></label>
         <label>Session idle lifetime (days)
           <input type="number" min="1" [(ngModel)]="s.sessionIdleDays" /></label>
+        <label>Retirement grace period (hours)
+          <input type="number" min="0" [(ngModel)]="s.gracePeriodHours" /></label>
         <button [disabled]="busy()" (click)="save(s)">Save settings</button>
       }
     </div>

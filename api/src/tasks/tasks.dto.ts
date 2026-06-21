@@ -59,6 +59,9 @@ export const listTasksQuerySchema = z
     claimant: multiFacet(uuid),
     after: uuid.optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
+    // Soft-retire opt-in (Slice 7.2): `?include=retired` lifts the active-only default
+    // so admin/history views see retired tasks too.
+    include: z.enum(['retired']).optional(),
   })
   .strip();
 

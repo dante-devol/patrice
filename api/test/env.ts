@@ -1,4 +1,3 @@
-/* eslint-disable */
 // Test environment defaults. Override DATABASE_URL via the shell to point at a
 // different Postgres. Uses the locally-running Postgres 18 + the patrice_test DB.
 process.env.DATABASE_URL ||=

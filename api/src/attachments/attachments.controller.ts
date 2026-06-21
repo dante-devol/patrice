@@ -12,7 +12,12 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { UnauthenticatedError } from '../common/errors';
-import { Authorize, attachmentCreateResource } from '../access/authorize.decorator';
+import {
+  Authorize,
+  attachmentCreateResource,
+  attachmentResource,
+  attachmentReviveResource,
+} from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { AttachmentsService } from './attachments.service';
 
@@ -47,6 +52,22 @@ export class AttachmentsController {
   ) {
     if (!req.user) throw new UnauthenticatedError();
     return this.attachments.upload(messageId, req.user.id, file);
+  }
+
+  @Post('attachments/:id/retire')
+  @HttpCode(200)
+  @Authorize(ACTIONS.attachmentRetire.action, attachmentResource)
+  async retire(@Param('id') id: string, @Req() req: AuthedRequest) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.attachments.retire(id, req.user.id);
+  }
+
+  @Post('attachments/:id/revive')
+  @HttpCode(200)
+  @Authorize(ACTIONS.attachmentRevive.action, attachmentReviveResource)
+  async revive(@Param('id') id: string, @Req() req: AuthedRequest) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.attachments.revive(id, req.user.id);
   }
 
   @Get('attachments/:id')

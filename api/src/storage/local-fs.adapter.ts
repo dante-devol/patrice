@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, normalize, resolve, sep } from 'node:path';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { dirname, join, normalize, relative, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { Logger } from '@nestjs/common';
 import { StoragePort } from './storage.port';
@@ -45,5 +45,20 @@ export class LocalFsStorageAdapter implements StoragePort {
 
   async delete(key: string): Promise<void> {
     await rm(this.pathFor(key), { force: true });
+  }
+
+  /** Recursively enumerate stored keys (forward-slash, relative to baseDir). */
+  async list(prefix = ''): Promise<string[]> {
+    const root = this.pathFor(prefix || '.');
+    let entries;
+    try {
+      entries = await readdir(root, { recursive: true, withFileTypes: true });
+    } catch {
+      return []; // missing dir = empty store
+    }
+    return entries
+      .filter((e) => e.isFile())
+      .map((e) => relative(this.baseDir, join(e.parentPath ?? e.path, e.name)))
+      .map((p) => p.split(sep).join('/'));
   }
 }

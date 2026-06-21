@@ -74,7 +74,9 @@ export class DivisionsAdminComponent {
 
   private async refresh(): Promise<void> {
     try {
-      this.divisions.set(await this.api.listDivisions());
+      // Admin view opts into retired rows so retired divisions (and their Revive
+      // action) remain visible (Slice 7.2 admin/history opt-out).
+      this.divisions.set(await this.api.listDivisions(true));
     } catch (e) {
       this.error.set(errorMessage(e));
     }

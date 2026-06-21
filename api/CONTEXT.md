@@ -75,12 +75,20 @@ _Avoid_: Confirmed Email, Validated Account
 ### Entity lifecycle
 
 **Retire**:
-The soft-delete action — sets `lifecycle_state='retired'` and `retired_at=now()`. Distinct from **Revive** (the reverse, during grace), **Reactivate** (the reverse of **Deactivate** — in-life, reversible), and **GC** (the permanent collector). Each `*:revive` is its own separately-granted Action, not an implicit corollary of `*:retire`.
+The soft-delete action — sets `lifecycle_state='retired'` and `retired_at=now()`. Distinct from **Revive** (the reverse, during grace), **Reactivate** (the reverse of **Deactivate** — in-life, reversible), and **GC** (the permanent collector). Each `*:revive` is its own separately-granted Action, not an implicit corollary of `*:retire`. **Revive rejection is `409 NOT_REVIVABLE`** (uniform across every `*:revive` endpoint) when the target is active (nothing to revive) or past the Grace Period (GC territory) — this is the pinned contract code, overriding the "422" wording in issue #28's acceptance text. Cedar gates *who*; the `isRevivable` guard gates *whether*; the revive resource resolver omits the `retired` attr so the action doesn't trip its own Retired-as-Hard-Deny.
 _Avoid_: Delete, Soft-Delete, Archive
 
 **Grace Period**:
-The configurable window after `retired_at` during which Revive is allowed and GC will not collect. Recovers from accidental retirement.
+The configurable window after `retired_at` during which Revive is allowed and GC will not collect. Read per-org from `organization.settings.gracePeriodHours` (default 24h) via `GraceService`; `0` disables the window. Recovers from accidental retirement.
 _Avoid_: Retention Window, Soft-Delete TTL
+
+**Soft-Retire Default Filter**:
+The active-only default on entity **list** queries (`activeFilter`): list endpoints exclude `lifecycle_state='retired'` rows unless `?include=retired` is passed (admin/history views). Targets *retired* only — deactivated rows stay listable. Single-row loads (revive, GC) and task message threads are exempt (retired data degrades-but-stays-visible per §2.10).
+_Avoid_: Active Scope, Retirement Hiding
+
+**GC Sweep**:
+The lazy collector (`GcService`, Slice 7.3) — a pg-boss job (`singletonKey: 'gc-sweep'`) that permanently deletes entities retired past the Grace Period with no live references. Task aggregates delete as a unit; roles/divisions/teams individually (`ON DELETE RESTRICT` is the DB backstop, logged as `gc.blocked`). A reconciliation pass removes orphaned blobs. `POST /gc/sweep` + `/gc/sweep/dry-run` are the manual hooks.
+_Avoid_: Garbage Collector (the term), Reaper, Purge
 
 **Scrub-in-Place**:
 The permanent user-erasure operation. Keeps the `app_user` row (preserving FK validity) with `id` + `display_name` only; purges PII and satellites; auto-revokes invitations the user issued. Patrice's GDPR-style erasure path.

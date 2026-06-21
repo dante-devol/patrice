@@ -69,6 +69,9 @@ export const activityPayloadSchemas = {
   'user.updated': z.object({ userId: uuid }).strict(),
   'user.deactivated': z.object({ userId: uuid }).strict(),
   'user.reactivated': z.object({ userId: uuid }).strict(),
+  // Slice 7 — user retirement lifecycle. IDs only.
+  'user.retired': z.object({ userId: uuid }).strict(),
+  'user.revived': z.object({ userId: uuid }).strict(),
   'config.updated': z
     .object({ changedKeys: z.array(z.string()) })
     .strict(),
@@ -91,6 +94,7 @@ export const activityPayloadSchemas = {
     .strict(),
   'task.updated': z.object({ taskId: uuid }).strict(),
   'task.retired': z.object({ taskId: uuid }).strict(),
+  'task.revived': z.object({ taskId: uuid }).strict(),
   // Slice 4.2 — claiming / openings / requester. IDs + the new status only.
   'task.claimed': z
     .object({ taskId: uuid, userId: uuid, statusCache: z.string() })
@@ -110,9 +114,13 @@ export const activityPayloadSchemas = {
     .strict(),
   'message.updated': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'message.retired': z.object({ messageId: uuid, taskId: uuid }).strict(),
+  'message.revived': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'attachment.created': z
     .object({ attachmentId: uuid, messageId: uuid })
     .strict(),
+  // Slice 7 — attachment lifecycle (independent retire/revive of a single file).
+  'attachment.retired': z.object({ attachmentId: uuid }).strict(),
+  'attachment.revived': z.object({ attachmentId: uuid }).strict(),
   // Slice 5 — submission lifecycle. IDs + the (non-PII) submission_no/decision/status.
   'submission.submitted': z
     .object({
@@ -141,6 +149,23 @@ export const activityPayloadSchemas = {
     .strict(),
   'task.completed': z
     .object({ taskId: uuid, statusCache: z.string() })
+    .strict(),
+  // Slice 7.3 — GC sweep. System-actored (actor_user_id NULL), IDs-only. One row per
+  // collected aggregate/entity; `gc.blocked` records a RESTRICT backstop hit (a live
+  // reference left the row in place); `gc.blob_reconciled` records orphaned-blob cleanup.
+  'gc.task_collected': z.object({ taskId: uuid }).strict(),
+  'gc.role_collected': z.object({ roleId: uuid }).strict(),
+  'gc.division_collected': z.object({ divisionId: uuid }).strict(),
+  'gc.team_collected': z.object({ teamId: uuid }).strict(),
+  'gc.blocked': z.object({ entityType: z.string(), entityId: uuid }).strict(),
+  'gc.blob_reconciled': z.object({ blobCount: z.number().int() }).strict(),
+  // Slice 7.4 — user GC. Scrub keeps the row (tombstone); collect deletes a
+  // history-less user outright. The auto-revoke of invitations issued by a scrubbed
+  // user is system-actored (actor_user_id NULL), one row per invite.
+  'gc.user_scrubbed': z.object({ userId: uuid }).strict(),
+  'gc.user_collected': z.object({ userId: uuid }).strict(),
+  'invite.auto_revoked_on_issuer_retired': z
+    .object({ invitationId: uuid, issuerUserId: uuid })
     .strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.

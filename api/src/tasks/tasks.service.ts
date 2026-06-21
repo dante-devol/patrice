@@ -5,6 +5,8 @@ import { ActivityService } from '../activity/activity.service';
 import { MessagesService } from '../messages/messages.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
+import { GraceService } from '../common/grace.service';
+import { activeFilter, isRevivable } from '../common/lifecycle';
 import { computeStatusCache } from './task-status';
 import { TaskStatusService } from './task-status.service';
 import {
@@ -53,6 +55,7 @@ export class TasksService {
     private readonly messages: MessagesService,
     private readonly notifications: NotificationsService,
     private readonly status: TaskStatusService,
+    private readonly grace: GraceService,
   ) {}
 
   private toView(t: {
@@ -206,7 +209,10 @@ export class TasksService {
     organizationId: string,
     query: ListTasksQuery,
   ): Promise<TaskListResult> {
-    const where: Prisma.TaskWhereInput = { organizationId };
+    const where: Prisma.TaskWhereInput = {
+      organizationId,
+      ...activeFilter(query.include === 'retired'),
+    };
     if (query.division) where.divisionId = { in: query.division };
     if (query.team) where.teamId = { in: query.team };
     if (query.status) where.statusCache = { in: query.status as StatusCache[] };
@@ -312,6 +318,54 @@ export class TasksService {
       return row;
     });
     this.notifications.publish(notified);
+    return this.toView(updated);
+  }
+
+  /**
+   * Revive a retired task (`task:revive`), the inverse of {@link retire}. Valid only
+   * while the task is `retired` AND still inside the grace window (`isRevivable`);
+   * otherwise `409 NOT_REVIVABLE` (post-GC the row is gone; pre-retire there is
+   * nothing to revive). Cedar gates *who*; the state-machine guard here gates *whether*.
+   */
+  async revive(id: string, actorUserId: string): Promise<TaskView> {
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        organizationId: true,
+        lifecycleState: true,
+        retiredAt: true,
+      },
+    });
+    if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+    const graceMs = await this.grace.windowMs(task.organizationId);
+    if (!isRevivable(task, graceMs)) {
+      throw new ConflictError(
+        'NOT_REVIVABLE',
+        'Task is not retired or its grace period has elapsed',
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.task.update({
+        where: { id: task.id },
+        data: {
+          lifecycleState: LifecycleState.active,
+          retiredAt: null,
+          version: { increment: 1 },
+        },
+      });
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId,
+        subjectType: 'task',
+        subjectId: task.id,
+        verb: 'task.revived',
+        payload: { taskId: task.id },
+      });
+      return row;
+    });
     return this.toView(updated);
   }
 

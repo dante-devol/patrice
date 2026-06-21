@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from './config/config.module';
+import { CommonModule } from './common/common.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ActivityModule } from './activity/activity.module';
 import { AccessModule } from './access/access.module';
@@ -22,12 +23,14 @@ import { MessagesModule } from './messages/messages.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { StorageModule } from './storage/storage.module';
+import { GcModule } from './gc/gc.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 @Module({
   imports: [
     ConfigModule,
+    CommonModule,
     PrismaModule,
     ActivityModule,
     AccessModule,
@@ -47,6 +50,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     AttachmentsModule,
     TasksModule,
     SubmissionsModule,
+    GcModule,
   ],
   controllers: [HealthController],
   providers: [

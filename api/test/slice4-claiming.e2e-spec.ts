@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -31,9 +32,9 @@ export class TeamsController {
 
   @Get()
   @Authorize(ACTIONS.teamCreate.action, orgResource)
-  async list(@Req() req: AuthedRequest) {
+  async list(@Query('include') include: string | undefined, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
-    return this.teams.list(req.user.organizationId);
+    return this.teams.list(req.user.organizationId, include === 'retired');
   }
 
   @Post()

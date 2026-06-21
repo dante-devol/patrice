@@ -16,6 +16,7 @@ import {
   Authorize,
   messageCreateResource,
   messageResource,
+  messageReviveResource,
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { MessagesService } from './messages.service';
@@ -80,5 +81,13 @@ export class MessagesController {
   async retire(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
     return this.messages.retire(id, req.user.id);
+  }
+
+  @Post('messages/:id/revive')
+  @HttpCode(200)
+  @Authorize(ACTIONS.messageRevive.action, messageReviveResource)
+  async revive(@Param('id') id: string, @Req() req: AuthedRequest) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.messages.revive(id, req.user.id);
   }
 }

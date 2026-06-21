@@ -25,6 +25,9 @@ export const updateConfigSchema = z
     anonymizeLabel: z.boolean().optional(),
     sessionAbsoluteDays: z.number().int().positive().max(3650).optional(),
     sessionIdleDays: z.number().int().positive().max(3650).optional(),
+    // Retire→revive grace window in hours (Slice 7.2). 0 disables the window
+    // (revive only same-instant; GC collects as soon as references clear).
+    gracePeriodHours: z.number().int().nonnegative().max(8760).optional(),
   })
   .strict();
 

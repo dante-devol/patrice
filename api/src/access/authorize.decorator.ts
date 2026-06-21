@@ -121,6 +121,31 @@ export const taskResource: ResourceResolver = async (req, prisma) => {
 };
 
 /**
+ * The task named by `:id` is the resource for `task:revive` — like {@link taskResource}
+ * but **without** the `retired` attribute. Revive is the one action that legitimately
+ * targets a retired task, so it must not trip the Retired-as-Hard-Deny forbid (which
+ * fires `when resource has retired && resource.retired`). Scope attrs (division/team,
+ * requester for own_as_requester) are still carried so scoped revive grants match.
+ */
+export const taskReviveResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: { id: true, divisionId: true, teamId: true, requesterUserId: true },
+  });
+  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+  return {
+    type: 'Task',
+    id: task.id,
+    attrs: {
+      division: divisionEntity(task.divisionId),
+      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
+      requester: userEntity(task.requesterUserId),
+    },
+  };
+};
+
+/**
  * The task named by `:id` is the resource for `task:submit` — the actor is the
  * `own_as_claimant` owner, so `claimant` is set to the actor **only when they hold an
  * active slot** on the task. A non-claimant (or a claimant who has left) yields no
@@ -254,6 +279,34 @@ export const messageResource: ResourceResolver = async (req, prisma) => {
 };
 
 /**
+ * The message named by `:id` is the resource for `message:revive` — like
+ * {@link messageResource} but **without** the `retired` attribute, so reviving a
+ * retired message doesn't trip the Retired-as-Hard-Deny forbid. Carries its task's
+ * division/team and the sender (own_as_sender) for scoped revive grants.
+ */
+export const messageReviveResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const message = await prisma.message.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      senderUserId: true,
+      task: { select: { divisionId: true, teamId: true } },
+    },
+  });
+  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
+  return {
+    type: 'Message',
+    id: message.id,
+    attrs: {
+      division: divisionEntity(message.task.divisionId),
+      ...(message.task.teamId ? { team: teamEntity(message.task.teamId) } : {}),
+      ...(message.senderUserId ? { sender: userEntity(message.senderUserId) } : {}),
+    },
+  };
+};
+
+/**
  * A **prospective** attachment is the resource for `attachment:create` — the target
  * message (the `:id` path param, available before multipart parsing) supplies its
  * task's division/team and the actor is the uploader (own_as_uploader). 404 if the
@@ -276,6 +329,86 @@ export const attachmentCreateResource: ResourceResolver = async (req, prisma) =>
       division: divisionEntity(message.task.divisionId),
       ...(message.task.teamId ? { team: teamEntity(message.task.teamId) } : {}),
       ...(user ? { uploader: userEntity(user.id) } : {}),
+    },
+  };
+};
+
+/**
+ * Load an attachment's task-scope (division/team) + uploader, resolving through
+ * whichever parent it has — a message, or an answer → submission → task. Shared by
+ * the retire/revive resolvers below. Returns null if the attachment is missing.
+ */
+async function loadAttachmentScope(
+  id: string,
+  prisma: PrismaService,
+): Promise<{
+  id: string;
+  uploaderUserId: string;
+  divisionId: string;
+  teamId: string | null;
+  retired: boolean;
+} | null> {
+  const att = await prisma.attachment.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      uploaderUserId: true,
+      lifecycleState: true,
+      message: { select: { task: { select: { divisionId: true, teamId: true } } } },
+      answer: {
+        select: { submission: { select: { task: { select: { divisionId: true, teamId: true } } } } },
+      },
+    },
+  });
+  if (!att) return null;
+  const task = att.message?.task ?? att.answer?.submission.task ?? null;
+  if (!task) return null;
+  return {
+    id: att.id,
+    uploaderUserId: att.uploaderUserId,
+    divisionId: task.divisionId,
+    teamId: task.teamId,
+    retired: att.lifecycleState === 'retired',
+  };
+}
+
+/**
+ * The attachment named by `:id` is the resource for `attachment:retire` — carries its
+ * task's division/team (specific/own group), the uploader (own_as_uploader), and
+ * `retired` (Retired-as-Hard-Deny). 404 if missing.
+ */
+export const attachmentResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const att = await loadAttachmentScope(id, prisma);
+  if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
+  return {
+    type: 'Attachment',
+    id: att.id,
+    attrs: {
+      division: divisionEntity(att.divisionId),
+      ...(att.teamId ? { team: teamEntity(att.teamId) } : {}),
+      uploader: userEntity(att.uploaderUserId),
+      retired: att.retired,
+    },
+  };
+};
+
+/**
+ * The attachment named by `:id` is the resource for `attachment:revive` — like
+ * {@link attachmentResource} but **without** `retired`, so reviving a retired
+ * attachment doesn't trip the Retired-as-Hard-Deny forbid.
+ */
+export const attachmentReviveResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const att = await loadAttachmentScope(id, prisma);
+  if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
+  return {
+    type: 'Attachment',
+    id: att.id,
+    attrs: {
+      division: divisionEntity(att.divisionId),
+      ...(att.teamId ? { team: teamEntity(att.teamId) } : {}),
+      uploader: userEntity(att.uploaderUserId),
     },
   };
 };

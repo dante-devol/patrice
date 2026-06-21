@@ -53,7 +53,7 @@ export class TeamsAdminComponent {
 
   private async refresh(): Promise<void> {
     try {
-      this.teams.set(await this.api.listTeams());
+      this.teams.set(await this.api.listTeams(true));
     } catch (e) {
       this.error.set(errorMessage(e));
     }

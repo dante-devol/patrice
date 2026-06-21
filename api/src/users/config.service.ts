@@ -11,6 +11,9 @@ export const SETTINGS_DEFAULTS = {
   anonymizeLabel: false,
   sessionAbsoluteDays: 30,
   sessionIdleDays: 7,
+  // Retire→revive grace window (Slice 7.2). GC skips, and Revive is allowed, while
+  // `retired_at > now() - gracePeriodHours`. Default 24h.
+  gracePeriodHours: 24,
 } as const;
 
 export type OrgSettings = {
@@ -19,6 +22,7 @@ export type OrgSettings = {
   anonymizeLabel: boolean;
   sessionAbsoluteDays: number;
   sessionIdleDays: number;
+  gracePeriodHours: number;
 };
 
 /**
