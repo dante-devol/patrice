@@ -14,4 +14,8 @@ _Avoid_: Question Form, Survey Component
 The UX-only display of what the current user may do — used to enable/disable controls, hide menu items, and route-guard navigation. **Reflects, never enforces** — a reflected `false` is a hint; the API is the authority and may still 403. Lives in the application/behavior layer (signal stores), not in presentational components.
 _Avoid_: Permission Check, Authorization (these imply enforcement)
 
+**Reconcile-on-Connect**:
+The `NotificationStore` delivery model (Slice 6). An `EventSource` on `/notifications/stream` carries content-free **sync** pings; each ping (and every connect/reconnect) triggers a pull of the durable rows from `GET /notifications`. The stream never carries payloads — the table is the source of truth, so a dropped/reconnected stream loses nothing. `unreadCount` (computed) drives the header badge.
+_Avoid_: Live Feed, Push Notifications (the payload is pulled, not pushed)
+
 *(More terms will land here as code arrives — keep additions opinionated and tight per `docs/agents/domain.md`.)*
