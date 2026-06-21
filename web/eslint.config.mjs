@@ -1,5 +1,6 @@
 // @ts-check
 import eslint from '@eslint/js';
+import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import angular from 'angular-eslint';
 
@@ -29,6 +30,11 @@ export default tseslint.config(
       '@angular-eslint/component-selector': 'off',
       '@angular-eslint/directive-selector': 'off',
     },
+  },
+  {
+    files: ['**/*.spec.ts'],
+    languageOptions: { globals: { ...globals.jest } },
+    rules: { '@typescript-eslint/no-explicit-any': 'off' },
   },
   {
     files: ['**/*.html'],
