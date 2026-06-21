@@ -144,6 +144,15 @@ export const activityPayloadSchemas = {
   'task.completed': z
     .object({ taskId: uuid, statusCache: z.string() })
     .strict(),
+  // Slice 7.3 — GC sweep. System-actored (actor_user_id NULL), IDs-only. One row per
+  // collected aggregate/entity; `gc.blocked` records a RESTRICT backstop hit (a live
+  // reference left the row in place); `gc.blob_reconciled` records orphaned-blob cleanup.
+  'gc.task_collected': z.object({ taskId: uuid }).strict(),
+  'gc.role_collected': z.object({ roleId: uuid }).strict(),
+  'gc.division_collected': z.object({ divisionId: uuid }).strict(),
+  'gc.team_collected': z.object({ teamId: uuid }).strict(),
+  'gc.blocked': z.object({ entityType: z.string(), entityId: uuid }).strict(),
+  'gc.blob_reconciled': z.object({ blobCount: z.number().int() }).strict(),
   // The LAST_ADMIN guard rejections — a useful security signal. `subjectType`/
   // `subjectId` name the attempted target; the payload stays IDs-only.
   'last_admin_refused': z

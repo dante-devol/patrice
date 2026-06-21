@@ -86,6 +86,10 @@ _Avoid_: Retention Window, Soft-Delete TTL
 The active-only default on entity **list** queries (`activeFilter`): list endpoints exclude `lifecycle_state='retired'` rows unless `?include=retired` is passed (admin/history views). Targets *retired* only — deactivated rows stay listable. Single-row loads (revive, GC) and task message threads are exempt (retired data degrades-but-stays-visible per §2.10).
 _Avoid_: Active Scope, Retirement Hiding
 
+**GC Sweep**:
+The lazy collector (`GcService`, Slice 7.3) — a pg-boss job (`singletonKey: 'gc-sweep'`) that permanently deletes entities retired past the Grace Period with no live references. Task aggregates delete as a unit; roles/divisions/teams individually (`ON DELETE RESTRICT` is the DB backstop, logged as `gc.blocked`). A reconciliation pass removes orphaned blobs. `POST /gc/sweep` + `/gc/sweep/dry-run` are the manual hooks.
+_Avoid_: Garbage Collector (the term), Reaper, Purge
+
 **Scrub-in-Place**:
 The permanent user-erasure operation. Keeps the `app_user` row (preserving FK validity) with `id` + `display_name` only; purges PII and satellites; auto-revokes invitations the user issued. Patrice's GDPR-style erasure path.
 _Avoid_: User Deletion, Account Removal

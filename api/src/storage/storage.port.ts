@@ -24,4 +24,11 @@ export interface StoragePort {
 
   /** Best-effort delete (used to clean up an orphaned blob after a failed write). */
   delete(key: string): Promise<void>;
+
+  /**
+   * List every stored object key under `prefix` (default: all). Used by the GC
+   * orphaned-blob reconciliation pass (Slice 7.3) to compare the store against the
+   * surviving `attachment` rows. Returns absolute storage keys.
+   */
+  list(prefix?: string): Promise<string[]>;
 }

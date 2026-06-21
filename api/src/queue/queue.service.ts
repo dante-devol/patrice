@@ -71,13 +71,49 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Publish a job. No-op (logged) when the queue is unavailable. */
-  async publish(queue: string, data: unknown): Promise<void> {
+  /**
+   * Publish a job. No-op (logged) when the queue is unavailable. `singletonKey`
+   * de-duplicates in-flight jobs (pg-boss drops a send whose key matches one already
+   * active) — the GC sweep passes `'gc-sweep'` so concurrent triggers can't overlap.
+   */
+  async publish(
+    queue: string,
+    data: unknown,
+    opts: { singletonKey?: string } = {},
+  ): Promise<void> {
     if (!this.boss) {
       this.logger.warn(`Queue unavailable; dropping job for "${queue}".`);
       return;
     }
     await this.boss.createQueue(queue).catch(() => undefined);
-    await this.boss.send(queue, data as object);
+    await this.boss.send(
+      queue,
+      data as object,
+      opts.singletonKey ? { singletonKey: opts.singletonKey } : {},
+    );
+  }
+
+  /**
+   * Schedule a recurring job on a cron expression. The `singletonKey` keeps a
+   * multi-instance deployment from double-running the same sweep. No-op when the
+   * queue is unavailable (jobs disabled).
+   */
+  async schedule(
+    queue: string,
+    cron: string,
+    data: unknown = {},
+    opts: { singletonKey?: string } = {},
+  ): Promise<void> {
+    if (!this.boss) {
+      this.logger.warn(`Queue unavailable; not scheduling "${queue}".`);
+      return;
+    }
+    await this.boss.createQueue(queue).catch(() => undefined);
+    await this.boss.schedule(
+      queue,
+      cron,
+      data as object,
+      opts.singletonKey ? { singletonKey: opts.singletonKey } : {},
+    );
   }
 }
