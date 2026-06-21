@@ -13,7 +13,7 @@ import { errorMessage } from '../core/errors';
   standalone: true,
   imports: [FormsModule, RouterLink],
   template: `
-    <div class="panel">
+    <div class="panel auth">
       <h2>Email verification</h2>
       @if (token) {
         @if (confirming()) { <p class="muted">Verifying…</p> }

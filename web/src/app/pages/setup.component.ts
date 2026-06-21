@@ -13,7 +13,7 @@ import { errorMessage } from '../core/errors';
   standalone: true,
   imports: [FormsModule, RouterLink],
   template: `
-    <div class="panel">
+    <div class="panel auth">
       <h2>First-run setup</h2>
       @if (loading()) {
         <p class="muted">Checking setup status…</p>

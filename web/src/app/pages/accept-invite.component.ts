@@ -10,7 +10,7 @@ import { errorMessage } from '../core/errors';
   standalone: true,
   imports: [FormsModule],
   template: `
-    <div class="panel">
+    <div class="panel auth">
       <h2>Accept invitation</h2>
       @if (loading()) {
         <p class="muted">Loading invitation…</p>

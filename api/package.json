@@ -18,6 +18,7 @@
     "test": "jest",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
     "challenge:invites": "node scripts/challenge-invites.mjs",
+    "seed": "node scripts/seed.mjs",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
