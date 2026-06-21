@@ -107,6 +107,20 @@ _Avoid_: Cache Generation, Schema Version
 The rule that `activity.payload jsonb` contains **IDs only** — never PII strings. Sidesteps the audit-immutability-vs-data-erasure conflict; the `logActivity` helper Zod-validates per-verb to enforce it.
 _Avoid_: Audit Privacy Rule
 
+### Notifications
+
+**Event Seq**:
+The monotonic `notification.event_seq` (bigint), counted per `(subject_type, subject_id, type)` at emit time. With `UNIQUE(recipient_user_id, type, subject_id, event_seq)` it is the **idempotency guard**: a retry carrying the same tuple collides and no-ops (`createMany skipDuplicates`). Resolved inline in the request transaction in v1, so the seq is auto-computed; an explicit seq is passed only to exercise the retry path.
+_Avoid_: Sequence Number, Notification Version
+
+**Recipient Snapshot**:
+The cohort resolved **at event time** and written as one `notification` row per recipient — never re-resolved at delivery. The sender is universally suppressed from their own cohort ({@link computeRecipients}). A claimant who leaves between event and read still keeps their row.
+_Avoid_: Recipient List, Subscriber Set
+
+**PubSubPort**:
+The fan-out seam (`publish(userId, ev)` / `subscribe(userId, cb)`). v1 binds the in-process adapter (single instance); the post-v1 multi-instance path is a Postgres `LISTEN/NOTIFY` adapter behind the same port. Carries a content-free **sync** ping only — durability never rides the stream.
+_Avoid_: Event Bus, Broker
+
 **Claim Eligibility AND-Composition**:
 The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: if either is true the claimant must hold the corresponding inherent role. Evaluated in Cedar via the `task:assign @ own_as_claimant` template; reads `principal.memberDivisions` and `principal.memberTeams`.
 _Avoid_: Membership Check, Eligibility Rule

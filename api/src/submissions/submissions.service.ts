@@ -8,6 +8,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { MessagesService } from '../messages/messages.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { REVIEW_DECISION_TYPE } from '../notifications/notification.types';
 import { TaskStatusService } from '../tasks/task-status.service';
 import {
   ConflictError,
@@ -75,6 +77,7 @@ export class SubmissionsService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly messages: MessagesService,
+    private readonly notifications: NotificationsService,
     private readonly status: TaskStatusService,
   ) {}
 
@@ -178,6 +181,7 @@ export class SubmissionsService {
       );
     }
 
+    let notified: string[] = [];
     const created = await this.prisma.$transaction(async (tx) => {
       // Serialize concurrent submits by this claimant so submission_no is race-safe.
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
@@ -269,12 +273,24 @@ export class SubmissionsService {
         },
       });
 
+      // Notify the task requester (sender — the claimant — is suppressed).
+      notified = await this.notifications.emit(tx, {
+        organizationId: task.organizationId,
+        type: 'task.submitted',
+        subjectType: 'submission',
+        subjectId: submission.id,
+        senderUserId: actorUserId,
+        recipientUserIds: [await this.notifications.requesterId(tx, taskId)],
+        payload: { taskId, submissionId: submission.id, actorUserId },
+      });
+
       return tx.submission.findUniqueOrThrow({
         where: { id: submission.id },
         include: this.includeAnswers,
       });
     });
 
+    this.notifications.publish(notified);
     return this.toView(created);
   }
 
@@ -314,6 +330,7 @@ export class SubmissionsService {
       select: {
         id: true,
         taskId: true,
+        claimantUserId: true,
         submissionNo: true,
         state: true,
         version: true,
@@ -337,6 +354,7 @@ export class SubmissionsService {
     }
     const outcome = DECISION_OUTCOME[dto.decision];
 
+    let notified: string[] = [];
     await this.prisma.$transaction(async (tx) => {
       // Version-guarded UPDATE — 0 rows means another writer moved it first.
       const updated = await tx.submission.updateMany({
@@ -400,8 +418,21 @@ export class SubmissionsService {
           statusCache: status,
         },
       });
+
+      // Notify the submission's claimant of the decision (reviewer is suppressed —
+      // self-review is forbidden by Cedar anyway, this is the backstop).
+      notified = await this.notifications.emit(tx, {
+        organizationId: submission.task.organizationId,
+        type: REVIEW_DECISION_TYPE[dto.decision],
+        subjectType: 'submission',
+        subjectId: submissionId,
+        senderUserId: actorUserId,
+        recipientUserIds: [submission.claimantUserId],
+        payload: { taskId: submission.taskId, submissionId, decision: dto.decision },
+      });
     });
 
+    this.notifications.publish(notified);
     return this.get(submissionId);
   }
 

@@ -13,6 +13,7 @@ import {
   InviteView,
   Message,
   MessageListResult,
+  NotificationListResult,
   OrgSettings,
   Questionnaire,
   QuestionInput,
@@ -377,5 +378,35 @@ export class ApiService {
   /** Manually complete a task → approved (`task:complete`). */
   completeTask(id: string): Promise<Task> {
     return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/complete`, {}));
+  }
+
+  // ---- Slice 6: notifications ---------------------------------------------
+
+  /** The relative SSE endpoint an EventSource subscribes to (cookie-authed). */
+  readonly notificationStreamUrl = '/api/notifications/stream';
+
+  /** The caller's durable notifications (unread-first) + the badge `unreadCount`. */
+  listNotifications(
+    opts: { after?: string; limit?: number } = {},
+  ): Promise<NotificationListResult> {
+    const params = new URLSearchParams();
+    if (opts.after) params.set('after', opts.after);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return firstValueFrom(
+      this.http.get<NotificationListResult>(`/api/notifications${qs ? `?${qs}` : ''}`),
+    );
+  }
+
+  markNotificationRead(id: string): Promise<{ unreadCount: number }> {
+    return firstValueFrom(
+      this.http.post<{ unreadCount: number }>(`/api/notifications/${id}/read`, {}),
+    );
+  }
+
+  markAllNotificationsRead(): Promise<{ unreadCount: number }> {
+    return firstValueFrom(
+      this.http.post<{ unreadCount: number }>('/api/notifications/read-all', {}),
+    );
   }
 }

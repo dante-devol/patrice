@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { LifecycleState, MessageKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { CreateMessageDto, ListMessagesQuery, UpdateMessageDto } from './messages.dto';
 
@@ -49,6 +50,7 @@ export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private attView(a: MessageRow['attachments'][number]): AttachmentView {
@@ -102,23 +104,26 @@ export class MessagesService {
   ): Promise<MessageView> {
     const task = await this.loadActiveTask(taskId);
 
+    let parent: { id: string; submissionId: string | null } | null = null;
     if (dto.parentMessageId) {
-      const parent = await this.prisma.message.findUnique({
+      const found = await this.prisma.message.findUnique({
         where: { id: dto.parentMessageId },
-        select: { id: true, taskId: true, parentMessageId: true },
+        select: { id: true, taskId: true, parentMessageId: true, submissionId: true },
       });
-      if (!parent || parent.taskId !== taskId) {
+      if (!found || found.taskId !== taskId) {
         throw new NotFoundError('PARENT_NOT_FOUND', 'Parent message not found on this task');
       }
       // One level deep: a reply may only attach to a TOP-LEVEL message.
-      if (parent.parentMessageId !== null) {
+      if (found.parentMessageId !== null) {
         throw new UnprocessableError(
           'REPLY_TO_REPLY',
           'Replies are one level deep; cannot reply to a reply',
         );
       }
+      parent = { id: found.id, submissionId: found.submissionId };
     }
 
+    let notified: string[] = [];
     const created = await this.prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
         data: {
@@ -143,9 +148,77 @@ export class MessagesService {
           parentMessageId: dto.parentMessageId ?? null,
         },
       });
+      notified = await this.notifyMessage(tx, {
+        organizationId: task.organizationId,
+        taskId,
+        messageId: message.id,
+        actorUserId,
+        parent,
+      });
       return message;
     });
+    this.notifications.publish(notified);
     return this.toView(created);
+  }
+
+  /**
+   * Fan a new comment out per the message recipient matrix (Slice 6). The subject is
+   * the message id (unique per event ⇒ `event_seq` is always 1, no collision), the
+   * sender is suppressed, and the cohort branches on thread shape:
+   *
+   *  - top-level (`message.posted`) → requester + active claimants
+   *  - reply in a submission thread (`message.submission_thread_replied`) → that
+   *    submission's claimant + the task requester
+   *  - reply in a plain thread (`message.replied`) → the thread's prior participants
+   */
+  private async notifyMessage(
+    tx: Prisma.TransactionClient,
+    ctx: {
+      organizationId: string;
+      taskId: string;
+      messageId: string;
+      actorUserId: string;
+      parent: { id: string; submissionId: string | null } | null;
+    },
+  ): Promise<string[]> {
+    const base = {
+      organizationId: ctx.organizationId,
+      subjectType: 'message',
+      subjectId: ctx.messageId,
+      senderUserId: ctx.actorUserId,
+      payload: { taskId: ctx.taskId, messageId: ctx.messageId, actorUserId: ctx.actorUserId },
+    } as const;
+
+    if (!ctx.parent) {
+      const requester = await this.notifications.requesterId(tx, ctx.taskId);
+      const claimants = await this.notifications.activeClaimantIds(tx, ctx.taskId);
+      return this.notifications.emit(tx, {
+        ...base,
+        type: 'message.posted',
+        recipientUserIds: [requester, ...claimants],
+      });
+    }
+
+    if (ctx.parent.submissionId) {
+      const submission = await tx.submission.findUnique({
+        where: { id: ctx.parent.submissionId },
+        select: { claimantUserId: true },
+      });
+      const requester = await this.notifications.requesterId(tx, ctx.taskId);
+      return this.notifications.emit(tx, {
+        ...base,
+        type: 'message.submission_thread_replied',
+        recipientUserIds: [submission?.claimantUserId, requester].filter(
+          (x): x is string => !!x,
+        ),
+      });
+    }
+
+    return this.notifications.emit(tx, {
+      ...base,
+      type: 'message.replied',
+      recipientUserIds: await this.notifications.threadParticipantIds(tx, ctx.parent.id),
+    });
   }
 
   /**

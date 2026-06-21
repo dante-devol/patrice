@@ -3,6 +3,7 @@ import { LifecycleState, Prisma, QuestionType, StatusCache } from '@prisma/clien
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { MessagesService } from '../messages/messages.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { computeStatusCache } from './task-status';
 import { TaskStatusService } from './task-status.service';
@@ -50,6 +51,7 @@ export class TasksService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly messages: MessagesService,
+    private readonly notifications: NotificationsService,
     private readonly status: TaskStatusService,
   ) {}
 
@@ -277,6 +279,7 @@ export class TasksService {
     }
 
     const now = new Date();
+    let notified: string[] = [];
     const updated = await this.prisma.$transaction(async (tx) => {
       const row = await tx.task.update({
         where: { id: task.id },
@@ -295,8 +298,20 @@ export class TasksService {
         verb: 'task.retired',
         payload: { taskId: task.id },
       });
+      // Active claimants hear the task was retired (the actor — usually the requester
+      // — is suppressed).
+      notified = await this.notifications.emit(tx, {
+        organizationId: task.organizationId,
+        type: 'task.retired',
+        subjectType: 'task',
+        subjectId: task.id,
+        senderUserId: actorUserId,
+        recipientUserIds: await this.notifications.activeClaimantIds(tx, task.id),
+        payload: { taskId: task.id },
+      });
       return row;
     });
+    this.notifications.publish(notified);
     return this.toView(updated);
   }
 
@@ -343,7 +358,8 @@ export class TasksService {
       throw new ConflictError('CLAIMS_CLOSED', 'This task is closed to new claims');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    let notified: string[] = [];
+    const view = await this.prisma.$transaction(async (tx) => {
       // Serialize concurrent claims on this task so the capacity check is race-safe.
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
 
@@ -382,15 +398,30 @@ export class TasksService {
         payload: { taskId, userId, statusCache: status },
       });
       await this.messages.createSystemMessage(tx, taskId, `User ${userId} claimed this task.`);
+      // Notify the requester of the new claim (the claimer is suppressed).
+      notified = await this.notifications.emit(tx, {
+        organizationId: task.organizationId,
+        type: 'task.claim_joined',
+        subjectType: 'task',
+        subjectId: taskId,
+        senderUserId: userId,
+        recipientUserIds: [await this.notifications.requesterId(tx, taskId)],
+        payload: { taskId, actorUserId: userId },
+      });
       const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
       return this.toView(row);
     });
+    this.notifications.publish(notified);
+    return view;
   }
 
   /** Leave a claim (`task:assign`, own slot). Frees the slot (no submits in Slice 4). */
   async leave(taskId: string, userId: string): Promise<TaskView> {
     const task = await this.loadActiveTask(taskId);
-    return this.prisma.$transaction(async (tx) => {
+    let notified: string[] = [];
+    const view = await this.prisma.$transaction(async (tx) => {
+      // Lock the task so the claim_left event_seq computation can't race a sibling.
+      await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
       const slot = await tx.taskClaimant.findUnique({
         where: { taskId_userId: { taskId, userId } },
         select: { id: true, leftAt: true },
@@ -413,9 +444,21 @@ export class TasksService {
         payload: { taskId, userId, statusCache: status },
       });
       await this.messages.createSystemMessage(tx, taskId, `User ${userId} left this task.`);
+      // Notify the requester that a claimant left (the leaver is suppressed).
+      notified = await this.notifications.emit(tx, {
+        organizationId: task.organizationId,
+        type: 'task.claim_left',
+        subjectType: 'task',
+        subjectId: taskId,
+        senderUserId: userId,
+        recipientUserIds: [await this.notifications.requesterId(tx, taskId)],
+        payload: { taskId, actorUserId: userId },
+      });
       const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
       return this.toView(row);
     });
+    this.notifications.publish(notified);
+    return view;
   }
 
   /**
@@ -429,7 +472,8 @@ export class TasksService {
     dto: ManageClaimsDto,
   ): Promise<TaskView> {
     const task = await this.loadActiveTask(taskId);
-    return this.prisma.$transaction(async (tx) => {
+    let notified: string[] = [];
+    const view = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
 
       const data: Prisma.TaskUpdateInput = { version: { increment: 1 } };
@@ -479,8 +523,23 @@ export class TasksService {
           statusCache: status,
         },
       });
+      // Closing claims notifies the active claimants (openings_added notifies nobody —
+      // eligible users discover it on the list). The actor (requester) is suppressed.
+      if (dto.claimsClosed === true) {
+        notified = await this.notifications.emit(tx, {
+          organizationId: task.organizationId,
+          type: 'task.claims_closed',
+          subjectType: 'task',
+          subjectId: taskId,
+          senderUserId: actorUserId,
+          recipientUserIds: await this.notifications.activeClaimantIds(tx, taskId),
+          payload: { taskId },
+        });
+      }
       return this.toView(row);
     });
+    this.notifications.publish(notified);
+    return view;
   }
 
   /**
@@ -491,7 +550,8 @@ export class TasksService {
    */
   async complete(taskId: string, actorUserId: string): Promise<TaskView> {
     const task = await this.loadActiveTask(taskId);
-    return this.prisma.$transaction(async (tx) => {
+    let notified: string[] = [];
+    const view = await this.prisma.$transaction(async (tx) => {
       const row = await tx.task.update({
         where: { id: taskId },
         data: { statusCache: StatusCache.approved, version: { increment: 1 } },
@@ -510,8 +570,20 @@ export class TasksService {
         verb: 'task.completed',
         payload: { taskId, statusCache: StatusCache.approved },
       });
+      // Notify the active claimants their work is accepted (requester is suppressed).
+      notified = await this.notifications.emit(tx, {
+        organizationId: task.organizationId,
+        type: 'task.completed',
+        subjectType: 'task',
+        subjectId: taskId,
+        senderUserId: actorUserId,
+        recipientUserIds: await this.notifications.activeClaimantIds(tx, taskId),
+        payload: { taskId },
+      });
       return this.toView(row);
     });
+    this.notifications.publish(notified);
+    return view;
   }
 
   /** Reassign the requester (`task:change_requester`). New requester must be active. */
@@ -530,7 +602,10 @@ export class TasksService {
       throw new ConflictError('USER_RETIRED', 'User is retired');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    let notified: string[] = [];
+    const view = await this.prisma.$transaction(async (tx) => {
+      // Capture the outgoing requester before the swap (a notification recipient).
+      const oldRequesterId = await this.notifications.requesterId(tx, taskId);
       const row = await tx.task.update({
         where: { id: taskId },
         data: { requesterUserId: dto.userId, version: { increment: 1 } },
@@ -549,7 +624,19 @@ export class TasksService {
         taskId,
         `Requester changed to user ${dto.userId}.`,
       );
+      // Both the outgoing and incoming requester hear about it (actor suppressed).
+      notified = await this.notifications.emit(tx, {
+        organizationId: task.organizationId,
+        type: 'task.requester_changed',
+        subjectType: 'task',
+        subjectId: taskId,
+        senderUserId: actorUserId,
+        recipientUserIds: [oldRequesterId, dto.userId],
+        payload: { taskId, requesterUserId: dto.userId, actorUserId },
+      });
       return this.toView(row);
     });
+    this.notifications.publish(notified);
+    return view;
   }
 }
