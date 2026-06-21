@@ -40,7 +40,7 @@ import { HistoryEvent, HistoryReply, avatarColor, buildHistory, relativeTime } f
             <span class="node node--comment" [style.--who]="who(m.senderUserId)"></span>
             <ng-container [ngTemplateOutlet]="commentCard" [ngTemplateOutletContext]="{ m, small: false }" />
           } @else {
-            <span class="node" [class]="'node--' + ev.node"></span>
+            <span [class]="'node node--' + ev.node"></span>
             <p class="text-[13.5px] flex items-center gap-2 flex-wrap">
               <span>{{ ev.text }}</span>
               <span class="font-mono text-ink-soft text-[12.5px]">· {{ rel(ev.createdAt) }}</span>

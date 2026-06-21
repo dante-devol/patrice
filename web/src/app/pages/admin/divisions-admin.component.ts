@@ -24,7 +24,7 @@ import { QuestionnaireBuilderComponent } from '../../features/questionnaire/ques
         </thead>
         <tbody>
           @for (d of divisions(); track d.id) {
-            <tr>
+            <tr [class.row--retired]="d.lifecycleState === 'retired'" [class.row--deactivated]="d.lifecycleState === 'deactivated'">
               <td><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" /></td>
               <td>
                 <input type="number" min="0" [(ngModel)]="d.defaultOpenings"
@@ -34,7 +34,7 @@ import { QuestionnaireBuilderComponent } from '../../features/questionnaire/ques
                          (change)="save(d, { openingsLocked: d.openingsLocked })" /></td>
               <td><input type="checkbox" [(ngModel)]="d.restrictClaims"
                          (change)="save(d, { restrictClaims: d.restrictClaims })" /></td>
-              <td>{{ d.lifecycleState }}</td>
+              <td><span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span></td>
               <td>
                 <button class="secondary" (click)="toggleQuestionnaire(d.id)">
                   {{ openQuestionnaire() === d.id ? 'Hide questionnaire' : 'Questionnaire' }}
@@ -63,6 +63,10 @@ export class DivisionsAdminComponent {
   /** Id of the division whose questionnaire builder is expanded (one at a time). */
   readonly openQuestionnaire = signal<string | null>(null);
   newName = '';
+
+  lcStamp(state: string): string {
+    return `stamp stamp--lc-${state}`;
+  }
 
   toggleQuestionnaire(id: string): void {
     this.openQuestionnaire.update((cur) => (cur === id ? null : id));

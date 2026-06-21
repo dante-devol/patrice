@@ -3,12 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { AdminUser, Role } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
+import { UserAvatarComponent } from '../tasks/user-avatar.component';
+import { avatarColor, initials } from '../tasks/task-presentation';
 
 /** Users list + per-user role-assignment panel (Slice 2.4). */
 @Component({
   selector: 'users-admin',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, UserAvatarComponent],
   template: `
     <div class="panel">
       <h2>Users</h2>
@@ -17,8 +19,13 @@ import { errorMessage } from '../../core/errors';
         <thead><tr><th>User</th><th>Roles</th><th>State</th><th>Add role</th><th></th></tr></thead>
         <tbody>
           @for (u of users(); track u.id) {
-            <tr>
-              <td>{{ u.displayName }}<br /><span class="muted">{{ u.email }}</span></td>
+            <tr [class.row--retired]="u.lifecycleState === 'retired'" [class.row--deactivated]="u.lifecycleState === 'deactivated'">
+              <td>
+                <div class="row" style="gap:10px;flex-wrap:nowrap;justify-content:flex-start">
+                  <user-avatar [name]="u.displayName" [seed]="u.id" [size]="28" />
+                  <div>{{ u.displayName }}<br /><span class="muted">{{ u.email }}</span></div>
+                </div>
+              </td>
               <td>
                 @for (rid of u.roleIds; track rid) {
                   <span class="badge">
@@ -27,15 +34,17 @@ import { errorMessage } from '../../core/errors';
                   </span>
                 } @empty { <span class="muted">none</span> }
               </td>
-              <td>{{ u.lifecycleState }}</td>
+              <td><span [class]="lcStamp(u.lifecycleState)">{{ u.lifecycleState }}</span></td>
               <td>
-                <select #sel>
-                  <option value="">Select role…</option>
-                  @for (r of grantableRoles(u); track r.id) {
-                    <option [value]="r.id">{{ r.name }}</option>
-                  }
-                </select>
-                <button class="secondary" (click)="grant(u, sel.value); sel.value=''">Add</button>
+                <div class="row" style="gap:6px;flex-wrap:nowrap">
+                  <select #sel style="flex:1;min-width:0;margin:0">
+                    <option value="">Select role…</option>
+                    @for (r of grantableRoles(u); track r.id) {
+                      <option [value]="r.id">{{ r.name }}</option>
+                    }
+                  </select>
+                  <button class="secondary" style="margin:0;white-space:nowrap" (click)="grant(u, sel.value); sel.value=''">Add</button>
+                </div>
               </td>
               <td>
                 @if (u.lifecycleState === 'active') {
@@ -78,6 +87,10 @@ export class UsersAdminComponent {
     } catch (e) {
       this.error.set(errorMessage(e));
     }
+  }
+
+  lcStamp(state: string): string {
+    return `stamp stamp--lc-${state}`;
   }
 
   roleName(id: string): string {

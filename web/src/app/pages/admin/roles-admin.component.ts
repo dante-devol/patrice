@@ -21,14 +21,14 @@ import { errorMessage } from '../../core/errors';
         <thead><tr><th>Name</th><th>Kind</th><th>State</th><th></th></tr></thead>
         <tbody>
           @for (r of roles(); track r.id) {
-            <tr>
+            <tr [class.row--retired]="r.lifecycleState === 'retired'" [class.row--deactivated]="r.lifecycleState === 'deactivated'">
               <td>
                 @if (r.kind === 'standalone' && r.lifecycleState === 'active') {
                   <input [(ngModel)]="r.name" (blur)="rename(r)" />
                 } @else { {{ r.name }} }
               </td>
-              <td><span class="badge">{{ r.kind }}</span></td>
-              <td>{{ r.lifecycleState }}</td>
+              <td><span [class]="kindBadge(r.kind)">{{ r.kind }}</span></td>
+              <td><span [class]="lcStamp(r.lifecycleState)">{{ r.lifecycleState }}</span></td>
               <td>
                 @if (r.kind === 'standalone') {
                   @if (r.lifecycleState === 'active') {
@@ -64,6 +64,13 @@ export class RolesAdminComponent {
     } catch (e) {
       this.error.set(errorMessage(e));
     }
+  }
+
+  lcStamp(state: string): string {
+    return `stamp stamp--lc-${state}`;
+  }
+  kindBadge(kind: string): string {
+    return `badge badge--${kind}`;
   }
 
   async create(): Promise<void> {

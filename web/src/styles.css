@@ -71,7 +71,7 @@ a:hover { text-decoration: underline; }
 .panel {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 22px;
   margin-bottom: 16px;
   box-shadow: 0 1px 0 rgba(25, 27, 25, 0.04), 0 1px 2px rgba(25, 27, 25, 0.05);
@@ -140,6 +140,35 @@ nav.tabs button {
   letter-spacing: 0.01em;
 }
 
+/* Admin flat tab rail — mono-uppercase underline style. */
+.admin-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  position: sticky;
+  top: 56px;
+  z-index: 9;
+  margin-bottom: 16px;
+}
+.admin-tab {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-soft);
+  border-bottom: 2px solid transparent;
+  margin: 0 0 -1px;
+  border-radius: 0;
+  white-space: nowrap;
+}
+.admin-tab:hover { color: var(--ink); background: none; border-color: transparent; }
+.admin-tab.is-active { color: var(--ink); border-bottom-color: var(--accent); }
+
 table { width: 100%; border-collapse: collapse; }
 th {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -153,6 +182,21 @@ th {
   font-weight: 500;
 }
 td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+tr.row--retired { opacity: 0.6; }
+tr.row--deactivated { opacity: 0.8; }
+
+/* Settings panel grouping. */
+.settings-group { margin-bottom: 22px; }
+.settings-group-label {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
 
 code {
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -172,6 +216,28 @@ code {
   border: 1px solid var(--line);
   color: var(--ink-soft);
 }
+.badge--standalone { /* inherits default */ }
+.badge--division { color: var(--accent-ink); border-color: rgba(15, 122, 107, 0.4); background: rgba(15, 122, 107, 0.06); }
+.badge--team { color: #3c5ba0; border-color: rgba(60, 91, 160, 0.35); background: rgba(60, 91, 160, 0.06); }
+
+/* Permissions matrix scope selects — compact coloured select in each cell. */
+.perm-scope {
+  width: auto;
+  padding: 3px 6px 2px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+}
+.perm-scope--empty { color: #c4c7bd; border-color: #e0e2da; }
+.perm-scope--global { color: var(--accent-ink); border-color: rgba(15, 122, 107, 0.45); background: rgba(15, 122, 107, 0.07); }
+.perm-scope--own_division { color: #3c5ba0; border-color: rgba(60, 91, 160, 0.4); background: rgba(60, 91, 160, 0.06); }
+.perm-scope--own_team { color: #4f6d7a; border-color: rgba(79, 109, 122, 0.4); background: rgba(79, 109, 122, 0.06); }
+.perm-scope--own { color: var(--ink-soft); border-color: var(--line); background: rgba(25, 27, 25, 0.04); }
 
 /* =========================================================================
    Scoped element reset for the Tailwind-driven surfaces. The Tasks pages and
@@ -236,6 +302,11 @@ code {
   .stamp--review { color: #8a6a0c; background: rgba(169, 129, 15, 0.1); }
   .stamp--revising { color: #99492f; background: rgba(176, 87, 60, 0.1); }
   .stamp--approved { color: #0a5249; background: rgba(15, 122, 107, 0.12); border-style: double; border-width: 3px; }
+
+  /* Lifecycle state stamps for admin tables (not task-status stamps). */
+  .stamp--lc-active { color: #3f443f; border-color: rgba(63, 68, 63, 0.35); background: rgba(63, 68, 63, 0.05); }
+  .stamp--lc-deactivated { color: #8a6a0c; border-color: rgba(138, 106, 12, 0.4); background: rgba(138, 106, 12, 0.07); border-style: dashed; }
+  .stamp--lc-retired { color: #8b9089; border-style: dashed; background: transparent; }
 
   /* Avatars: the initials fill is the fallback — real ones are <img> from the
      Discord CDN (Slice 8). A solid muted circle ≈ a default Discord avatar. */

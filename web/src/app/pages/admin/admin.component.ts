@@ -20,13 +20,11 @@ type Tab = 'roles' | 'divisions' | 'teams' | 'users' | 'permissions' | 'settings
     SettingsAdminComponent,
   ],
   template: `
-    <div class="panel">
-      <nav class="tabs">
-        @for (t of tabs; track t) {
-          <button [class.secondary]="tab() !== t" (click)="tab.set(t)">{{ t }}</button>
-        }
-      </nav>
-    </div>
+    <nav class="admin-tabs">
+      @for (t of tabs; track t) {
+        <button class="admin-tab" [class.is-active]="tab() === t" (click)="tab.set(t)">{{ t }}</button>
+      }
+    </nav>
     @switch (tab()) {
       @case ('roles') { <roles-admin /> }
       @case ('divisions') { <divisions-admin /> }

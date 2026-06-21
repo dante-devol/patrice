@@ -21,11 +21,11 @@ import { errorMessage } from '../../core/errors';
         <thead><tr><th>Name</th><th>Restrict claims</th><th>State</th><th></th></tr></thead>
         <tbody>
           @for (t of teams(); track t.id) {
-            <tr>
+            <tr [class.row--retired]="t.lifecycleState === 'retired'" [class.row--deactivated]="t.lifecycleState === 'deactivated'">
               <td><input [(ngModel)]="t.name" (blur)="save(t, { name: t.name })" /></td>
               <td><input type="checkbox" [(ngModel)]="t.restrictClaims"
                          (change)="save(t, { restrictClaims: t.restrictClaims })" /></td>
-              <td>{{ t.lifecycleState }}</td>
+              <td><span [class]="lcStamp(t.lifecycleState)">{{ t.lifecycleState }}</span></td>
               <td>
                 @if (t.lifecycleState === 'active') {
                   <button class="secondary" (click)="retire(t)">Retire</button>
@@ -46,6 +46,10 @@ export class TeamsAdminComponent {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   newName = '';
+
+  lcStamp(state: string): string {
+    return `stamp stamp--lc-${state}`;
+  }
 
   constructor() {
     void this.refresh();
