@@ -75,7 +75,7 @@ _Avoid_: Confirmed Email, Validated Account
 ### Entity lifecycle
 
 **Retire**:
-The soft-delete action — sets `lifecycle_state='retired'` and `retired_at=now()`. Distinct from **Revive** (the reverse, during grace), **Reactivate** (the reverse of **Deactivate** — in-life, reversible), and **GC** (the permanent collector). Each `*:revive` is its own separately-granted Action, not an implicit corollary of `*:retire`.
+The soft-delete action — sets `lifecycle_state='retired'` and `retired_at=now()`. Distinct from **Revive** (the reverse, during grace), **Reactivate** (the reverse of **Deactivate** — in-life, reversible), and **GC** (the permanent collector). Each `*:revive` is its own separately-granted Action, not an implicit corollary of `*:retire`. **Revive rejection is `409 NOT_REVIVABLE`** (uniform across every `*:revive` endpoint) when the target is active (nothing to revive) or past the Grace Period (GC territory) — this is the pinned contract code, overriding the "422" wording in issue #28's acceptance text. Cedar gates *who*; the `isRevivable` guard gates *whether*; the revive resource resolver omits the `retired` attr so the action doesn't trip its own Retired-as-Hard-Deny.
 _Avoid_: Delete, Soft-Delete, Archive
 
 **Grace Period**:

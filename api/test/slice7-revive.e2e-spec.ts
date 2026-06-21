@@ -45,6 +45,9 @@ describe('Slice 7.1 — Revive endpoints', () => {
       'message:create',
       'message:retire',
       'message:revive',
+      'attachment:create',
+      'attachment:retire',
+      'attachment:revive',
     ]) {
       const g = await auth(http().post('/api/grants')).send({
         roleId,
@@ -127,5 +130,34 @@ describe('Slice 7.1 — Revive endpoints', () => {
     expect(revive.status).toBe(200);
     expect(revive.body.lifecycleState).toBe('active');
     expect(revive.body.retiredAt).toBeNull();
+  });
+
+  it('retires then revives an attachment; download 404s while retired', async () => {
+    const msg = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({
+      body: 'with file',
+    });
+    const messageId = msg.body.id;
+    const up = await auth(http().post(`/api/messages/${messageId}/attachments`)).attach(
+      'file',
+      Buffer.from('attachment bytes'),
+      { filename: 'a.txt', contentType: 'text/plain' },
+    );
+    expect(up.status).toBe(201);
+    const attachmentId = up.body.id;
+
+    // Download works while active.
+    expect((await auth(http().get(`/api/attachments/${attachmentId}`))).status).toBe(200);
+
+    const retire = await auth(http().post(`/api/attachments/${attachmentId}/retire`));
+    expect(retire.status).toBe(200);
+    expect(retire.body.lifecycleState).toBe('retired');
+
+    // A retired attachment is gone for download purposes.
+    expect((await auth(http().get(`/api/attachments/${attachmentId}`))).status).toBe(404);
+
+    const revive = await auth(http().post(`/api/attachments/${attachmentId}/revive`));
+    expect(revive.status).toBe(200);
+    expect(revive.body.lifecycleState).toBe('active');
+    expect((await auth(http().get(`/api/attachments/${attachmentId}`))).status).toBe(200);
   });
 });

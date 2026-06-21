@@ -54,6 +54,7 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
   'message:retire': 'sender',
   'attachment:create': 'uploader',
   'attachment:retire': 'uploader',
+  'attachment:revive': 'uploader',
   // Slice 5 — submission lifecycle. submit is the claimant own-family; review /
   // retire_submission / complete are requester own-family (own_as_requester).
   'task:submit': 'claimant',

@@ -332,3 +332,83 @@ export const attachmentCreateResource: ResourceResolver = async (req, prisma) =>
     },
   };
 };
+
+/**
+ * Load an attachment's task-scope (division/team) + uploader, resolving through
+ * whichever parent it has — a message, or an answer → submission → task. Shared by
+ * the retire/revive resolvers below. Returns null if the attachment is missing.
+ */
+async function loadAttachmentScope(
+  id: string,
+  prisma: PrismaService,
+): Promise<{
+  id: string;
+  uploaderUserId: string;
+  divisionId: string;
+  teamId: string | null;
+  retired: boolean;
+} | null> {
+  const att = await prisma.attachment.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      uploaderUserId: true,
+      lifecycleState: true,
+      message: { select: { task: { select: { divisionId: true, teamId: true } } } },
+      answer: {
+        select: { submission: { select: { task: { select: { divisionId: true, teamId: true } } } } },
+      },
+    },
+  });
+  if (!att) return null;
+  const task = att.message?.task ?? att.answer?.submission.task ?? null;
+  if (!task) return null;
+  return {
+    id: att.id,
+    uploaderUserId: att.uploaderUserId,
+    divisionId: task.divisionId,
+    teamId: task.teamId,
+    retired: att.lifecycleState === 'retired',
+  };
+}
+
+/**
+ * The attachment named by `:id` is the resource for `attachment:retire` — carries its
+ * task's division/team (specific/own group), the uploader (own_as_uploader), and
+ * `retired` (Retired-as-Hard-Deny). 404 if missing.
+ */
+export const attachmentResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const att = await loadAttachmentScope(id, prisma);
+  if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
+  return {
+    type: 'Attachment',
+    id: att.id,
+    attrs: {
+      division: divisionEntity(att.divisionId),
+      ...(att.teamId ? { team: teamEntity(att.teamId) } : {}),
+      uploader: userEntity(att.uploaderUserId),
+      retired: att.retired,
+    },
+  };
+};
+
+/**
+ * The attachment named by `:id` is the resource for `attachment:revive` — like
+ * {@link attachmentResource} but **without** `retired`, so reviving a retired
+ * attachment doesn't trip the Retired-as-Hard-Deny forbid.
+ */
+export const attachmentReviveResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const att = await loadAttachmentScope(id, prisma);
+  if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
+  return {
+    type: 'Attachment',
+    id: att.id,
+    attrs: {
+      division: divisionEntity(att.divisionId),
+      ...(att.teamId ? { team: teamEntity(att.teamId) } : {}),
+      uploader: userEntity(att.uploaderUserId),
+    },
+  };
+};

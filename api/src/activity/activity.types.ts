@@ -118,6 +118,9 @@ export const activityPayloadSchemas = {
   'attachment.created': z
     .object({ attachmentId: uuid, messageId: uuid })
     .strict(),
+  // Slice 7 — attachment lifecycle (independent retire/revive of a single file).
+  'attachment.retired': z.object({ attachmentId: uuid }).strict(),
+  'attachment.revived': z.object({ attachmentId: uuid }).strict(),
   // Slice 5 — submission lifecycle. IDs + the (non-PII) submission_no/decision/status.
   'submission.submitted': z
     .object({
