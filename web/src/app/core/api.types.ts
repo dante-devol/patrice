@@ -309,3 +309,34 @@ export interface NotificationListResult {
   unreadCount: number;
   nextCursor: string | null;
 }
+
+// ---- Slice 8: integrations ----------------------------------------------
+
+export type IntegrationProvider = 'discord';
+export type IntegrationStatus = 'active' | 'broken' | 'disabled';
+export type SyncDirection = 'inbound' | 'outbound' | 'bidirectional';
+
+export interface IntegrationConnection {
+  id: string;
+  provider: IntegrationProvider;
+  externalWorkspaceId: string;
+  displayName: string;
+  config: Record<string, unknown>;
+  credentialsRef: string | null;
+  status: IntegrationStatus;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExternalGroupMapping {
+  id: string;
+  roleId: string;
+  connectionId: string;
+  externalGroupId: string;
+  syncDirection: SyncDirection;
+  isBroken: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

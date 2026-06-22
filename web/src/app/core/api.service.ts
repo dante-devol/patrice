@@ -8,6 +8,9 @@ import {
   CreatedInvitation,
   CurrentUser,
   Division,
+  ExternalGroupMapping,
+  IntegrationConnection,
+  SyncDirection,
   Grant,
   InvitationListItem,
   InviteView,
@@ -422,6 +425,77 @@ export class ApiService {
   markAllNotificationsRead(): Promise<{ unreadCount: number }> {
     return firstValueFrom(
       this.http.post<{ unreadCount: number }>('/api/notifications/read-all', {}),
+    );
+  }
+
+  // ---- Slice 8: integrations --------------------------------------------
+
+  listIntegrations(includeRetired = false): Promise<IntegrationConnection[]> {
+    return firstValueFrom(
+      this.http.get<IntegrationConnection[]>('/api/integrations' + retiredQuery(includeRetired)),
+    );
+  }
+
+  connectIntegration(body: {
+    provider: 'discord';
+    externalWorkspaceId: string;
+    displayName: string;
+    config?: Record<string, unknown>;
+  }): Promise<IntegrationConnection> {
+    return firstValueFrom(this.http.post<IntegrationConnection>('/api/integrations', body));
+  }
+
+  updateIntegration(
+    id: string,
+    body: { displayName?: string; config?: Record<string, unknown> },
+  ): Promise<IntegrationConnection> {
+    return firstValueFrom(
+      this.http.patch<IntegrationConnection>(`/api/integrations/${id}`, body),
+    );
+  }
+
+  retireIntegration(id: string): Promise<IntegrationConnection> {
+    return firstValueFrom(
+      this.http.post<IntegrationConnection>(`/api/integrations/${id}/retire`, {}),
+    );
+  }
+
+  reviveIntegration(id: string): Promise<IntegrationConnection> {
+    return firstValueFrom(
+      this.http.post<IntegrationConnection>(`/api/integrations/${id}/revive`, {}),
+    );
+  }
+
+  listMappings(connectionId: string): Promise<ExternalGroupMapping[]> {
+    return firstValueFrom(
+      this.http.get<ExternalGroupMapping[]>(`/api/integrations/${connectionId}/mappings`),
+    );
+  }
+
+  createMapping(
+    connectionId: string,
+    body: { roleId: string; externalGroupId: string; syncDirection: SyncDirection },
+  ): Promise<ExternalGroupMapping> {
+    return firstValueFrom(
+      this.http.post<ExternalGroupMapping>(`/api/integrations/${connectionId}/mappings`, body),
+    );
+  }
+
+  deleteMapping(connectionId: string, mappingId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(`/api/integrations/${connectionId}/mappings/${mappingId}`),
+    );
+  }
+
+  triggerSync(connectionId: string): Promise<{ queued: boolean }> {
+    return firstValueFrom(
+      this.http.post<{ queued: boolean }>(`/api/integrations/${connectionId}/sync`, {}),
+    );
+  }
+
+  startDiscordLink(connectionId: string): Promise<{ redirectUrl: string }> {
+    return firstValueFrom(
+      this.http.post<{ redirectUrl: string }>(`/api/integrations/${connectionId}/link`, {}),
     );
   }
 }
