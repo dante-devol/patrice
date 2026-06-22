@@ -13,5 +13,6 @@ import { DiscordAdapter } from './sync/discord.adapter';
   imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule],
   controllers: [IntegrationsController],
   providers: [IntegrationsService, SyncService, DiscordAdapter],
+  exports: [SyncService],
 })
 export class IntegrationsModule {}

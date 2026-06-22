@@ -1,9 +1,10 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
+import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
-import { Task, TaskFilters, TaskStatus } from '../../core/api.types';
+import { Task, TaskFilters, TaskStatus, OrgSettings, IntegrationConnection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 
 const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approved'];
@@ -18,7 +19,18 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
   standalone: true,
   imports: [FormsModule, RouterLink],
   template: `
-    <div class="panel">
+    @if (discordGated()) {
+      <div class="discord-gate">
+        <span style="font-size:18px">⚠️</span>
+        <span>
+          Your organisation requires a linked Discord account to access tasks.
+          <a (click)="linkDiscord()" style="cursor:pointer">Link now →</a>
+        </span>
+      </div>
+    }
+    <div class="panel" [style.opacity]="discordGated() ? '0.4' : '1'"
+         [style.pointer-events]="discordGated() ? 'none' : 'auto'"
+         [title]="discordGated() ? 'Link your Discord account to access tasks' : ''">
       <h2>Tasks</h2>
 
       <div class="row filters">
@@ -89,12 +101,17 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
   styles: [
     `.filters select { width: auto; min-width: 9rem; }
      textarea { width: 100%; padding: 9px 10px; background: #0d0f14; border: 1px solid var(--border); border-radius: 7px; color: var(--text); }
-     .badge { margin-right: 4px; }`,
+     .badge { margin-right: 4px; }
+     .discord-gate { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 16px; background: rgba(255,107,107,.08); border: 1px solid var(--danger); border-radius: 8px; font-size: 13px; }
+     .discord-gate a { color: var(--accent); }`,
   ],
 })
 export class TaskListComponent {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthStore);
   readonly lookup = inject(LookupStore);
+  readonly settings = signal<OrgSettings | null>(null);
+  readonly discordConnectionId = signal<string | null>(null);
 
   readonly statuses = STATUSES;
   readonly tasks = signal<Task[]>([]);
@@ -106,11 +123,36 @@ export class TaskListComponent {
   filters: TaskFilters = {};
   newTask = { name: '', description: '', divisionId: '', teamId: '' };
 
+  readonly discordGated = computed(
+    () =>
+      this.settings()?.requireDiscordLink === true &&
+      this.auth.user()?.hasDiscordLink === false,
+  );
+
   constructor() {
-    // Refresh (not ensureLoaded) so a division/team added elsewhere in the session
-    // — e.g. just now in the Admin pane — shows up in the create-form options
-    // without a hard reload.
     void this.lookup.refresh().then(() => this.reload());
+    void this.loadGateState();
+  }
+
+  private async loadGateState(): Promise<void> {
+    const [cfg, connections] = await Promise.all([
+      this.api.getConfig().catch(() => null),
+      this.api.listIntegrations().catch(() => []),
+    ]);
+    this.settings.set(cfg);
+    const active = connections.find((c: IntegrationConnection) => c.provider === 'discord' && c.lifecycleState === 'active');
+    this.discordConnectionId.set(active?.id ?? null);
+  }
+
+  async linkDiscord(): Promise<void> {
+    const id = this.discordConnectionId();
+    if (!id) return;
+    try {
+      const { redirectUrl } = await this.api.startDiscordLink(id);
+      window.location.href = redirectUrl;
+    } catch {
+      // silently ignore; user can go via profile
+    }
   }
 
   async reload(): Promise<void> {

@@ -27,6 +27,8 @@ import { errorMessage } from '../../core/errors';
           <input type="number" min="1" [(ngModel)]="s.sessionIdleDays" /></label>
         <label>Retirement grace period (hours)
           <input type="number" min="0" [(ngModel)]="s.gracePeriodHours" /></label>
+        <label><input type="checkbox" [(ngModel)]="s.requireDiscordLink" />
+          Require Discord account link before accessing tasks</label>
         <button [disabled]="busy()" (click)="save(s)">Save settings</button>
       }
     </div>

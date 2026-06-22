@@ -84,6 +84,8 @@ export interface OrgSettings {
   sessionIdleDays: number;
   /** Retire→revive grace window in hours (Slice 7.2); 0 disables the window. */
   gracePeriodHours: number;
+  /** Slice 8: require Discord account link before task access. */
+  requireDiscordLink: boolean;
 }
 
 export interface CurrentUser {
@@ -92,6 +94,7 @@ export interface CurrentUser {
   email: string | null;
   displayName: string;
   emailVerified: boolean;
+  hasDiscordLink: boolean;
   capabilities: UserCapabilities;
 }
 

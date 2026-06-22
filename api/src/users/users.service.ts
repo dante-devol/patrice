@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { LifecycleState } from '@prisma/client';
 import { CedarEngine } from '../access/cedar/engine';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +9,7 @@ import { ConflictError, DeniedError, NotFoundError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { UpdateUserDto } from './users.dto';
+import { SyncService } from '../integrations/sync/sync.service';
 
 export interface UserView {
   id: string;
@@ -33,6 +34,7 @@ export class UsersService {
     private readonly admin: AdministrabilityService,
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
+    @Optional() private readonly sync: SyncService | null,
   ) {}
 
   async list(organizationId: string, includeRetired = false): Promise<UserView[]> {
@@ -324,6 +326,7 @@ export class UsersService {
       });
       await this.access.bumpConfigVersion(organizationId, tx);
     });
+    void this.sync?.notifyRoleChange(roleId);
   }
 
   async revokeRole(
@@ -368,5 +371,6 @@ export class UsersService {
         await this.access.bumpConfigVersion(organizationId, tx);
       },
     );
+    void this.sync?.notifyRoleChange(roleId);
   }
 }

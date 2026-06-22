@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'crypto';
 import { Injectable, Inject } from '@nestjs/common';
 import { LifecycleState, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -134,12 +135,40 @@ export class IntegrationsService {
   // Discord OAuth account linking (external_identity)
   // ---------------------------------------------------------------------------
 
+  private signState(payload: string): string {
+    return createHmac('sha256', this.env.SESSION_SECRET).update(payload).digest('hex');
+  }
+
+  private buildState(connectionId: string, userId: string): string {
+    const payload = JSON.stringify({ connectionId, userId });
+    const sig = this.signState(payload);
+    return Buffer.from(JSON.stringify({ payload, sig })).toString('base64url');
+  }
+
+  private parseState(state: string): { connectionId: string; userId: string } {
+    let envelope: { payload: string; sig: string };
+    try {
+      envelope = JSON.parse(Buffer.from(state, 'base64url').toString()) as {
+        payload: string;
+        sig: string;
+      };
+    } catch {
+      throw new UnprocessableError('INVALID_STATE', 'Invalid OAuth state');
+    }
+    const expected = Buffer.from(this.signState(envelope.payload));
+    const received = Buffer.from(envelope.sig);
+    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+      throw new UnprocessableError('INVALID_STATE', 'OAuth state signature invalid');
+    }
+    return JSON.parse(envelope.payload) as { connectionId: string; userId: string };
+  }
+
   /** Begin Discord OAuth link flow for the current user. Returns a redirect URL. */
   startDiscordLink(connectionId: string, userId: string, baseUrl: string): string {
     if (!this.env.DISCORD_CLIENT_ID) {
       throw new UnprocessableError('DISCORD_NOT_CONFIGURED', 'Discord integration is not configured');
     }
-    const state = Buffer.from(JSON.stringify({ connectionId, userId })).toString('base64url');
+    const state = this.buildState(connectionId, userId);
     const params = new URLSearchParams({
       client_id: this.env.DISCORD_CLIENT_ID,
       redirect_uri: `${baseUrl}/integrations/${connectionId}/link/callback`,
@@ -161,16 +190,7 @@ export class IntegrationsService {
       throw new UnprocessableError('DISCORD_NOT_CONFIGURED', 'Discord integration is not configured');
     }
 
-    let parsedState: { connectionId: string; userId: string };
-    try {
-      parsedState = JSON.parse(Buffer.from(state, 'base64url').toString()) as {
-        connectionId: string;
-        userId: string;
-      };
-    } catch {
-      throw new UnprocessableError('INVALID_STATE', 'Invalid OAuth state');
-    }
-
+    const parsedState = this.parseState(state);
     if (parsedState.connectionId !== connectionId) {
       throw new UnprocessableError('STATE_MISMATCH', 'OAuth state connection mismatch');
     }
