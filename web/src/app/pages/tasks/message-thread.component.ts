@@ -64,7 +64,7 @@ import { HistoryEvent, HistoryReply, buildHistory, relativeTime, userOrderColor 
                 } @else {
                   <p class="text-[12.5px] flex items-center gap-2 flex-wrap text-ink-soft">
                     <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                          [style.background]="nodeColor(r.actorId, r.node === 'submit' || r.kind === 'comment' ? 'full' : 'soft')"></span>
+                          [style.background]="nodeColor(r.actorId, r.node === 'submit' ? 'full' : 'soft')"></span>
                     <span>{{ r.text }}</span>
                     <span class="font-mono text-[11.5px]">· {{ rel(r.createdAt) }}</span>
                   </p>
