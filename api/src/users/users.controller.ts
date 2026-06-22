@@ -12,10 +12,11 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { UnauthenticatedError } from '../common/errors';
+import { NotFoundError, UnauthenticatedError } from '../common/errors';
 import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { CedarEngine } from '../access/cedar/engine';
+import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
 import {
   grantRoleSchema,
@@ -28,12 +29,25 @@ interface AuthedRequest extends Request {
   user?: { id: string; organizationId: string };
 }
 
-/** Resolve the target User as a Cedar resource (carries `retired` for hard-deny). */
-const targetUser = (req: Request) => ({
-  type: 'User' as const,
-  id: String(req.params.id),
-  attrs: { retired: false },
-});
+/**
+ * Resolve the target User as a Cedar resource, carrying the **real** `retired` state so
+ * the Retired-as-Hard-Deny static forbid actually fires on a retired/tombstoned target
+ * (mirrors divisionResource/taskResource — hardcoding `retired: false` here makes the
+ * hard-deny a no-op for every user action). 404 if the user doesn't exist.
+ */
+const targetUser = async (req: Request, prisma: PrismaService) => {
+  const id = String(req.params.id);
+  const user = await prisma.appUser.findUnique({
+    where: { id },
+    select: { id: true, lifecycleState: true },
+  });
+  if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
+  return {
+    type: 'User' as const,
+    id: user.id,
+    attrs: { retired: user.lifecycleState === 'retired' },
+  };
+};
 
 /**
  * The target User for `user:revive` — **omits** `retired` so reviving a retired user
