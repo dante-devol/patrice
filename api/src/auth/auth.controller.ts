@@ -9,6 +9,7 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { ENV, Env } from '../config/env';
 import { ZodValidationPipe } from '../common/zod.pipe';
 import { UnauthenticatedError } from '../common/errors';
@@ -42,6 +43,9 @@ export class AuthController {
     private readonly verification: VerificationService,
   ) {}
 
+  // Brute-force ceiling on password guessing (per-IP). argon2 raises per-attempt cost;
+  // this caps attempt *volume*.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('auth/login')
   @HttpCode(200)
   async login(
@@ -77,6 +81,8 @@ export class AuthController {
     return this.auth.getMe(req.user.id);
   }
 
+  // Cap email-dispatch + token-guessing volume on the unauthenticated flows.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('auth/verify-email/resend')
   @HttpCode(200)
   async resendVerification(
@@ -86,6 +92,7 @@ export class AuthController {
     return { ok: true }; // unconditional success — no enumeration oracle
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('auth/verify-email/confirm')
   @HttpCode(200)
   async confirmVerification(
@@ -95,6 +102,7 @@ export class AuthController {
     return { ok: true };
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('auth/password-reset')
   @HttpCode(200)
   async requestPasswordReset(
@@ -104,6 +112,7 @@ export class AuthController {
     return { ok: true }; // unconditional success — no enumeration oracle
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('auth/password-reset/confirm')
   @HttpCode(200)
   async confirmPasswordReset(

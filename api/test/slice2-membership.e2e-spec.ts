@@ -104,6 +104,48 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
     expect(denied.status).toBe(403);
   });
 
+  it('invite creation cannot pre-assign a role the issuer may not grant (H1 escalation guard)', async () => {
+    // An issuer who may create invites and grant ONLY leadRole.
+    const issuerRole = await auth(http().post('/api/roles')).send({ name: 'InviterLtd' });
+    const issuerRoleId = issuerRole.body.id;
+    await auth(http().post('/api/grants')).send({
+      roleId: issuerRoleId,
+      action: 'invite:create',
+      scopeKind: 'global',
+    });
+    await auth(http().post('/api/grants')).send({
+      roleId: issuerRoleId,
+      action: 'user:grant_role',
+      scopeKind: 'role',
+      scopeRoleId: leadRoleId,
+    });
+    const privileged = await auth(http().post('/api/roles')).send({ name: 'Privileged' });
+
+    const { session: issuer } = await inviteAndAccept(booted, admin, {
+      email: 'issuer@example.com',
+      intendedRoleIds: [issuerRoleId],
+    });
+    const issued = (r: request.Test) =>
+      r.set('Cookie', issuer.cookies).set('x-csrf-token', issuer.csrf);
+
+    // Pre-assigning the in-scope role is allowed…
+    const ok = await issued(http().post('/api/invitations')).send({
+      email: 'invitee-ok@example.com',
+      intendedRoleIds: [leadRoleId],
+    });
+    expect(ok.status).toBe(201);
+
+    // …pre-assigning a role outside the issuer's grantable set is refused at creation,
+    // closing the invite-as-privilege-escalation path (the direct grant_role path is
+    // already gated; the invite path used to skip the check entirely).
+    const escalate = await issued(http().post('/api/invitations')).send({
+      email: 'invitee-bad@example.com',
+      intendedRoleIds: [privileged.body.id],
+    });
+    expect(escalate.status).toBe(403);
+    expect(escalate.body.error.code).toBe('ROLE_NOT_GRANTABLE');
+  });
+
   describe('administrability invariant (real)', () => {
     it('revoking the last admin’s Admin role is refused with 409 LAST_ADMIN + activity', async () => {
       const adminRole = await prisma.role.findFirstOrThrow({

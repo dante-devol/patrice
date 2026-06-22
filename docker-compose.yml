@@ -1,6 +1,17 @@
-# Patrice — local/self-host stack (Slice 1).
+# Patrice — LOCAL / EVALUATION stack (Slice 1).
 # `docker compose up` on an empty DB: migrations run, the API prints a bootstrap
 # key, and the web app is served. Single-instance topology (v1).
+#
+# ⚠️  NOT a production deployment. It serves plain HTTP on localhost, so cookies are
+#     necessarily non-Secure, and it ships throwaway secrets. For a real deployment you
+#     MUST, at minimum:
+#       - terminate TLS in front of the API and set COOKIE_SECURE=true
+#       - supply strong, unique SESSION_SECRET and TOKEN_PEPPER (≥32 random bytes each)
+#         — e.g. export them or put them in a .env file (compose interpolates ${VAR})
+#       - use the S3 storage driver (local-fs is single-instance only)
+#       - not expose the Postgres port and not use the demo DB password
+#     TOKEN_PEPPER is the sole at-rest protection for session/invite/reset token hashes;
+#     a known pepper makes a DB/backup leak trivially replayable. Never reuse these.
 
 services:
   db:
@@ -37,13 +48,16 @@ services:
     environment:
       DATABASE_URL: postgresql://patrice:patrice@db:5432/patrice?schema=public
       PUBLIC_BASE_URL: http://localhost:8080
-      SESSION_SECRET: dev-session-secret-change-me-please
-      TOKEN_PEPPER: dev-token-pepper-change-me-please
+      # Override for any real use (export or .env). Defaults are throwaway dev values.
+      SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me-please}
+      TOKEN_PEPPER: ${TOKEN_PEPPER:-dev-token-pepper-change-me-please}
       SMTP_URL: smtp://mailpit:1025
       EMAIL_FROM: Patrice <no-reply@patrice.local>
-      NODE_ENV: production
+      # development: this is a localhost/eval stack on plain HTTP (see header warning).
+      NODE_ENV: development
       LOG_LEVEL: info
-      COOKIE_SECURE: 'false'
+      # MUST be 'true' once served over HTTPS — false only because this stack is plain-HTTP localhost.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRUST_PROXY: 'true'
       PORT: '3000'
     ports:
