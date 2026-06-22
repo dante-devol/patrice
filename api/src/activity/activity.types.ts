@@ -172,6 +172,31 @@ export const activityPayloadSchemas = {
   'last_admin_refused': z
     .object({ path: z.string(), subjectId: uuid })
     .strict(),
+  // Slice 8 — integration lifecycle.
+  'integration.connected': z.object({ connectionId: uuid }).strict(),
+  'integration.updated': z.object({ connectionId: uuid }).strict(),
+  'integration.retired': z.object({ connectionId: uuid }).strict(),
+  'integration.revived': z.object({ connectionId: uuid }).strict(),
+  'integration.synced': z
+    .object({ connectionId: uuid, grantedCount: z.number().int(), revokedCount: z.number().int() })
+    .strict(),
+  'integration.broken': z.object({ connectionId: uuid, externalGroupId: z.string() }).strict(),
+  'integration.removed': z
+    .object({ connectionId: uuid, userId: uuid, roleId: uuid })
+    .strict(),
+  'external_identity.linked': z
+    .object({ connectionId: uuid, userId: uuid, externalIdentityId: uuid })
+    .strict(),
+  'external_group_mapping.created': z
+    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+    .strict(),
+  'external_group_mapping.updated': z
+    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+    .strict(),
+  'external_group_mapping.retired': z
+    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+    .strict(),
+  'gc.integration_connection_collected': z.object({ connectionId: uuid }).strict(),
 } as const;
 
 export type ActivityVerb = keyof typeof activityPayloadSchemas;
