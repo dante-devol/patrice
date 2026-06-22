@@ -5,8 +5,9 @@ import { TeamsAdminComponent } from './teams-admin.component';
 import { UsersAdminComponent } from './users-admin.component';
 import { PermissionsAdminComponent } from './permissions-admin.component';
 import { SettingsAdminComponent } from './settings-admin.component';
+import { InvitationsComponent } from '../invitations.component';
 
-type Tab = 'roles' | 'divisions' | 'teams' | 'users' | 'permissions' | 'settings';
+type Tab = 'roles' | 'divisions' | 'teams' | 'users' | 'permissions' | 'settings' | 'invitations';
 
 /** Admin-area shell (Slice 2). Tabbed host over the dumb editor components. */
 @Component({
@@ -18,6 +19,7 @@ type Tab = 'roles' | 'divisions' | 'teams' | 'users' | 'permissions' | 'settings
     UsersAdminComponent,
     PermissionsAdminComponent,
     SettingsAdminComponent,
+    InvitationsComponent,
   ],
   template: `
     <nav class="admin-tabs">
@@ -32,10 +34,11 @@ type Tab = 'roles' | 'divisions' | 'teams' | 'users' | 'permissions' | 'settings
       @case ('users') { <users-admin /> }
       @case ('permissions') { <permissions-admin /> }
       @case ('settings') { <settings-admin /> }
+      @case ('invitations') { <invitations-admin /> }
     }
   `,
 })
 export class AdminComponent {
-  readonly tabs: Tab[] = ['roles', 'divisions', 'teams', 'users', 'permissions', 'settings'];
+  readonly tabs: Tab[] = ['roles', 'divisions', 'teams', 'users', 'permissions', 'settings', 'invitations'];
   readonly tab = signal<Tab>('roles');
 }

@@ -6,14 +6,7 @@ import { LookupStore } from '../../core/lookup.store';
 import { Task, TaskFilters, TaskStatus } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from './user-avatar.component';
-import {
-  divisionColor,
-  isMultiClaim,
-  relativeTime,
-  stampClass,
-  stampStatus,
-  teamColor,
-} from './task-presentation';
+import { isMultiClaim, relativeTime, stampClass, stampStatus } from './task-presentation';
 
 const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approved'];
 
@@ -95,7 +88,7 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
           @for (d of lookup.divisionList(); track d.id) {
             <button class="chip rounded-full border border-line bg-paper text-[12.5px] px-3 py-1 dtag"
                     [class.ring-2]="filters.division === d.id" [class.ring-line]="filters.division === d.id"
-                    [style.--c]="divColor(d.name)" (click)="setDivision(d.id)">{{ d.name }}</button>
+                    [style.--c]="divColor(d.id)" (click)="setDivision(d.id)">{{ d.name }}</button>
           }
         </div>
 
@@ -127,8 +120,8 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
               <a [routerLink]="['/tasks', t.id]"
                  class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
                  [class.opacity-90]="t.statusCache === 'approved'"
-                 [style.--c]="divColor(lookup.divisionName(t.divisionId))"
-                 [style.--tc]="t.teamId ? teamCol(lookup.teamName(t.teamId)) : null">
+                 [style.--c]="divColor(t.divisionId)"
+                 [style.--tc]="teamCol(t.teamId)">
                 <div class="spine"></div>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2.5 flex-wrap">
@@ -207,12 +200,8 @@ export class TaskListComponent {
   }
 
   // ---- view helpers ----
-  divColor(name: string): string {
-    return divisionColor(name);
-  }
-  teamCol(name: string): string {
-    return teamColor(name);
-  }
+  divColor(id: string): string { return this.lookup.divisionColor(id); }
+  teamCol(id: string | null): string { return this.lookup.teamColor(id); }
   rel(iso: string): string {
     return relativeTime(iso);
   }

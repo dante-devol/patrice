@@ -4,6 +4,7 @@ import { ApiService } from '../../core/api.service';
 import { Division } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { QuestionnaireBuilderComponent } from '../../features/questionnaire/questionnaire-builder.component';
+import { divisionColor as computeDivColor } from '../tasks/task-presentation';
 
 /** Divisions editor (Slice 2.2): name, default openings, openings-locked, restrict-claims. */
 @Component({
@@ -20,12 +21,21 @@ import { QuestionnaireBuilderComponent } from '../../features/questionnaire/ques
       @if (error()) { <p class="error">{{ error() }}</p> }
       <table>
         <thead>
-          <tr><th>Name</th><th>Default openings</th><th>Locked</th><th>Restrict claims</th><th>State</th><th></th></tr>
+          <tr><th>Name</th><th>Color</th><th>Default openings</th><th>Locked</th><th>Restrict claims</th><th>State</th><th></th></tr>
         </thead>
         <tbody>
           @for (d of divisions(); track d.id) {
             <tr [class.row--retired]="d.lifecycleState === 'retired'" [class.row--deactivated]="d.lifecycleState === 'deactivated'">
               <td><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" /></td>
+              <td>
+                <div class="row" style="gap:4px;align-items:center;flex-wrap:nowrap">
+                  <input type="color" [value]="d.color ?? computeColor(d)"
+                         (change)="saveColor(d, $event)" style="width:32px;height:26px;padding:2px;cursor:pointer" />
+                  @if (d.color) {
+                    <button class="secondary" style="padding:2px 6px;font-size:11px" (click)="clearColor(d)" title="Reset to auto">×</button>
+                  }
+                </div>
+              </td>
               <td>
                 <input type="number" min="0" [(ngModel)]="d.defaultOpenings"
                        (blur)="save(d, { defaultOpenings: +d.defaultOpenings })" style="width:5rem" />
@@ -47,9 +57,9 @@ import { QuestionnaireBuilderComponent } from '../../features/questionnaire/ques
               </td>
             </tr>
             @if (openQuestionnaire() === d.id) {
-              <tr><td colspan="6"><questionnaire-builder [divisionId]="d.id" /></td></tr>
+              <tr><td colspan="7"><questionnaire-builder [divisionId]="d.id" /></td></tr>
             }
-          } @empty { <tr><td colspan="6" class="muted">No divisions.</td></tr> }
+          } @empty { <tr><td colspan="7" class="muted">No divisions.</td></tr> }
         </tbody>
       </table>
     </div>
@@ -64,8 +74,16 @@ export class DivisionsAdminComponent {
   readonly openQuestionnaire = signal<string | null>(null);
   newName = '';
 
-  lcStamp(state: string): string {
-    return `stamp stamp--lc-${state}`;
+  lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
+  computeColor(d: Division): string { return computeDivColor(d.name); }
+
+  async saveColor(d: Division, ev: Event): Promise<void> {
+    d.color = (ev.target as HTMLInputElement).value;
+    await this.save(d, { color: d.color });
+  }
+  async clearColor(d: Division): Promise<void> {
+    d.color = null;
+    await this.save(d, { color: null });
   }
 
   toggleQuestionnaire(id: string): void {

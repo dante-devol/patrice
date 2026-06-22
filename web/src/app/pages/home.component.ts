@@ -6,13 +6,7 @@ import { LookupStore } from '../core/lookup.store';
 import { Task, TaskStatus } from '../core/api.types';
 import { errorMessage } from '../core/errors';
 import { UserAvatarComponent } from './tasks/user-avatar.component';
-import {
-  divisionColor,
-  relativeTime,
-  stampClass,
-  stampStatus,
-  teamColor,
-} from './tasks/task-presentation';
+import { relativeTime, stampClass, stampStatus } from './tasks/task-presentation';
 
 const ACTIVE_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising'];
 const LEDGER_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising', 'approved'];
@@ -117,8 +111,8 @@ const STATUS_COLORS: Record<string, string> = {
               <li>
                 <a [routerLink]="['/tasks', t.id]"
                    class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
-                   [style.--c]="divColor(lookup.divisionName(t.divisionId))"
-                   [style.--tc]="t.teamId ? teamCol(lookup.teamName(t.teamId)) : null">
+                   [style.--c]="divColor(t.divisionId)"
+                   [style.--tc]="teamCol(t.teamId)">
                   <div class="spine"></div>
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2.5 flex-wrap">
@@ -129,8 +123,8 @@ const STATUS_COLORS: Record<string, string> = {
                       <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">{{ t.description }}</p>
                     }
                     <div class="flex items-center gap-3 mt-2 flex-wrap">
-                      <span class="dtag" [style.--c]="divColor(lookup.divisionName(t.divisionId))">{{ lookup.divisionName(t.divisionId) }}</span>
-                      @if (t.teamId) { <span class="ttag" [style.--tc]="teamCol(lookup.teamName(t.teamId))">{{ lookup.teamName(t.teamId) }}</span> }
+                      <span class="dtag" [style.--c]="divColor(t.divisionId)">{{ lookup.divisionName(t.divisionId) }}</span>
+                      @if (t.teamId) { <span class="ttag" [style.--tc]="teamCol(t.teamId)">{{ lookup.teamName(t.teamId) }}</span> }
                       <span class="font-mono text-[12px] text-ink-soft">· {{ rel(t.createdAt) }}</span>
                     </div>
                   </div>
@@ -157,8 +151,8 @@ const STATUS_COLORS: Record<string, string> = {
                 <li>
                   <a [routerLink]="['/tasks', t.id]"
                      class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
-                     [style.--c]="divColor(lookup.divisionName(t.divisionId))"
-                     [style.--tc]="t.teamId ? teamCol(lookup.teamName(t.teamId)) : null">
+                     [style.--c]="divColor(t.divisionId)"
+                     [style.--tc]="teamCol(t.teamId)">
                     <div class="spine"></div>
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-2.5 flex-wrap">
@@ -166,8 +160,8 @@ const STATUS_COLORS: Record<string, string> = {
                         <span class="font-mono text-[12px] text-ink-soft">#{{ shortId(t.id) }}</span>
                       </div>
                       <div class="flex items-center gap-3 mt-2 flex-wrap">
-                        <span class="dtag" [style.--c]="divColor(lookup.divisionName(t.divisionId))">{{ lookup.divisionName(t.divisionId) }}</span>
-                        @if (t.teamId) { <span class="ttag" [style.--tc]="teamCol(lookup.teamName(t.teamId))">{{ lookup.teamName(t.teamId) }}</span> }
+                        <span class="dtag" [style.--c]="divColor(t.divisionId)">{{ lookup.divisionName(t.divisionId) }}</span>
+                        @if (t.teamId) { <span class="ttag" [style.--tc]="teamCol(t.teamId)">{{ lookup.teamName(t.teamId) }}</span> }
                         <span class="font-mono text-[12px] text-ink-soft">· {{ rel(t.createdAt) }}</span>
                       </div>
                     </div>
@@ -245,8 +239,8 @@ export class HomeComponent implements OnInit {
     }
   }
 
-  divColor(name: string): string { return divisionColor(name); }
-  teamCol(name: string): string { return teamColor(name); }
+  divColor(id: string): string { return this.lookup.divisionColor(id); }
+  teamCol(id: string | null): string { return this.lookup.teamColor(id); }
   rel(iso: string): string { return relativeTime(iso); }
   shortId(id: string): string { return id.replace(/-/g, '').slice(0, 4); }
   stamp(t: Task): string { return stampStatus(t.statusCache); }

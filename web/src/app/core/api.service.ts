@@ -116,8 +116,8 @@ export class ApiService {
   createRole(name: string): Promise<Role> {
     return firstValueFrom(this.http.post<Role>('/api/roles', { name }));
   }
-  updateRole(id: string, name: string): Promise<Role> {
-    return firstValueFrom(this.http.patch<Role>(`/api/roles/${id}`, { name }));
+  updateRole(id: string, body: { name?: string; color?: string | null }): Promise<Role> {
+    return firstValueFrom(this.http.patch<Role>(`/api/roles/${id}`, body));
   }
   retireRole(id: string): Promise<Role> {
     return firstValueFrom(this.http.post<Role>(`/api/roles/${id}/retire`, {}));

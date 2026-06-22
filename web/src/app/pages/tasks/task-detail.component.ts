@@ -13,14 +13,7 @@ import { errorMessage } from '../../core/errors';
 import { MessageThreadComponent } from './message-thread.component';
 import { SubmitDialogComponent } from './submit-dialog.component';
 import { UserAvatarComponent } from './user-avatar.component';
-import {
-  divisionColor,
-  isMultiClaim,
-  relativeTime,
-  stampClass,
-  stampStatus,
-  teamColor,
-} from './task-presentation';
+import { isMultiClaim, relativeTime, stampClass, stampStatus } from './task-presentation';
 
 /** One claimant's standing on a task, derived from their latest submission. */
 interface ClaimRow {
@@ -70,8 +63,8 @@ interface ClaimRow {
           <div class="flex items-center gap-3 flex-wrap mb-5">
             <span class="font-mono text-[12.5px] text-ink-soft">#{{ shortId(t.id) }}</span>
             <span class="text-ink-soft">·</span>
-            <span class="dtag" [style.--c]="divColor(lookup.divisionName(t.divisionId))">{{ lookup.divisionName(t.divisionId) }}</span>
-            @if (t.teamId) { <span class="ttag" [style.--tc]="teamCol(lookup.teamName(t.teamId))">{{ lookup.teamName(t.teamId) }}</span> }
+            <span class="dtag" [style.--c]="divColor(t.divisionId)">{{ lookup.divisionName(t.divisionId) }}</span>
+            @if (t.teamId) { <span class="ttag" [style.--tc]="teamCol(t.teamId)">{{ lookup.teamName(t.teamId) }}</span> }
             <span class="font-mono text-[12.5px] text-ink-soft">requested by {{ lookup.userName(t.requesterUserId) }} · {{ rel(t.createdAt) }}</span>
           </div>
 
@@ -186,13 +179,13 @@ interface ClaimRow {
                 <dl class="text-[13px]">
                   <div class="flex items-center justify-between py-1.5">
                     <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Division</dt>
-                    <dd><span class="dtag" [style.--c]="divColor(lookup.divisionName(t.divisionId))">{{ lookup.divisionName(t.divisionId) }}</span></dd>
+                    <dd><span class="dtag" [style.--c]="divColor(t.divisionId)">{{ lookup.divisionName(t.divisionId) }}</span></dd>
                   </div>
                   <div class="flex items-center justify-between py-1.5 border-t border-line/70">
                     <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Team</dt>
                     <dd>
                       @if (t.teamId) {
-                        <span class="ttag" [style.--tc]="teamCol(lookup.teamName(t.teamId))">{{ lookup.teamName(t.teamId) }}</span>
+                        <span class="ttag" [style.--tc]="teamCol(t.teamId)">{{ lookup.teamName(t.teamId) }}</span>
                       } @else {
                         <span class="text-ink-soft">—</span>
                       }
@@ -385,8 +378,8 @@ export class TaskDetailComponent implements OnInit {
   });
 
   // ---- view helpers ----
-  divColor(name: string): string { return divisionColor(name); }
-  teamCol(name: string): string { return teamColor(name); }
+  divColor(id: string): string { return this.lookup.divisionColor(id); }
+  teamCol(id: string | null): string { return this.lookup.teamColor(id); }
   rel(iso: string): string { return relativeTime(iso); }
   shortId(id: string): string { return id.replace(/-/g, '').slice(0, 4); }
   stamp(t: Task): string { return stampStatus(t.statusCache); }

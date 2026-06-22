@@ -7,6 +7,7 @@ import { InvitationListItem } from '../core/api.types';
 import { errorMessage } from '../core/errors';
 
 @Component({
+  selector: 'invitations-admin',
   standalone: true,
   imports: [FormsModule, DatePipe],
   template: `
