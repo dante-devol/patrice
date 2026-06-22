@@ -102,6 +102,33 @@ export function avatarColor(seed: string): string {
   return paletteColor(`user:${seed}`);
 }
 
+// ---- User-order timeline colours ------------------------------------------
+
+const GOLDEN_ANGLE_DEG = 137.508;
+const USER_COLOR_START_HUE = 200; // Start at teal/blue — feels neutral as user #1
+
+/**
+ * Deterministic hue for the nth user to appear in a task's history
+ * (ordinal is 1-based: first person seen = 1, second = 2, …).
+ *
+ * variant:
+ *  'full' — saturated, for comment fills and submission borders
+ *  'soft' — desaturated, for other system-event borders
+ *  'bg'   — very light tint, for submission node backgrounds
+ */
+export function userOrderColor(ordinal: number, variant: 'full' | 'soft' | 'bg' = 'full'): string {
+  const h = (USER_COLOR_START_HUE + (ordinal - 1) * GOLDEN_ANGLE_DEG) % 360;
+  if (variant === 'full') return `hsl(${h.toFixed(1)},62%,42%)`;
+  if (variant === 'soft') return `hsl(${h.toFixed(1)},26%,60%)`;
+  return `hsl(${h.toFixed(1)},50%,92%)`;
+}
+
+/** Extract the primary actor user-ID from a raw system message body. */
+export function parseActorId(body: string): string | null {
+  const m = body.match(/^(?:User|Reviewer) (\S+)/i);
+  return m ? m[1].replace(/[.,]$/, '') : null;
+}
+
 /** Up-to-two-letter initials for an avatar fallback. */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -185,6 +212,8 @@ export interface HistoryReply {
   text: string;
   message: Message;
   createdAt: string;
+  /** The user who caused this event (parsed from body for system, senderUserId for comments). */
+  actorId: string | null;
 }
 
 export interface HistoryEvent {
@@ -199,12 +228,15 @@ export interface HistoryEvent {
   submission: { actorId: string; version: number } | null;
   /** One-level replies (review decisions + comments) threaded under this event. */
   replies: HistoryReply[];
+  /** The user who caused this event (parsed from body for system, senderUserId for comments). */
+  actorId: string | null;
 }
 
 function reply(m: Message, resolveName: (id: string | null) => string): HistoryReply {
+  const actorId = m.kind === 'system' ? parseActorId(m.body) : m.senderUserId;
   return m.kind === 'system'
-    ? { id: m.id, kind: 'system', node: systemNodeKind(m.body), text: humanizeSystemBody(m.body, resolveName), message: m, createdAt: m.createdAt }
-    : { id: m.id, kind: 'comment', node: 'comment', text: m.body, message: m, createdAt: m.createdAt };
+    ? { id: m.id, kind: 'system', node: systemNodeKind(m.body), text: humanizeSystemBody(m.body, resolveName), message: m, createdAt: m.createdAt, actorId }
+    : { id: m.id, kind: 'comment', node: 'comment', text: m.body, message: m, createdAt: m.createdAt, actorId };
 }
 
 /**
@@ -228,6 +260,7 @@ export function buildHistory(
     createdAt: task.createdAt,
     submission: null,
     replies: [],
+    actorId: task.requesterUserId,
   };
 
   const events: HistoryEvent[] = messages.map((m) => {

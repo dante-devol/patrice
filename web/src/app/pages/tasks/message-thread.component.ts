@@ -10,7 +10,7 @@ import { Message, Question, Submission, Task } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from './user-avatar.component';
 import { ReviewDialogComponent } from './review-dialog.component';
-import { HistoryEvent, HistoryReply, avatarColor, buildHistory, relativeTime } from './task-presentation';
+import { HistoryEvent, HistoryReply, buildHistory, relativeTime, userOrderColor } from './task-presentation';
 
 /**
  * The unified **History** stream (ui-tailwind). System events and comments share one
@@ -37,10 +37,14 @@ import { HistoryEvent, HistoryReply, avatarColor, buildHistory, relativeTime } f
       @for (ev of events(); track ev.id) {
         <div class="ev">
           @if (ev.kind === 'comment' && ev.message; as m) {
-            <span class="node node--comment" [style.--who]="who(m.senderUserId)"></span>
+            <!-- Comment node: filled circle in the user's ordinal color -->
+            <span class="node node--comment" [style.--who]="nodeColor(ev.actorId, 'full')"></span>
             <ng-container [ngTemplateOutlet]="commentCard" [ngTemplateOutletContext]="{ m, small: false }" />
           } @else {
-            <span [class]="'node node--' + ev.node"></span>
+            <!-- System event node: border = user color, fill varies by importance -->
+            <span class="node"
+                  [style.borderColor]="nodeColor(ev.actorId, ev.node === 'submit' ? 'full' : 'soft')"
+                  [style.background]="ev.node === 'submit' ? nodeColor(ev.actorId, 'bg') : '#fbfbf8'"></span>
             <p class="text-[13.5px] flex items-center gap-2 flex-wrap">
               <span>{{ ev.text }}</span>
               <span class="font-mono text-ink-soft text-[12.5px]">· {{ rel(ev.createdAt) }}</span>
@@ -59,7 +63,8 @@ import { HistoryEvent, HistoryReply, avatarColor, buildHistory, relativeTime } f
                   <ng-container [ngTemplateOutlet]="commentCard" [ngTemplateOutletContext]="{ m: r.message, small: true }" />
                 } @else {
                   <p class="text-[12.5px] flex items-center gap-2 flex-wrap text-ink-soft">
-                    <span class="inline-block w-1.5 h-1.5 rounded-full" [class]="dotClass(r)"></span>
+                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                          [style.background]="nodeColor(r.actorId, r.node === 'submit' || r.kind === 'comment' ? 'full' : 'soft')"></span>
                     <span>{{ r.text }}</span>
                     <span class="font-mono text-[11.5px]">· {{ rel(r.createdAt) }}</span>
                   </p>
@@ -94,20 +99,34 @@ import { HistoryEvent, HistoryReply, avatarColor, buildHistory, relativeTime } f
         </div>
       }
 
-      <!-- new top-level comment -->
+      <!-- New top-level comment composer -->
       <div class="ev pt-1">
         <span class="node" style="background:#e7e8e1;border-color:#c4c7bd"></span>
         <div class="composer rounded-lg border border-line bg-paper shadow-card transition-shadow">
           <textarea rows="2" [(ngModel)]="draft" (keydown.control.enter)="post()"
+            (focus)="composerFocused.set(true)" (blur)="composerFocused.set(false)"
             placeholder="Add to the history — a note, a question, a review reply…"
             class="w-full resize-none bg-transparent px-3.5 py-3 text-[14px] leading-relaxed placeholder:text-ink-soft/70 focus:outline-none"></textarea>
           <div class="flex items-center justify-between px-3 py-2 border-t border-line">
-            <label class="font-mono text-[11px] text-ink-soft cursor-pointer hover:text-ink">
+            <!-- Paperclip attachment trigger -->
+            <label class="cursor-pointer text-ink-soft hover:text-ink rounded p-1 -ml-1 transition-colors"
+                   [title]="pendingName() ?? 'Attach a file'">
               <input type="file" class="hidden" (change)="onFile($event)" />
-              {{ pendingName() ?? 'attach a file' }}
+              @if (pendingName()) {
+                <span class="font-mono text-[11px]">{{ pendingName() }}</span>
+              } @else {
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13.5 7.5l-7 7a4.243 4.243 0 01-6-6l7-7a2.828 2.828 0 014 4l-7 7a1.414 1.414 0 01-2-2l6.5-6.5"/>
+                </svg>
+              }
             </label>
-            <button class="rounded-md bg-ink text-paper text-[13px] font-medium px-3.5 py-1.5 hover:bg-ink/90 disabled:opacity-50"
-                    (click)="post()" [disabled]="busy() || !draft.trim()">Comment</button>
+            <!-- Submit button: filled+labeled when composer is focused -->
+            <button [class]="composerFocused()
+                      ? 'rounded-md bg-accent text-paper text-[13px] font-medium px-3.5 py-1.5 hover:bg-accent-ink transition-colors disabled:opacity-50'
+                      : 'rounded-md border border-line text-ink-soft text-[13px] font-medium px-3.5 py-1.5 hover:border-ink/40 transition-colors disabled:opacity-50'"
+                    (click)="post()" [disabled]="busy() || !draft.trim()">
+              {{ composerFocused() ? 'Submit' : 'Comment' }}
+            </button>
           </div>
         </div>
       </div>
@@ -177,26 +196,39 @@ export class MessageThreadComponent implements OnInit {
     buildHistory(this.task, this.messages(), (id) => this.lookup.userName(id)),
   );
 
+  /** Maps userId → 1-based ordinal of first appearance in this task's history. */
+  readonly userOrdinals = computed<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    let next = 1;
+    const see = (id: string | null) => {
+      if (id && !map.has(id)) map.set(id, next++);
+    };
+    for (const ev of this.events()) {
+      see(ev.actorId);
+      for (const r of ev.replies) see(r.actorId);
+    }
+    return map;
+  });
+
   draft = '';
   editBody = '';
   replyDraft = '';
+  readonly composerFocused = signal(false);
   private pendingFile: File | null = null;
 
   myId(): string | undefined {
     return this.auth.user()?.id;
   }
-  who(id: string | null): string {
-    return avatarColor(id ?? 'system');
+  /** Ordinal-based color for a user; variant controls saturation/lightness. */
+  nodeColor(id: string | null, variant: 'full' | 'soft' | 'bg' = 'full'): string {
+    const ordinal = (id ? this.userOrdinals().get(id) : undefined) ?? 1;
+    return userOrderColor(ordinal, variant);
   }
   rel(iso: string): string {
     return relativeTime(iso);
   }
   roleLabel(senderId: string | null): string {
     return senderId && senderId === this.task.requesterUserId ? 'requester ' : '';
-  }
-  dotClass(r: HistoryReply): string {
-    const map: Record<string, string> = { claim: 'bg-[#3f443f]', submit: 'bg-[#8a6a0c]', return: 'bg-[#99492f]', approve: 'bg-accent' };
-    return map[r.node] ?? 'bg-[#a7aba3]';
   }
   /** Threads root only at top-level comments and submission events. */
   canReply(ev: HistoryEvent): boolean {
