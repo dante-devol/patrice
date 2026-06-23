@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule } from './config/config.module';
 import { CommonModule } from './common/common.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -30,6 +31,14 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 @Module({
   imports: [
+    // App-wide request ceiling (in-memory store — fits the single-instance v1 topology;
+    // a multi-instance deployment would swap in a shared store). Credential/token routes
+    // tighten this further with @Throttle (see auth/invitations controllers). Skipped
+    // under NODE_ENV=test so the e2e suite's repeated logins/redemptions don't 429.
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 300 }],
+      skipIf: () => process.env.NODE_ENV === 'test',
+    }),
     ConfigModule,
     CommonModule,
     PrismaModule,
@@ -56,8 +65,9 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
   ],
   controllers: [HealthController],
   providers: [
-    // Order matters: SessionGuard resolves identity (+ CSRF) first, then the
-    // AuthorizeGuard enforces the declared Cedar action.
+    // Order matters: throttle before any work, then SessionGuard resolves identity
+    // (+ CSRF), then the AuthorizeGuard enforces the declared Cedar action.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_GUARD, useClass: AuthorizeGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

@@ -2,6 +2,8 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
+  ActivityFilters,
+  ActivityListResult,
   AdminUser,
   Attachment,
   BootstrapStatus,
@@ -425,6 +427,25 @@ export class ApiService {
   markAllNotificationsRead(): Promise<{ unreadCount: number }> {
     return firstValueFrom(
       this.http.post<{ unreadCount: number }>('/api/notifications/read-all', {}),
+    );
+  }
+
+  // ---- Activity (org audit log) -------------------------------------------
+
+  /** The org audit feed (admin-gated), newest-first, keyset-paginated by `after`. */
+  listActivity(
+    filters: ActivityFilters = {},
+    opts: { after?: string; limit?: number } = {},
+  ): Promise<ActivityListResult> {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v) params.set(k, v);
+    }
+    if (opts.after) params.set('after', opts.after);
+    if (opts.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return firstValueFrom(
+      this.http.get<ActivityListResult>(`/api/activity${qs ? `?${qs}` : ''}`),
     );
   }
 

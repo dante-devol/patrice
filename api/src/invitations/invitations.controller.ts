@@ -10,6 +10,7 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { ENV, Env } from '../config/env';
 import { ZodValidationPipe } from '../common/zod.pipe';
 import { UnauthenticatedError } from '../common/errors';
@@ -42,11 +43,15 @@ export class InvitationsController {
     return this.bootstrap.getStatus();
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Get('invite/:token')
   async view(@Param('token') token: string) {
     return this.invitations.view(token);
   }
 
+  // Caps invite-token + bootstrap-passcode guessing (per-IP); FCFS consumption and the
+  // constant-time passcode compare remain the primary controls.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('invite/:token/accept')
   @HttpCode(201)
   async accept(
