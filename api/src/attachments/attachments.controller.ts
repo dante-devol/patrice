@@ -86,12 +86,24 @@ export class AttachmentsController {
     }
     const stream = await this.attachments.stream(target);
     res.setHeader('Content-Type', target.contentType);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${target.filename.replace(/"/g, '')}"`,
-    );
+    // Never let the browser sniff a stored (client-supplied) content type into
+    // something executable, and always force a download rather than inline render.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', contentDisposition(target.filename));
     stream.pipe(res);
   }
+}
+
+/**
+ * Build a safe `Content-Disposition: attachment` value for a user-supplied filename.
+ * Emits an ASCII-only `filename=` fallback (control chars + quotes/backslashes stripped)
+ * plus an RFC 5987 `filename*=UTF-8''…` for full-fidelity Unicode, so a crafted filename
+ * can neither inject header syntax nor break older clients.
+ */
+function contentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '');
+  const encoded = encodeURIComponent(filename);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 /** The subset of Express.Multer.File the service consumes. */

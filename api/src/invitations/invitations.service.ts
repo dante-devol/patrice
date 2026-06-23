@@ -3,6 +3,8 @@ import { AuthProvider, Prisma } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
+import { ACTIONS } from '../access/actions';
+import { CedarEngine } from '../access/cedar/engine';
 import { ActivityService } from '../activity/activity.service';
 import { PasswordService } from '../auth/password';
 import { VerificationService } from '../auth/verification.service';
@@ -69,6 +71,44 @@ export class InvitationsService {
     return createHash('sha256').update(passcode).digest('hex');
   }
 
+  /**
+   * Privilege bound (ARCHITECTURE.md §2.13): an invite's pre-assigned roles must be a
+   * subset of what the actor may grant (`user:grant_role` scope). Enforced at creation
+   * AND re-validated at redemption against the issuer's *current* scope, so a leaked or
+   * pre-minted invite can never confer a role the issuer couldn't grant directly (the
+   * direct path checks the same thing in users.service `reauthorizeRoleScope`). Bootstrap
+   * invites (`created_by = null`) bypass this — their Admin grant is system-authored.
+   */
+  private async assertRolesGrantable(
+    actorUserId: string,
+    roleIds: string[],
+  ): Promise<void> {
+    for (const roleId of roleIds) {
+      const allowed = await this.access.decide({
+        userId: actorUserId,
+        action: ACTIONS.userGrantRole.action,
+        resource: {
+          // No target user exists yet at invite time; grant_role's scope keys off the
+          // role being granted (role-scope) or is global, not the invitee identity.
+          type: 'User',
+          id: 'prospective-invitee',
+          attrs: {
+            retired: false,
+            targetRole: {
+              __entity: { type: CedarEngine.qualify('Role'), id: roleId },
+            },
+          },
+        },
+      });
+      if (!allowed) {
+        throw new DeniedError(
+          'ROLE_NOT_GRANTABLE',
+          'Invitation includes a role you are not permitted to grant',
+        );
+      }
+    }
+  }
+
   /** Create a normal (non-bootstrap) invitation. Returns the plaintext token. */
   async create(args: {
     creatorUserId: string;
@@ -77,6 +117,10 @@ export class InvitationsService {
     intendedRoleIds?: string[];
     expiresAt?: Date;
   }): Promise<{ id: string; token: string }> {
+    // Privilege bound at creation — the creator may only pre-assign roles they could
+    // grant directly (re-validated again at redemption below).
+    await this.assertRolesGrantable(args.creatorUserId, args.intendedRoleIds ?? []);
+
     const token = generateInviteToken();
     const invitation = await this.prisma.invitation.create({
       data: {
@@ -200,6 +244,13 @@ export class InvitationsService {
         'EMAIL_MISMATCH',
         'This invitation was issued to a different email address',
       );
+    }
+
+    // Re-validate the privilege bound at redemption against the issuer's *current*
+    // grantable scope — a since-shrunk creator scope cannot leak privilege through a
+    // pre-minted invite (§2.13). Bootstrap invites (created_by = null) are exempt.
+    if (!isBootstrap && inv.intendedRoleIds.length > 0) {
+      await this.assertRolesGrantable(inv.createdBy!, inv.intendedRoleIds);
     }
 
     // Friendly, field-targeted message for the common duplicate-email case (the DB

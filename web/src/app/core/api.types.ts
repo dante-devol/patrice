@@ -312,3 +312,38 @@ export interface NotificationListResult {
   unreadCount: number;
   nextCursor: string | null;
 }
+
+// ---- Activity (org audit log) -------------------------------------------
+
+export type ActivitySource = 'patrice' | 'integration' | 'system';
+
+export interface ActivityItem {
+  id: string;
+  actorUserId: string | null;
+  /** Actor's current display name (joined server-side); null = system-actored. */
+  actorName: string | null;
+  subjectType: string;
+  subjectId: string;
+  verb: string;
+  /** IDs + small enums only (no PII) — render links/names by joining these. */
+  payload: Record<string, unknown>;
+  source: ActivitySource;
+  createdAt: string;
+}
+
+export interface ActivityListResult {
+  items: ActivityItem[];
+  nextCursor: string | null;
+}
+
+/** Optional facets for the audit feed; all AND-composed server-side. */
+export interface ActivityFilters {
+  verb?: string;
+  verbPrefix?: string;
+  actorUserId?: string;
+  subjectType?: string;
+  subjectId?: string;
+  source?: ActivitySource;
+  from?: string;
+  to?: string;
+}

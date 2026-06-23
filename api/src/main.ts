@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ENV, type Env } from './config/env';
 
@@ -23,7 +24,17 @@ async function bootstrap(): Promise<void> {
   if (env.TRUST_PROXY) {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
   }
-  app.use(cookieParser());
+  // Baseline security headers: X-Content-Type-Options: nosniff (matters for the
+  // attachment download, which streams a client-supplied content type), frameguard,
+  // HSTS (only emitted over HTTPS), and no X-Powered-By. CSP is left off — this tier
+  // serves JSON + binary streams, never HTML, so a content policy here is noise; the
+  // SPA's CSP belongs to the web tier that serves the document.
+  app.use(helmet({ contentSecurityPolicy: false }));
+  // SESSION_SECRET enables cookie-parser's signed-cookie verification. Our session/CSRF
+  // cookies are opaque, high-entropy, and server-validated (peppered hash lookup), so
+  // signing is defence-in-depth rather than the primary control — but the secret is now
+  // wired in (previously it was validated on boot yet never consumed).
+  app.use(cookieParser(env.SESSION_SECRET));
   // All routes live under /api/* so the web tier's reverse proxy can forward a
   // single prefix (and unknown /api paths return the API's JSON 404 rather than the
   // SPA shell). The SPA itself is served at the origin root by nginx.
