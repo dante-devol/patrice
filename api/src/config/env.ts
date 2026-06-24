@@ -39,6 +39,13 @@ export const envSchema = z.object({
   S3_FORCE_PATH_STYLE: boolFromString.default('false'),
   // Upload cap enforced at the attachment boundary (default 25 MiB).
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(26_214_400),
+  // Discord integration OAuth credentials (Slice 8). Optional — the integration
+  // feature is disabled if absent; the core auth path is never affected.
+  DISCORD_CLIENT_ID: z.string().optional(),
+  DISCORD_CLIENT_SECRET: z.string().optional(),
+  // Batching window: role-change events within this window collapse into one sync
+  // job per connection (pg-boss singletonKey deduplication). Default 30 s.
+  INTEGRATION_SYNC_DELAY_SECONDS: z.coerce.number().int().positive().default(30),
 });
 
 export type Env = z.infer<typeof envSchema>;

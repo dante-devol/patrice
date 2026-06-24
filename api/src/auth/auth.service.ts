@@ -24,6 +24,8 @@ export interface AuthenticatedUser {
   email: string | null;
   displayName: string;
   emailVerified: boolean;
+  /** True if the user has at least one active Discord account link. */
+  hasDiscordLink: boolean;
   capabilities: UserCapabilities;
 }
 
@@ -110,7 +112,7 @@ export class AuthService {
       type: 'Organization' as const,
       id: user.organizationId,
     };
-    const [inviteCreate, manageOrg] = await Promise.all([
+    const [inviteCreate, manageOrg, discordLinkCount] = await Promise.all([
       this.access.decide({
         userId: user.id,
         action: ACTIONS.inviteCreate.action,
@@ -121,6 +123,9 @@ export class AuthService {
         action: ACTIONS.grantCreate.action,
         resource: orgResource,
       }),
+      this.prisma.externalIdentity.count({
+        where: { userId: user.id, connection: { lifecycleState: 'active' } },
+      }),
     ]);
 
     return {
@@ -129,6 +134,7 @@ export class AuthService {
       email: user.email,
       displayName: user.displayName,
       emailVerified: user.identities[0]?.verifiedAt != null,
+      hasDiscordLink: discordLinkCount > 0,
       capabilities: { inviteCreate, manageOrg },
     };
   }

@@ -14,6 +14,8 @@ export const SETTINGS_DEFAULTS = {
   // Retire→revive grace window (Slice 7.2). GC skips, and Revive is allowed, while
   // `retired_at > now() - gracePeriodHours`. Default 24h.
   gracePeriodHours: 24,
+  // Slice 8: require users to link a Discord account before accessing tasks.
+  requireDiscordLink: false,
 } as const;
 
 export type OrgSettings = {
@@ -23,6 +25,7 @@ export type OrgSettings = {
   sessionAbsoluteDays: number;
   sessionIdleDays: number;
   gracePeriodHours: number;
+  requireDiscordLink: boolean;
 };
 
 /**

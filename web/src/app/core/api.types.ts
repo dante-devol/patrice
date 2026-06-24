@@ -87,6 +87,8 @@ export interface OrgSettings {
   sessionIdleDays: number;
   /** Retire→revive grace window in hours (Slice 7.2); 0 disables the window. */
   gracePeriodHours: number;
+  /** Slice 8: require Discord account link before task access. */
+  requireDiscordLink: boolean;
 }
 
 export interface CurrentUser {
@@ -95,6 +97,7 @@ export interface CurrentUser {
   email: string | null;
   displayName: string;
   emailVerified: boolean;
+  hasDiscordLink: boolean;
   capabilities: UserCapabilities;
 }
 
@@ -346,4 +349,35 @@ export interface ActivityFilters {
   source?: ActivitySource;
   from?: string;
   to?: string;
+}
+
+// ---- Slice 8: integrations ----------------------------------------------
+
+export type IntegrationProvider = 'discord';
+export type IntegrationStatus = 'active' | 'broken' | 'disabled';
+export type SyncDirection = 'inbound' | 'outbound' | 'bidirectional';
+
+export interface IntegrationConnection {
+  id: string;
+  provider: IntegrationProvider;
+  externalWorkspaceId: string;
+  displayName: string;
+  config: Record<string, unknown>;
+  credentialsRef: string | null;
+  status: IntegrationStatus;
+  lifecycleState: Lifecycle;
+  retiredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExternalGroupMapping {
+  id: string;
+  roleId: string;
+  connectionId: string;
+  externalGroupId: string;
+  syncDirection: SyncDirection;
+  isBroken: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

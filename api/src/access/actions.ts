@@ -16,7 +16,8 @@ export type CedarEntityType =
   | 'Task'
   | 'Message'
   | 'Attachment'
-  | 'Division';
+  | 'Division'
+  | 'Integration';
 
 export interface ActionDef {
   /** `resource:verb` string — the Cedar action id and the grant.action value. */
@@ -92,6 +93,11 @@ export const ACTIONS = {
   teamRevive: { action: 'team:revive', resourceType: 'Organization' },
   // config:update — org settings editor (Slice 2.4).
   configUpdate: { action: 'config:update', resourceType: 'Organization' },
+  // integration:* — org-scoped; resource is the singleton org (admin governance).
+  integrationCreate: { action: 'integration:create', resourceType: 'Organization' },
+  integrationUpdate: { action: 'integration:update', resourceType: 'Organization' },
+  integrationRetire: { action: 'integration:retire', resourceType: 'Organization' },
+  integrationRevive: { action: 'integration:revive', resourceType: 'Organization' },
 } as const satisfies Record<string, ActionDef>;
 
 export type ActionKey = keyof typeof ACTIONS;
@@ -143,6 +149,11 @@ export const ADMIN_SEED_ACTIONS: readonly string[] = [
   // Matrix + membership + settings authority (Slices 2.3–2.4).
   'grant:revive',
   'config:update',
+  // Integration management (Slice 8).
+  'integration:create',
+  'integration:update',
+  'integration:retire',
+  'integration:revive',
   'user:update',
   'user:retire',
   'user:revive',

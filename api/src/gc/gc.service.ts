@@ -15,6 +15,8 @@ export interface GcReport {
   usersScrubbed: string[];
   /** History-less users deleted outright. */
   usersDeleted: string[];
+  /** Retired-past-grace integration connections collected. */
+  integrationConnections: string[];
   /** Entities whose delete was attempted but left in place by a live reference. */
   blocked: { entityType: string; entityId: string }[];
   /** Orphaned blobs reconciled away (0 on dry-run). */
@@ -30,6 +32,7 @@ function emptyReport(): GcReport {
     roles: [],
     usersScrubbed: [],
     usersDeleted: [],
+    integrationConnections: [],
     blocked: [],
     orphanedBlobs: 0,
   };
@@ -119,12 +122,30 @@ export class GcService {
     return { tasks, divisions, teams, roles };
   }
 
+  /** Retired-past-grace integration connections with no surviving external_identity or group mappings. */
+  private async collectableConnections(orgId: string, cutoff: Date): Promise<string[]> {
+    const candidates = await this.prisma.integrationConnection.findMany({
+      where: { organizationId: orgId, lifecycleState: 'retired', retiredAt: { lt: cutoff } },
+      select: { id: true },
+    });
+    const result: string[] = [];
+    for (const c of candidates) {
+      const [ids, mappings] = await Promise.all([
+        this.prisma.externalIdentity.count({ where: { connectionId: c.id } }),
+        this.prisma.externalGroupMapping.count({ where: { connectionId: c.id } }),
+      ]);
+      if (ids === 0 && mappings === 0) result.push(c.id);
+    }
+    return result;
+  }
+
   private async roleUnreferenced(roleId: string): Promise<boolean> {
-    const [memberships, grants] = await Promise.all([
+    const [memberships, grants, mappings] = await Promise.all([
       this.prisma.userRole.count({ where: { roleId } }),
       this.prisma.grant.count({ where: { roleId } }),
+      this.prisma.externalGroupMapping.count({ where: { roleId } }),
     ]);
-    return memberships === 0 && grants === 0;
+    return memberships === 0 && grants === 0 && mappings === 0;
   }
 
   private async divisionCollectable(
@@ -183,11 +204,13 @@ export class GcService {
     const { orgId, cutoff } = await this.sweepContext();
     const c = await this.collectable(orgId, cutoff);
     const u = await this.collectableUsers(orgId, cutoff);
+    const integrationConnections = await this.collectableConnections(orgId, cutoff);
     return {
       ...emptyReport(),
       ...c,
       usersScrubbed: u.scrub,
       usersDeleted: u.delete,
+      integrationConnections,
     };
   }
 
@@ -235,8 +258,43 @@ export class GcService {
       if (await this.deleteUser(orgId, userId, report)) report.usersDeleted.push(userId);
     }
 
+    // Collect retired-past-grace integration connections (after user GC, which
+    // may have freed the last external_identity reference).
+    const freshConnections = await this.collectableConnections(orgId, cutoff);
+    for (const connectionId of freshConnections) {
+      if (await this.deleteIntegrationConnection(orgId, connectionId, report)) {
+        report.integrationConnections.push(connectionId);
+      }
+    }
+
     report.orphanedBlobs = await this.reconcileOrphanedBlobs(orgId);
     return report;
+  }
+
+  private async deleteIntegrationConnection(
+    orgId: string,
+    connectionId: string,
+    report: GcReport,
+  ): Promise<boolean> {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.integrationConnection.delete({ where: { id: connectionId } });
+        await this.activity.logActivity({
+          tx,
+          organizationId: orgId,
+          actorUserId: null,
+          subjectType: 'integration_connection',
+          subjectId: connectionId,
+          verb: 'gc.integration_connection_collected',
+          payload: { connectionId },
+          source: ActivitySource.system,
+        });
+      });
+      return true;
+    } catch (err) {
+      this.handleDeleteFailure(orgId, 'integration_connection', connectionId, err, report);
+      return false;
+    }
   }
 
   /**
@@ -319,6 +377,8 @@ export class GcService {
     await tx.authToken.deleteMany({ where: { userId } });
     await tx.notification.deleteMany({ where: { recipientUserId: userId } });
     await tx.userRole.deleteMany({ where: { userId } });
+    // Slice 8: purge integration account links (external_identity rows name user as PII).
+    await tx.externalIdentity.deleteMany({ where: { userId } });
   }
 
   /**

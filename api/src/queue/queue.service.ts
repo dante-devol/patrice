@@ -75,22 +75,23 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
    * Publish a job. No-op (logged) when the queue is unavailable. `singletonKey`
    * de-duplicates in-flight jobs (pg-boss drops a send whose key matches one already
    * active) — the GC sweep passes `'gc-sweep'` so concurrent triggers can't overlap.
+   * `startAfterSeconds` delays execution, letting a singleton absorb follow-on
+   * events that arrive within the window (role-change batching in Slice 8).
    */
   async publish(
     queue: string,
     data: unknown,
-    opts: { singletonKey?: string } = {},
+    opts: { singletonKey?: string; startAfterSeconds?: number } = {},
   ): Promise<void> {
     if (!this.boss) {
       this.logger.warn(`Queue unavailable; dropping job for "${queue}".`);
       return;
     }
     await this.boss.createQueue(queue).catch(() => undefined);
-    await this.boss.send(
-      queue,
-      data as object,
-      opts.singletonKey ? { singletonKey: opts.singletonKey } : {},
-    );
+    await this.boss.send(queue, data as object, {
+      ...(opts.singletonKey && { singletonKey: opts.singletonKey }),
+      ...(opts.startAfterSeconds && { startAfter: opts.startAfterSeconds }),
+    });
   }
 
   /**

@@ -114,6 +114,22 @@ enum AttachmentKind {
   other
 }
 
+enum IntegrationProvider {
+  discord
+}
+
+enum IntegrationStatus {
+  active
+  broken
+  disabled
+}
+
+enum SyncDirection {
+  inbound
+  outbound
+  bidirectional
+}
+
 model Organization {
   id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   name          String
@@ -124,17 +140,18 @@ model Organization {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  users       AppUser[]
-  invitations Invitation[]
-  roles          Role[]
-  grants         Grant[]
-  activities     Activity[]
-  divisions      Division[]
-  teams          Team[]
-  questionnaires Questionnaire[]
-  tasks          Task[]
-  attachments    Attachment[]
-  notifications  Notification[]
+  users                  AppUser[]
+  invitations            Invitation[]
+  roles                  Role[]
+  grants                 Grant[]
+  activities             Activity[]
+  divisions              Division[]
+  teams                  Team[]
+  questionnaires         Questionnaire[]
+  tasks                  Task[]
+  attachments            Attachment[]
+  notifications          Notification[]
+  integrationConnections IntegrationConnection[]
 
   @@unique([singleton])
   @@map("organization")
@@ -196,18 +213,19 @@ model AppUser {
   createdAt               DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt               DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  identities     UserIdentity[]
-  sessions       Session[]
-  userRoles      UserRole[]
-  authTokens     AuthToken[]
-  invitationUses InvitationUse[]
-  requestedTasks Task[]
-  taskClaimants  TaskClaimant[]
-  submissions    Submission[]
-  messages       Message[]
-  attachments    Attachment[]
-  notifications  Notification[]
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  identities          UserIdentity[]
+  sessions            Session[]
+  userRoles           UserRole[]
+  authTokens          AuthToken[]
+  invitationUses      InvitationUse[]
+  requestedTasks      Task[]
+  taskClaimants       TaskClaimant[]
+  submissions         Submission[]
+  messages            Message[]
+  attachments         Attachment[]
+  notifications       Notification[]
+  externalIdentities  ExternalIdentity[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -312,12 +330,13 @@ model Role {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  userRoles    UserRole[]
-  grants       Grant[]
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  userRoles       UserRole[]
+  grants          Grant[]
+  groupMappings   ExternalGroupMapping[]
   // Inherent-role back-relations: an inherent role points at its division/team.
-  division     Division?    @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  team         Team?        @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  division        Division?              @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  team            Team?                  @relation(fields: [teamId], references: [id], onDelete: Restrict)
 
   @@index([organizationId])
   @@map("role")
@@ -636,4 +655,72 @@ model Notification {
   @@index([recipientUserId, readAt, createdAt])
   @@index([organizationId])
   @@map("notification")
+}
+
+/// A connection to an external provider (Slice 8). `credentials_ref` is a seam
+/// for provider credentials — never custodied here, auth is delegated to the
+/// provider. `status` tracks live health; `lifecycle_state` tracks retirement.
+model IntegrationConnection {
+  id                  String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  organizationId      String              @map("organization_id") @db.Uuid
+  provider            IntegrationProvider
+  externalWorkspaceId String              @map("external_workspace_id")
+  displayName         String              @map("display_name")
+  config              Json                @default("{}")
+  credentialsRef      String?             @map("credentials_ref")
+  status              IntegrationStatus   @default(active)
+  lifecycleState      LifecycleState      @default(active) @map("lifecycle_state")
+  retiredAt           DateTime?           @map("retired_at") @db.Timestamptz(6)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  externalIds    ExternalIdentity[]
+  groupMappings  ExternalGroupMapping[]
+
+  @@unique([organizationId, provider, externalWorkspaceId])
+  @@index([organizationId])
+  @@map("integration_connection")
+}
+
+/// Links a Patrice user to their external provider account (Slice 8.2). This is
+/// an **integration link only** — never an authentication path. `user_identity`
+/// is the sole auth path. On user scrub/GC, these rows are purged first.
+model ExternalIdentity {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  connectionId   String    @map("connection_id") @db.Uuid
+  externalUserId String    @map("external_user_id")
+  externalHandle String?   @map("external_handle")
+  linkedAt       DateTime  @default(now()) @map("linked_at") @db.Timestamptz(6)
+  lastSyncedAt   DateTime? @map("last_synced_at") @db.Timestamptz(6)
+
+  user       AppUser               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@unique([connectionId, externalUserId])
+  @@unique([userId, connectionId])
+  @@index([userId])
+  @@map("external_identity")
+}
+
+/// Maps a Patrice role to an external group (e.g. Discord role) within a
+/// connection (Slice 8.3). `external_group_id` is a stable provider snowflake,
+/// surviving renames. `is_broken` is set when the external group is deleted.
+model ExternalGroupMapping {
+  id              String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  roleId          String        @map("role_id") @db.Uuid
+  connectionId    String        @map("connection_id") @db.Uuid
+  externalGroupId String        @map("external_group_id")
+  syncDirection   SyncDirection @map("sync_direction")
+  isBroken        Boolean       @default(false) @map("is_broken")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  role       Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@unique([roleId, connectionId, externalGroupId])
+  @@index([connectionId])
+  @@map("external_group_mapping")
 }

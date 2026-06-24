@@ -25,6 +25,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { StorageModule } from './storage/storage.module';
 import { GcModule } from './gc/gc.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -60,6 +61,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     TasksModule,
     SubmissionsModule,
     GcModule,
+    IntegrationsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -36,6 +36,11 @@ import { errorMessage } from '../../core/errors';
           <label>Retirement grace period (hours) — data is retained for this long before final scrub
             <input type="number" min="0" [(ngModel)]="s.gracePeriodHours" /></label>
         </div>
+        <div class="settings-group">
+          <div class="settings-group-label">Integrations</div>
+          <label><input type="checkbox" [(ngModel)]="s.requireDiscordLink" />
+            Require Discord account link before accessing tasks</label>
+        </div>
         <button [disabled]="busy()" (click)="save(s)">Save settings</button>
       }
     </div>

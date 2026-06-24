@@ -3,8 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { AuthStore } from '../core/auth.store';
-import { InviteView } from '../core/api.types';
+import { InviteView, IntegrationConnection, OrgSettings } from '../core/api.types';
 import { errorMessage } from '../core/errors';
+
+type Step = 'register' | 'link-discord' | 'done';
 
 @Component({
   standalone: true,
@@ -18,7 +20,7 @@ import { errorMessage } from '../core/errors';
         <p class="error">{{ error() }}</p>
       } @else if (invite()!.status !== 'pending') {
         <p class="error">This invitation is {{ invite()!.status }}.</p>
-      } @else {
+      } @else if (step() === 'register') {
         @if (invite()!.requiresPasscode) {
           <label>Passcode</label>
           <input [(ngModel)]="passcode" autocomplete="off" />
@@ -34,6 +36,29 @@ import { errorMessage } from '../core/errors';
         <input type="password" [(ngModel)]="password" autocomplete="new-password" />
         @if (error()) { <p class="error">{{ error() }}</p> }
         <button [disabled]="busy()" (click)="submit()">Create account</button>
+      } @else if (step() === 'link-discord') {
+        <h2>Link your Discord account</h2>
+        @if (settings()?.requireDiscordLink) {
+          <p>
+            This organisation requires a linked Discord account before you can access tasks.
+            Link now, or skip and link later from your profile — you won't be able to view
+            tasks until you do.
+          </p>
+        } @else {
+          <p class="muted">
+            Optionally link your Discord account to sync roles automatically.
+            You can always do this later from your profile.
+          </p>
+        }
+        @if (error()) { <p class="error">{{ error() }}</p> }
+        <div class="row" style="gap:8px;justify-content:flex-start;margin-top:4px">
+          <button [disabled]="busy()" (click)="startDiscordLink()">
+            Link Discord account
+          </button>
+          <button class="secondary" (click)="skipDiscordLink()">
+            {{ settings()?.requireDiscordLink ? 'Skip for now' : 'Skip' }}
+          </button>
+        </div>
       }
     </div>
   `,
@@ -45,8 +70,12 @@ export class AcceptInviteComponent {
   private readonly route = inject(ActivatedRoute);
 
   private token = '';
+  private connectionId: string | null = null;
+
   readonly loading = signal(true);
   readonly invite = signal<InviteView | null>(null);
+  readonly step = signal<Step>('register');
+  readonly settings = signal<OrgSettings | null>(null);
 
   passcode = '';
   displayName = '';
@@ -64,8 +93,6 @@ export class AcceptInviteComponent {
     try {
       const view = await this.api.viewInvite(this.token);
       this.invite.set(view);
-      // Intentionally do NOT pre-fill the email — for an email-gated invite the
-      // redeemer must supply the address themselves (the server enforces it).
     } catch (e) {
       this.error.set(errorMessage(e));
     } finally {
@@ -84,11 +111,43 @@ export class AcceptInviteComponent {
         displayName: this.displayName,
       });
       this.auth.setUser(user);
-      void this.router.navigate(['/home']);
+
+      const [connections, cfg] = await Promise.all([
+        this.api.listIntegrations().catch(() => [] as IntegrationConnection[]),
+        this.api.getConfig().catch(() => null),
+      ]);
+      const activeConnection = connections.find(
+        (c: IntegrationConnection) => c.provider === 'discord' && c.lifecycleState === 'active',
+      );
+
+      if (activeConnection && !user.hasDiscordLink) {
+        this.connectionId = activeConnection.id;
+        this.settings.set(cfg);
+        this.step.set('link-discord');
+      } else {
+        void this.router.navigate(['/home']);
+      }
     } catch (e) {
       this.error.set(errorMessage(e));
     } finally {
       this.busy.set(false);
     }
+  }
+
+  async startDiscordLink(): Promise<void> {
+    if (!this.connectionId) return;
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      const { redirectUrl } = await this.api.startDiscordLink(this.connectionId);
+      window.location.href = redirectUrl;
+    } catch (e) {
+      this.error.set(errorMessage(e));
+      this.busy.set(false);
+    }
+  }
+
+  skipDiscordLink(): void {
+    void this.router.navigate(['/home']);
   }
 }
