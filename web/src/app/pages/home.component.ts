@@ -176,9 +176,9 @@ const STATUS_COLORS: Record<string, string> = {
         }
       }
 
-      @if (auth.canInvite()) {
+      @if (auth.canManageOrg()) {
         <div class="mt-8 pt-4 border-t border-line/50">
-          <a routerLink="/invitations" class="font-mono text-[11.5px] text-ink-soft hover:text-ink">
+          <a routerLink="/admin" class="font-mono text-[11.5px] text-ink-soft hover:text-ink">
             Manage invitations →
           </a>
         </div>

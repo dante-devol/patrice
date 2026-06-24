@@ -25,9 +25,6 @@ import { avatarColor, initials } from './pages/tasks/task-presentation';
             <nav class="hidden sm:flex items-center gap-5 text-[13.5px] text-ink-soft">
               <a routerLink="/home" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Home</a>
               <a routerLink="/tasks" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Tasks</a>
-              @if (auth.canInvite()) {
-                <a routerLink="/invitations" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Invitations</a>
-              }
               @if (auth.canManageOrg()) {
                 <a routerLink="/admin" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Admin</a>
               }

@@ -1,6 +1,5 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
-import { inviteManageGuard } from './core/invite.guard';
 import { adminGuard } from './core/admin.guard';
 
 export const routes: Routes = [
@@ -27,12 +26,6 @@ export const routes: Routes = [
     path: 'accept/:token',
     loadComponent: () =>
       import('./pages/accept-invite.component').then((m) => m.AcceptInviteComponent),
-  },
-  {
-    path: 'invitations',
-    canActivate: [authGuard, inviteManageGuard],
-    loadComponent: () =>
-      import('./pages/invitations.component').then((m) => m.InvitationsComponent),
   },
   {
     path: 'tasks',
