@@ -32,6 +32,7 @@ export interface TaskView {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+  claimantUserIds: string[];
 }
 
 export interface TaskListResult {
@@ -73,6 +74,7 @@ export class TasksService {
     version: number;
     createdAt: Date;
     updatedAt: Date;
+    claimants?: { userId: string }[];
   }): TaskView {
     return {
       id: t.id,
@@ -89,11 +91,15 @@ export class TasksService {
       version: t.version,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
+      claimantUserIds: t.claimants?.map((c) => c.userId) ?? [],
     };
   }
 
   async get(id: string): Promise<TaskView> {
-    const task = await this.prisma.task.findUnique({ where: { id } });
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
+    });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
     return this.toView(task);
   }
@@ -230,6 +236,7 @@ export class TasksService {
       where,
       orderBy: { id: 'desc' },
       take: query.limit + 1,
+      include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
     });
 
     const hasMore = rows.length > query.limit;
@@ -259,6 +266,7 @@ export class TasksService {
           ...(dto.description !== undefined ? { description: dto.description } : {}),
           version: { increment: 1 },
         },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
       });
       await this.activity.logActivity({
         tx,
@@ -294,6 +302,7 @@ export class TasksService {
           retiredAt: now,
           version: { increment: 1 },
         },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
       });
       await this.activity.logActivity({
         tx,
@@ -354,6 +363,7 @@ export class TasksService {
           retiredAt: null,
           version: { increment: 1 },
         },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
       });
       await this.activity.logActivity({
         tx,
@@ -462,7 +472,10 @@ export class TasksService {
         recipientUserIds: [await this.notifications.requesterId(tx, taskId)],
         payload: { taskId, actorUserId: userId },
       });
-      const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
+      const row = await tx.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
+      });
       return this.toView(row);
     });
     this.notifications.publish(notified);
@@ -508,7 +521,10 @@ export class TasksService {
         recipientUserIds: [await this.notifications.requesterId(tx, taskId)],
         payload: { taskId, actorUserId: userId },
       });
-      const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
+      const row = await tx.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
+      });
       return this.toView(row);
     });
     this.notifications.publish(notified);
@@ -562,7 +578,10 @@ export class TasksService {
 
       await tx.task.update({ where: { id: taskId }, data });
       const status = await this.recomputeStatus(tx, taskId);
-      const row = await tx.task.findUniqueOrThrow({ where: { id: taskId } });
+      const row = await tx.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
+      });
       await this.activity.logActivity({
         tx,
         organizationId: task.organizationId,
@@ -609,6 +628,7 @@ export class TasksService {
       const row = await tx.task.update({
         where: { id: taskId },
         data: { statusCache: StatusCache.approved, version: { increment: 1 } },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
       });
       await this.messages.createSystemMessage(
         tx,
@@ -640,6 +660,61 @@ export class TasksService {
     return view;
   }
 
+  /**
+   * Admin eviction (`task:manage_claims`): remove a specific claimant from their slot,
+   * leaving the opening available for someone else. Mirrors `leave()` but targets any
+   * named user rather than the caller themselves.
+   */
+  async removeClaimant(
+    taskId: string,
+    actorUserId: string,
+    targetUserId: string,
+  ): Promise<TaskView> {
+    const task = await this.loadActiveTask(taskId);
+    let notified: string[] = [];
+    const view = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
+      const slot = await tx.taskClaimant.findUnique({
+        where: { taskId_userId: { taskId, userId: targetUserId } },
+        select: { id: true, leftAt: true },
+      });
+      if (!slot || slot.leftAt !== null) {
+        throw new NotFoundError('NOT_CLAIMED', 'User does not hold a slot on this task');
+      }
+      await tx.taskClaimant.update({
+        where: { id: slot.id },
+        data: { leftAt: new Date() },
+      });
+      const status = await this.recomputeStatus(tx, taskId);
+      await this.activity.logActivity({
+        tx,
+        organizationId: task.organizationId,
+        actorUserId,
+        subjectType: 'task',
+        subjectId: taskId,
+        verb: 'task.claimant_removed',
+        payload: { taskId, removedUserId: targetUserId, statusCache: status },
+      });
+      await this.messages.createSystemMessage(tx, taskId, `User ${targetUserId} left this task.`);
+      notified = await this.notifications.emit(tx, {
+        organizationId: task.organizationId,
+        type: 'task.claim_left',
+        subjectType: 'task',
+        subjectId: taskId,
+        senderUserId: actorUserId,
+        recipientUserIds: [await this.notifications.requesterId(tx, taskId)],
+        payload: { taskId, actorUserId: targetUserId },
+      });
+      const row = await tx.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
+      });
+      return this.toView(row);
+    });
+    this.notifications.publish(notified);
+    return view;
+  }
+
   /** Reassign the requester (`task:change_requester`). New requester must be active. */
   async changeRequester(
     taskId: string,
@@ -663,6 +738,7 @@ export class TasksService {
       const row = await tx.task.update({
         where: { id: taskId },
         data: { requesterUserId: dto.userId, version: { increment: 1 } },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
       });
       await this.activity.logActivity({
         tx,

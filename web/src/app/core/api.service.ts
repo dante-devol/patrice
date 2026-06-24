@@ -289,6 +289,9 @@ export class ApiService {
   leaveTask(id: string): Promise<Task> {
     return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/leave`, {}));
   }
+  removeClaimant(taskId: string, userId: string): Promise<Task> {
+    return firstValueFrom(this.http.delete<Task>(`/api/tasks/${taskId}/claimants/${userId}`));
+  }
   manageClaims(
     id: string,
     body: { openingsDelta?: number; claimsClosed?: boolean },

@@ -152,14 +152,19 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
                 <div class="flex flex-col items-end justify-between shrink-0 gap-3">
                   <span class="stamp" [class]="stampMod(t)">{{ stamp(t) }}</span>
                   @if (multi(t)) {
-                    <div class="gauge" [title]="t.openings + ' openings'">
-                      @for (p of pips(t.openings); track $index) { <span class="pip pip--open"></span> }
-                      <span class="gauge-n" [class.text-accent-ink]="isOpen(t)">{{ t.openings }} {{ isOpen(t) ? 'open' : 'openings' }}</span>
+                    <div class="flex items-center gap-0.5 flex-wrap justify-end">
+                      @for (uid of t.claimantUserIds; track uid) {
+                        <user-avatar [name]="lookup.userName(uid)" [seed]="uid" [size]="20" />
+                      }
+                      @for (p of emptySlots(t); track $index) {
+                        <user-avatar [empty]="true" [size]="20" />
+                      }
+                      <span class="gauge-n ml-1">{{ t.claimantUserIds.length }}/{{ t.openings }}</span>
                     </div>
-                  } @else if (isOpen(t)) {
-                    <user-avatar [empty]="true" [size]="26" />
+                  } @else if (t.claimantUserIds.length > 0) {
+                    <user-avatar [name]="lookup.userName(t.claimantUserIds[0])" [seed]="t.claimantUserIds[0]" [size]="26" />
                   } @else {
-                    <span class="avatar" style="width:26px;height:26px;background:#9aa39a" title="claimed"></span>
+                    <user-avatar [empty]="true" [size]="26" />
                   }
                 </div>
               </a>
@@ -259,8 +264,8 @@ export class TaskListComponent {
   multi(t: Task): boolean {
     return isMultiClaim(t);
   }
-  pips(openings: number): unknown[] {
-    return new Array(Math.min(openings, 5));
+  emptySlots(t: Task): unknown[] {
+    return new Array(Math.max(0, t.openings - t.claimantUserIds.length));
   }
 
   setDivision(id: string | undefined): void {

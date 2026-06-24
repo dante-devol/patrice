@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -121,6 +122,18 @@ export class TasksController {
   async leave(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
     return this.tasks.leave(id, req.user.id);
+  }
+
+  @Delete(':id/claimants/:userId')
+  @HttpCode(200)
+  @Authorize(ACTIONS.taskManageClaims.action, taskResource)
+  async removeClaimant(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.tasks.removeClaimant(id, req.user.id, userId);
   }
 
   @Post(':id/claims')

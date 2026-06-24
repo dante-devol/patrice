@@ -147,6 +147,9 @@ export const activityPayloadSchemas = {
       reason: z.string(),
     })
     .strict(),
+  'task.claimant_removed': z
+    .object({ taskId: uuid, removedUserId: uuid, statusCache: z.string() })
+    .strict(),
   'task.completed': z
     .object({ taskId: uuid, statusCache: z.string() })
     .strict(),

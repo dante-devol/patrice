@@ -15,12 +15,12 @@ import { SubmitDialogComponent } from './submit-dialog.component';
 import { UserAvatarComponent } from './user-avatar.component';
 import { isMultiClaim, relativeTime, stampClass, stampStatus } from './task-presentation';
 
-/** One claimant's standing on a task, derived from their latest submission. */
+/** One claim slot on a task; state/version overlaid from the claimant's latest submission. */
 interface ClaimRow {
   userId: string;
   name: string;
-  version: number;
-  state: string;
+  version: number | null;
+  state: string | null;
 }
 
 /**
@@ -111,45 +111,47 @@ interface ClaimRow {
               <div class="rounded-lg border border-line bg-paper shadow-card p-4">
                 <div class="flex items-center justify-between mb-3">
                   <span class="font-mono text-[11px] tracking-[0.14em] uppercase text-ink-soft">
-                    {{ multi(t) ? 'Openings' : 'Assignee' }}
+                    Claimant{{ multi(t) ? 's' : '' }}
                   </span>
-                  <div class="flex items-center gap-2">
-                    @if (multi(t)) {
-                      <div class="gauge" [title]="claims().length + ' of ' + t.openings + ' openings filled'">
-                        @for (p of filledPips(); track $index) { <span class="pip pip--lg pip--filled"></span> }
-                        @for (p of openPips(t); track $index) { <span class="pip pip--lg pip--open"></span> }
-                        <span class="gauge-n">{{ claims().length }}/{{ t.openings }}</span>
-                      </div>
-                    }
-                    <!-- Close Claims: only when there are unfilled open slots and not already closed -->
-                    @if (hasOpenSlots(t)) {
-                      <button class="font-mono text-[11px] text-ink-soft border border-line rounded px-2 py-[3px] hover:border-ink/40 leading-none"
-                              (click)="closeClaims(t)">Close claims</button>
-                    }
-                  </div>
+                  @if (multi(t)) {
+                    <div class="gauge" [title]="claims().length + ' of ' + t.openings + ' slots filled'">
+                      @for (c of claims(); track c.userId) { <span class="pip pip--lg pip--filled"></span> }
+                      @for (p of openPips(t); track $index) { <span class="pip pip--lg pip--open"></span> }
+                      <span class="gauge-n">{{ claims().length }}/{{ t.openings }}</span>
+                    </div>
+                  }
                 </div>
 
-                <!-- Claimant rows; current user gets a Leave icon button -->
+                <!-- Filled slots -->
                 @if (claims().length > 0) {
                   <ul class="flex flex-col gap-2 mb-2">
                     @for (c of claims(); track c.userId) {
                       <li class="flex items-center gap-2.5">
                         <user-avatar [name]="c.name" [seed]="c.userId" [size]="24" [imageUrl]="lookup.userAvatar(c.userId)" />
                         <span class="text-[13.5px] font-medium flex-1 min-w-0 truncate">{{ c.name }}</span>
-                        <span class="font-mono text-[11px] shrink-0" [style.color]="stateColor(c.state)">v{{ c.version }}·{{ c.state }}</span>
+                        @if (c.state) {
+                          <span class="font-mono text-[11px] shrink-0" [style.color]="stateColor(c.state)">
+                            @if (c.version !== null) { v{{ c.version }}· }{{ c.state }}
+                          </span>
+                        }
                         @if (isCurrentUser(c.userId)) {
                           <button class="ml-1 w-6 h-6 flex items-center justify-center rounded border border-line
                                          hover:border-[#99492f] hover:text-[#99492f] text-ink-soft text-[11px] font-mono
                                          shrink-0 transition-colors"
                                   (click)="leave(t)" title="Leave this task">✕</button>
+                        } @else if (canEdit()) {
+                          <button class="ml-1 w-6 h-6 flex items-center justify-center rounded border border-line
+                                         hover:border-[#99492f] hover:text-[#99492f] text-ink-soft text-[11px] font-mono
+                                         shrink-0 transition-colors"
+                                  (click)="evict(t, c.userId)" title="Remove claimant">✕</button>
                         }
                       </li>
                     }
                   </ul>
                 }
 
-                <!-- Open slots; each gets a Claim icon button -->
-                @if (openPips(t).length > 0 && !t.claimsClosed) {
+                <!-- Open slots -->
+                @if (openPips(t).length > 0) {
                   <ul class="flex flex-col gap-2 mb-2">
                     @for (slot of openPips(t); track $index) {
                       <li class="flex items-center gap-2.5">
@@ -159,18 +161,23 @@ interface ClaimRow {
                                        hover:border-accent hover:text-accent text-ink-soft text-[15px] font-mono
                                        shrink-0 transition-colors"
                                 (click)="claim(t)" title="Claim this slot">+</button>
+                        @if (canEdit()) {
+                          <button class="w-6 h-6 flex items-center justify-center rounded border border-line
+                                         hover:border-[#99492f] hover:text-[#99492f] text-ink-soft text-[11px] font-mono
+                                         shrink-0 transition-colors"
+                                  (click)="removeSlot(t)" title="Remove this slot">✕</button>
+                        }
                       </li>
                     }
                   </ul>
                 }
 
-                @if (claims().length === 0 && (openPips(t).length === 0 || t.claimsClosed)) {
-                  <div class="flex items-center gap-2.5 mb-2">
-                    <user-avatar [empty]="true" [size]="24" />
-                    <span class="text-[13.5px] text-ink-soft">
-                      {{ t.claimsClosed ? 'Claims closed' : 'Unclaimed — open to claims' }}
-                    </span>
-                  </div>
+                <!-- Add slot (admin) -->
+                @if (canEdit()) {
+                  <button class="flex items-center gap-1 font-mono text-[11px] text-ink-soft hover:text-ink mt-1 leading-none"
+                          (click)="addOpening(t)">
+                    <span class="text-[14px] leading-none">+</span> Add slot
+                  </button>
                 }
               </div>
 
@@ -277,12 +284,6 @@ interface ClaimRow {
     <!-- Overflow menu (title-row level) -->
     <ng-template #manageMenu>
       <div class="menu-card" cdkMenu>
-        <button cdkMenuItem (click)="addOpening(task()!)">
-          <span class="font-mono text-ink-soft">+</span> Add an opening
-        </button>
-        @if (task()?.claimsClosed) {
-          <button cdkMenuItem (click)="toggleClaims(task()!)">Reopen claims</button>
-        }
         <button cdkMenuItem class="danger" (click)="confirmRetireOpen.set(true)">Retire task…</button>
       </div>
     </ng-template>
@@ -346,19 +347,24 @@ export class TaskDetailComponent implements OnInit {
   /** Whether the current user can edit task metadata (name, description, requester). */
   readonly canEdit = computed(() => this.auth.canManageOrg());
 
-  /** The claim strip: one row per claimant, from their latest submission. */
+  /** One row per active claimant (from task.claimantUserIds), submission state overlaid. */
   readonly claims = computed<ClaimRow[]>(() => {
+    const t = this.task();
+    if (!t) return [];
     const latest = new Map<string, Submission>();
     for (const s of this.submissions()) {
       const cur = latest.get(s.claimantUserId);
       if (!cur || s.submissionNo > cur.submissionNo) latest.set(s.claimantUserId, s);
     }
-    return [...latest.values()].map((s) => ({
-      userId: s.claimantUserId,
-      name: this.lookup.userName(s.claimantUserId),
-      version: s.submissionNo,
-      state: s.state,
-    }));
+    return t.claimantUserIds.map((userId) => {
+      const sub = latest.get(userId);
+      return {
+        userId,
+        name: this.lookup.userName(userId),
+        version: sub?.submissionNo ?? null,
+        state: sub?.state ?? null,
+      };
+    });
   });
 
   /** True when every claimant has an approved submission. */
@@ -385,14 +391,12 @@ export class TaskDetailComponent implements OnInit {
   stamp(t: Task): string { return stampStatus(t.statusCache); }
   stampMod(t: Task): string { return stampClass(t.statusCache); }
   multi(t: Task): boolean { return isMultiClaim(t); }
-  filledPips(): unknown[] { return new Array(this.claims().length); }
   openPips(t: Task): unknown[] { return new Array(Math.max(0, t.openings - this.claims().length)); }
   shortType(type: string): string { return type.replace('_text', '').replace('multiline', 'text'); }
   stateColor(state: string): string {
     return { review: '#8a6a0c', revising: '#99492f', approved: '#0a5249', rejected: '#99492f' }[state] ?? '#5b605c';
   }
   isCurrentUser(userId: string): boolean { return this.auth.user()?.id === userId; }
-  hasOpenSlots(t: Task): boolean { return this.claims().length < t.openings && !t.claimsClosed; }
 
   ngOnInit(): void {
     void this.lookup.ensureLoaded();
@@ -473,18 +477,9 @@ export class TaskDetailComponent implements OnInit {
   // ---- claim-strip actions ----
   claim(t: Task): void { void this.run(this.api.claimTask(t.id), 'Claimed an opening'); }
   leave(t: Task): void { void this.run(this.api.leaveTask(t.id), 'Left the task'); }
-  addOpening(t: Task): void { void this.run(this.api.manageClaims(t.id, { openingsDelta: 1 }), 'Opening added'); }
-  toggleClaims(t: Task): void {
-    void this.run(
-      this.api.manageClaims(t.id, { claimsClosed: !t.claimsClosed }),
-      t.claimsClosed ? 'Claims reopened' : 'Claims closed',
-    );
-  }
-  closeClaims(t: Task): void {
-    const openSlots = t.openings - this.claims().length;
-    if (openSlots <= 0) return;
-    void this.run(this.api.manageClaims(t.id, { openingsDelta: -openSlots }), 'Open slots removed');
-  }
+  evict(t: Task, userId: string): void { void this.run(this.api.removeClaimant(t.id, userId), 'Claimant removed'); }
+  addOpening(t: Task): void { void this.run(this.api.manageClaims(t.id, { openingsDelta: 1 }), 'Slot added'); }
+  removeSlot(t: Task): void { void this.run(this.api.manageClaims(t.id, { openingsDelta: -1 }), 'Slot removed'); }
   complete(t: Task): void { void this.run(this.api.completeTask(t.id), 'Task marked complete'); }
 
   confirmRetire(t: Task): void {

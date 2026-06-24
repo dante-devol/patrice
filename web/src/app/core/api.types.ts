@@ -239,6 +239,7 @@ export interface Task {
   version: number;
   createdAt: string;
   updatedAt: string;
+  claimantUserIds: string[];
 }
 
 export interface TaskListResult {
