@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-import { ExternalGroupMapping, IntegrationConnection, Role } from '../../core/api.types';
+import { ExternalGroupMapping, IntegrationConnection, Role, SyncDirection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 
 interface ConnectionRow extends IntegrationConnection {
