@@ -8,6 +8,9 @@ interface ConnectionRow extends IntegrationConnection {
   mappings: ExternalGroupMapping[];
   expanded: boolean;
   syncBusy: boolean;
+  _newRoleId: string;
+  _newGroupId: string;
+  _newDirection: SyncDirection | '';
 }
 
 /**
@@ -145,7 +148,7 @@ interface ConnectionRow extends IntegrationConnection {
 
               <!-- Add mapping form -->
               <div class="add-mapping-form">
-                <select [(ngModel)]="c['_newRoleId']">
+                <select [(ngModel)]="c._newRoleId">
                   <option value="">Patrice role…</option>
                   @for (r of roles(); track r.id) {
                     @if (r.lifecycleState === 'active') {
@@ -153,15 +156,15 @@ interface ConnectionRow extends IntegrationConnection {
                     }
                   }
                 </select>
-                <input [(ngModel)]="c['_newGroupId']" placeholder="Discord role snowflake ID"
+                <input [(ngModel)]="c._newGroupId" placeholder="Discord role snowflake ID"
                        style="font-family:monospace" />
-                <select [(ngModel)]="c['_newDirection']">
+                <select [(ngModel)]="c._newDirection">
                   <option value="inbound">inbound</option>
                   <option value="outbound">outbound</option>
                   <option value="bidirectional">bidirectional</option>
                 </select>
                 <button
-                  [disabled]="busy() || !c['_newRoleId'] || !c['_newGroupId']"
+                  [disabled]="busy() || !c._newRoleId || !c._newGroupId"
                   (click)="addMapping(c)">
                   Add mapping
                 </button>
@@ -219,7 +222,7 @@ export class IntegrationsAdminComponent {
             _newRoleId: '',
             _newGroupId: '',
             _newDirection: 'inbound',
-          } as ConnectionRow & Record<string, unknown>;
+          } as ConnectionRow;
         }),
       );
       this.connections.set(rows);
@@ -262,18 +265,18 @@ export class IntegrationsAdminComponent {
     }
   }
 
-  async addMapping(c: ConnectionRow & Record<string, unknown>): Promise<void> {
+  async addMapping(c: ConnectionRow): Promise<void> {
     this.busy.set(true);
     this.error.set(null);
     try {
       const m = await this.api.createMapping(c.id, {
-        roleId: c['_newRoleId'] as string,
-        externalGroupId: c['_newGroupId'] as string,
-        syncDirection: (c['_newDirection'] as string) as 'inbound' | 'outbound' | 'bidirectional',
+        roleId: c._newRoleId,
+        externalGroupId: c._newGroupId,
+        syncDirection: c._newDirection as SyncDirection,
       });
       c.mappings = [...c.mappings, m];
-      c['_newRoleId'] = '';
-      c['_newGroupId'] = '';
+      c._newRoleId = '';
+      c._newGroupId = '';
       this.connections.update((cs) => [...cs]);
     } catch (e) {
       this.error.set(errorMessage(e));

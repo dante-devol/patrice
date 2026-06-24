@@ -74,6 +74,7 @@ export class IntegrationsController {
   }
 
   @Post(':id/retire')
+  @HttpCode(200)
   @Authorize(ACTIONS.integrationRetire.action, orgResource)
   async retire(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
@@ -81,6 +82,7 @@ export class IntegrationsController {
   }
 
   @Post(':id/revive')
+  @HttpCode(200)
   @Authorize(ACTIONS.integrationRevive.action, orgResource)
   async revive(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();

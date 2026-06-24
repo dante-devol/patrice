@@ -90,7 +90,8 @@ export class IntegrationsService {
   }
 
   async retire(id: string, actorUserId: string) {
-    const connection = await this.loadActive(id);
+    const connection = await this.prisma.integrationConnection.findUnique({ where: { id } });
+    if (!connection) throw new NotFoundError('CONNECTION_NOT_FOUND', 'Integration connection not found');
     if (connection.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('ALREADY_RETIRED', 'Integration connection is already retired');
     }
@@ -356,7 +357,9 @@ export class IntegrationsService {
 
   async loadActive(id: string) {
     const connection = await this.prisma.integrationConnection.findUnique({ where: { id } });
-    if (!connection) throw new NotFoundError('CONNECTION_NOT_FOUND', 'Integration connection not found');
+    if (!connection || connection.lifecycleState !== LifecycleState.active) {
+      throw new NotFoundError('CONNECTION_NOT_FOUND', 'Integration connection not found');
+    }
     return connection;
   }
 }
