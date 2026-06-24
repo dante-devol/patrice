@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patrice — My work</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: {
+          sans: ['"IBM Plex Sans"','system-ui','sans-serif'],
+          serif: ['"IBM Plex Serif"','Georgia','serif'],
+          mono: ['"IBM Plex Mono"','ui-monospace','monospace'],
+        },
+        colors: {
+          board:'#E7E8E1', paper:'#FBFBF8', ink:'#191B19', 'ink-soft':'#5B605C',
+          line:'#D3D5CC', accent:'#0F7A6B', 'accent-ink':'#0A5249',
+          div:{
+            writing:'#3C5BA0', art:'#B0573C', scripting:'#2E7D5B',
+            testing:'#7E54A3', leadership:'#A9810F'
+          },
+        },
+        boxShadow:{ card:'0 1px 0 rgba(25,27,25,0.04), 0 1px 2px rgba(25,27,25,0.05)' },
+      }},
+    };
+  </script>
+  <style>
+    :root {
+      --div-writing:#3C5BA0; --div-art:#B0573C; --div-scripting:#2E7D5B;
+      --div-testing:#7E54A3; --div-leadership:#A9810F;
+      --team-usa:#4F6D7A; --team-artists:#6D5F7A;
+      --accent:#0F7A6B;
+    }
+    body { background-color:#E7E8E1; color:#191B19; }
+    .board-grain {
+      background-image: radial-gradient(circle at 1px 1px, rgba(25,27,25,0.035) 1px, transparent 0);
+      background-size:22px 22px;
+    }
+
+    /* Division spines */
+    .spine { width:4px; border-radius:4px; align-self:stretch; background:var(--c); flex:none; }
+    .spine--user { width:6px; border-radius:4px; align-self:stretch; background:var(--user-c); flex:none; }
+
+    /* Facet tags */
+    .dtag, .ttag {
+      font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:500;
+      letter-spacing:0.06em; text-transform:uppercase;
+      display:inline-flex; align-items:center; gap:6px;
+    }
+    .dtag { color:var(--c); }
+    .dtag::before { content:''; width:7px; height:7px; border-radius:2px; background:var(--c); }
+    .ttag { color:var(--tc); }
+    .ttag::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--tc); }
+
+    /* Rubber stamps */
+    .stamp {
+      font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:600;
+      letter-spacing:0.14em; text-transform:uppercase; line-height:1;
+      padding:5px 8px 4px; border:1.5px solid currentColor; border-radius:3px;
+      display:inline-block; white-space:nowrap;
+    }
+    .stamp--open    { color:#8B9089; border-style:dashed; }
+    .stamp--claimed { color:#3F443F; background:rgba(63,68,63,0.06); }
+    .stamp--review  { color:#8A6A0C; background:rgba(169,129,15,0.10); }
+    .stamp--revising{ color:#99492F; background:rgba(176,87,60,0.10); }
+    .stamp--approved{ color:#0A5249; background:rgba(15,122,107,0.12); border-style:double; border-width:3px; }
+
+    /* Avatars */
+    .avatar {
+      border-radius:50%; display:grid; place-items:center;
+      font-family:'IBM Plex Mono',monospace; font-weight:600;
+      color:#FBFBF8; overflow:hidden; flex:none;
+    }
+
+    /* Slot gauge */
+    .gauge { display:inline-flex; align-items:center; gap:5px; }
+    .pip { width:9px; height:9px; border-radius:50%; }
+    .pip--filled { background:var(--accent); }
+    .pip--open { border:1.5px solid #A7ABA3; }
+    .gauge-n { font-family:'IBM Plex Mono',monospace; font-size:12px; color:#5B605C; }
+
+    /* ─── Ledger stat strip ─── */
+    .stat-strip {
+      display:flex; align-items:stretch;
+      border:1px solid #D3D5CC; border-radius:6px;
+      background:rgba(231,232,225,0.45); overflow:hidden;
+    }
+    .stat-cell {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:3px; padding:10px 18px;
+    }
+    .stat-cell + .stat-cell { border-left:1px solid #D3D5CC; }
+    .stat-cell--done {
+      background:rgba(15,122,107,0.05);
+      border-left:1.5px solid rgba(15,122,107,0.2) !important;
+    }
+    .stat-label {
+      font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:600;
+      letter-spacing:0.18em; text-transform:uppercase; color:#5B605C;
+    }
+    .stat-num {
+      font-family:'IBM Plex Mono',monospace; font-size:24px; font-weight:600;
+      line-height:1; color:#191B19;
+    }
+    .stat-num--accent { color:#0F7A6B; }
+    .stat-num--muted  { color:#8B9089; }
+
+    /* ─── Ticket cards ─── */
+    .ticket { transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease; }
+    .ticket:hover { transform:translateY(-1px); box-shadow:0 4px 14px -6px rgba(25,27,25,0.22); border-color:#C4C7BD; }
+    .chip { transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
+
+    /* ─── Filter strip ─── */
+    .filter-btn { padding:6px 12px; font-size:11.5px; }
+    .filter-btn.is-active { background:#191B19; color:#FBFBF8; }
+
+    /* ─── Done section ─── */
+    .done-sep {
+      display:flex; align-items:center; gap:12px; margin:24px 0 14px;
+    }
+    .done-sep::before, .done-sep::after {
+      content:''; flex:1; height:1px; background:#D3D5CC;
+    }
+    .done-sep-label {
+      font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:600;
+      letter-spacing:0.18em; text-transform:uppercase; color:#8B9089;
+      padding:3px 10px; border:1px solid #D3D5CC; border-radius:2px;
+    }
+    .task-done { opacity:0.72; }
+    .task-done:hover { opacity:1; transition:opacity .14s ease; }
+
+    /* ─── Misc ─── */
+    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .verified-badge {
+      font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:600;
+      letter-spacing:0.12em; text-transform:uppercase;
+      color:#0A5249; background:rgba(15,122,107,0.1);
+      border:1px solid rgba(15,122,107,0.25); border-radius:3px;
+      padding:2px 7px;
+    }
+    .task-row { display:none; }
+    .task-row.visible { display:block; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ticket, .chip { transition:none; }
+      .ticket:hover { transform:none; }
+    }
+  </style>
+</head>
+
+<body class="board-grain font-sans">
+
+  <!-- ─── App header ─────────────────────────────────────────────────── -->
+  <header class="border-b border-line bg-board/80 backdrop-blur sticky top-0 z-10">
+    <div class="mx-auto max-w-[1080px] px-5 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-[13px] font-semibold tracking-[0.18em] text-ink border border-ink/70 rounded px-2 py-1 leading-none">PATRICE</span>
+        <nav class="hidden sm:flex items-center gap-5 text-[13.5px] text-ink-soft">
+          <a href="#" class="text-ink font-medium border-b-2 border-accent pb-[2px]">My work</a>
+          <a href="#" class="hover:text-ink transition-colors">Tasks</a>
+          <a href="#" class="hover:text-ink transition-colors">Divisions</a>
+          <a href="#" class="hover:text-ink transition-colors">Invitations</a>
+        </nav>
+      </div>
+      <div class="flex items-center gap-3 text-[13px] text-ink-soft">
+        <!-- Notification bell -->
+        <button class="relative p-1.5 hover:text-ink transition-colors" aria-label="Notifications (2 unread)">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+          </svg>
+          <span class="absolute top-[5px] right-[5px] w-[7px] h-[7px] rounded-full bg-accent border-2 border-board"></span>
+        </button>
+        <span class="font-mono text-[12px]">USA · Writing</span>
+        <span class="avatar w-7 h-7 text-[11px]" style="background:#3C5BA0">DV</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-[1080px] px-5 py-7">
+
+    <!-- ─── Identity / ledger card ─────────────────────────────────── -->
+    <!--
+      Signature move: the user is treated as a ledger entry — name in Serif (like a task title),
+      stats in a tabular mono strip that echoes the rubber stamps used on tasks.
+      The 6px left spine carries their division color, same grammar as task cards.
+    -->
+    <div class="flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-5 py-5 mb-8"
+         style="--user-c: var(--div-writing)">
+      <div class="spine--user"></div>
+
+      <div class="flex-1 flex flex-col sm:flex-row sm:items-center gap-5 min-w-0">
+
+        <!-- Avatar + identity -->
+        <div class="flex items-center gap-4 min-w-0 flex-1">
+          <span class="avatar w-[52px] h-[52px] text-[17px]" style="background:#3C5BA0">DV</span>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="font-serif text-[22px] font-semibold leading-tight">Dante Velasco</h1>
+              <span class="verified-badge">verified</span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap mt-1">
+              <span class="dtag text-[11px]" style="--c:var(--div-writing)">Writing</span>
+              <span class="font-mono text-[11px] text-line select-none">·</span>
+              <span class="ttag text-[11px]" style="--tc:var(--team-usa)">USA</span>
+              <span class="font-mono text-[11px] text-line select-none">·</span>
+              <span class="font-mono text-[11px] text-ink-soft">calphff@gmail.com</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ledger stat strip: label over number, divided by hairlines -->
+        <div class="stat-strip shrink-0">
+          <div class="stat-cell">
+            <span class="stat-label">Active</span>
+            <span class="stat-num stat-num--accent">5</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-label">Claimed</span>
+            <span class="stat-num">3</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-label">Review</span>
+            <span class="stat-num">2</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-label">Revising</span>
+            <span class="stat-num stat-num--muted">0</span>
+          </div>
+          <div class="stat-cell stat-cell--done">
+            <span class="stat-label" style="color:#0A5249">Approved</span>
+            <span class="stat-num stat-num--muted">23</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ─── My tasks ──────────────────────────────────────────────────── -->
+    <div class="flex items-end justify-between gap-4 mb-4">
+      <div>
+        <div class="font-mono text-[11.5px] tracking-[0.16em] uppercase text-ink-soft mb-1">My work</div>
+        <h2 class="font-serif text-[26px] leading-[1.05] font-semibold">
+          5 active
+          <span class="text-ink-soft font-serif">· 23 approved</span>
+        </h2>
+      </div>
+    </div>
+
+    <!-- Filter strip + done toggle -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="inline-flex rounded-md border border-line bg-paper overflow-hidden font-mono uppercase tracking-[0.08em]"
+           role="group" aria-label="Filter by status">
+        <button class="filter-btn is-active" data-filter="all">All active</button>
+        <button class="filter-btn border-l border-line text-ink-soft hover:text-ink" data-filter="claimed">Claimed</button>
+        <button class="filter-btn border-l border-line text-ink-soft hover:text-ink" data-filter="review">Review</button>
+        <button class="filter-btn border-l border-line text-ink-soft hover:text-ink" data-filter="revising">Revising</button>
+      </div>
+      <button id="toggle-done"
+        class="font-mono text-[11.5px] uppercase tracking-[0.08em] text-ink-soft
+               border border-line bg-paper rounded-md px-3 py-[6px]
+               hover:text-ink hover:border-ink/40 flex items-center gap-2 transition-colors">
+        <span id="done-btn-label">Show done</span>
+        <span class="stamp stamp--approved" style="font-size:9px;padding:3px 6px 2px;letter-spacing:0.1em">23</span>
+      </button>
+    </div>
+
+    <!-- Task list -->
+    <ul class="flex flex-col gap-2.5" id="task-list">
+
+      <!-- Claimed · Writing -->
+      <li class="task-row visible" data-status="claimed">
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+           style="--c:var(--div-writing); --tc:var(--team-usa)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Write merchant barks — 20 lines</h3>
+              <span class="font-mono text-[12px] text-ink-soft">#d2e3</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Short, repeatable merchant lines for the market district. Two writers welcome.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Writing</span>
+              <span class="ttag">USA</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Maya · 1d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--claimed">claimed</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Claimed · Testing -->
+      <li class="task-row visible" data-status="claimed">
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+           style="--c:var(--div-testing); --tc:var(--team-usa)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Regression pass — Act I quest flags</h3>
+              <span class="font-mono text-[12px] text-ink-soft">#b3a0</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Walk every Act I branch; confirm flags clear on completion. Custom test form attached.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Testing</span>
+              <span class="ttag">USA</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Aric · 2d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--claimed">claimed</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Claimed · Scripting -->
+      <li class="task-row visible" data-status="claimed">
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+           style="--c:var(--div-scripting)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Implement cutscene skip handler</h3>
+              <span class="font-mono text-[12px] text-ink-soft">#f1c2</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Wire the skip-input binding to the cutscene manager; needs fallback for non-skippable scenes.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Scripting</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Joon · 3d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--claimed">claimed</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Review · Writing -->
+      <li class="task-row visible" data-status="review">
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+           style="--c:var(--div-writing)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Localize Chapter 3 — tavern dialogue</h3>
+              <span class="font-mono text-[12px] text-ink-soft">#a1f2</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Pass over the 40 tavern barks; keep cadence loose and in-character. Submitted v1 — awaiting review.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Writing</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Devin · 5d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--review">review</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Review · Art -->
+      <li class="task-row visible" data-status="review">
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+           style="--c:var(--div-art)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Tavern interior — concept sheet</h3>
+              <span class="font-mono text-[12px] text-ink-soft">#93cd</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Three mood frames for the riverside tavern — warm lamplight, late evening. Submitted for review.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Art</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Sela · 6h</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--review">review</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+          </div>
+        </a>
+      </li>
+
+    </ul>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="hidden py-12 text-center">
+      <p class="font-mono text-[11.5px] uppercase tracking-[0.14em] text-ink-soft">No active tasks match this filter</p>
+    </div>
+
+    <!-- ─── Done section (hidden until toggled) ───────────────────── -->
+    <div id="done-section" class="hidden">
+      <div class="done-sep">
+        <span class="done-sep-label">Done · 23 approved</span>
+      </div>
+
+      <ul class="flex flex-col gap-2.5">
+
+        <!-- Approved · Writing -->
+        <li>
+          <a href="task-detail.html" class="task-done ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+             style="--c:var(--div-writing)">
+            <div class="spine"></div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Draft the Act II briefing notes</h3>
+                <span class="font-mono text-[12px] text-ink-soft">#8ba0</span>
+              </div>
+              <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Summary of Act II story beats for the writing team. Approved 2 weeks ago.</p>
+              <div class="flex items-center gap-3 mt-2">
+                <span class="dtag">Writing</span>
+                <span class="font-mono text-[12px] text-ink-soft">requested by Devin · 18d</span>
+              </div>
+            </div>
+            <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+              <span class="stamp stamp--approved">approved</span>
+              <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+            </div>
+          </a>
+        </li>
+
+        <!-- Approved · Leadership -->
+        <li>
+          <a href="task-detail.html" class="task-done ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+             style="--c:var(--div-leadership)">
+            <div class="spine"></div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Sign off Act I voice direction</h3>
+                <span class="font-mono text-[12px] text-ink-soft">#c4d1</span>
+              </div>
+              <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Final review of the Act I VO brief before recording opens.</p>
+              <div class="flex items-center gap-3 mt-2">
+                <span class="dtag">Leadership</span>
+                <span class="font-mono text-[12px] text-ink-soft">requested by Devin · 11d</span>
+              </div>
+            </div>
+            <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+              <span class="stamp stamp--approved">approved</span>
+              <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+            </div>
+          </a>
+        </li>
+
+        <!-- Approved · Scripting -->
+        <li>
+          <a href="task-detail.html" class="task-done ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
+             style="--c:var(--div-scripting)">
+            <div class="spine"></div>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <h3 class="font-serif text-[17px] font-semibold leading-tight truncate">Port save-system to the v2 schema</h3>
+                <span class="font-mono text-[12px] text-ink-soft">#77be</span>
+              </div>
+              <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Migrated legacy save blobs; backwards-compat shim included per Joon's notes.</p>
+              <div class="flex items-center gap-3 mt-2">
+                <span class="dtag">Scripting</span>
+                <span class="font-mono text-[12px] text-ink-soft">requested by Joon · 3w</span>
+              </div>
+            </div>
+            <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+              <span class="stamp stamp--approved">approved</span>
+              <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#3C5BA0" title="Dante Velasco">DV</span>
+            </div>
+          </a>
+        </li>
+
+        <!-- Load more -->
+        <li>
+          <button class="w-full font-mono text-[12px] uppercase tracking-[0.1em] text-ink-soft
+                         border border-dashed border-line bg-paper/60 rounded-lg px-4 py-3
+                         hover:text-ink hover:border-ink/30 transition-colors">
+            show 20 more approved tasks →
+          </button>
+        </li>
+
+      </ul>
+    </div>
+
+  </main>
+
+  <script>
+    // Status filter
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const taskRows   = document.querySelectorAll('.task-row');
+    const emptyState = document.getElementById('empty-state');
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filter = btn.dataset.filter;
+
+        filterBtns.forEach(b => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+
+        let visible = 0;
+        taskRows.forEach(row => {
+          const show = filter === 'all' || row.dataset.status === filter;
+          row.classList.toggle('visible', show);
+          if (show) visible++;
+        });
+
+        emptyState.classList.toggle('hidden', visible > 0);
+      });
+    });
+
+    // Done section toggle
+    const toggleDoneBtn  = document.getElementById('toggle-done');
+    const doneBtnLabel   = document.getElementById('done-btn-label');
+    const doneSection    = document.getElementById('done-section');
+    let showingDone = false;
+
+    toggleDoneBtn.addEventListener('click', () => {
+      showingDone = !showingDone;
+      doneSection.classList.toggle('hidden', !showingDone);
+      doneBtnLabel.textContent = showingDone ? 'Hide done' : 'Show done';
+    });
+  </script>
+
+</body>
+</html>

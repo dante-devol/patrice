@@ -1,42 +1,67 @@
-import { Component, inject } from '@angular/core';
-import { RouterLink, RouterOutlet, Router } from '@angular/router';
+import { Component, computed, inject } from '@angular/core';
+import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
+import { NgxSonnerToaster } from 'ngx-sonner';
 import { AuthStore } from './core/auth.store';
 import { NotificationBellComponent } from './features/notifications/notification-bell.component';
+import { avatarColor, initials } from './pages/tasks/task-presentation';
 
+/**
+ * App shell. The header carries the drafting-board identity app-wide: the PATRICE
+ * wordmark (mono, boxed), the primary nav with an accent underline on the active
+ * route, and the signed-in user's avatar. It's the design-spike header, wired to the
+ * real auth/nav state. `.appshell` opts the header into the scoped element reset so
+ * its Tailwind-styled controls aren't touched by the global semantic styles.
+ */
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, NotificationBellComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NotificationBellComponent, NgxSonnerToaster],
   template: `
-    <nav class="appbar">
-      <strong>Patrice</strong>
-      @if (auth.isAuthenticated()) {
-        <a routerLink="/home">Home</a>
-        <a routerLink="/tasks">Tasks</a>
-        @if (auth.canInvite()) {
-          <a routerLink="/invitations">Invitations</a>
-        }
-        @if (auth.canManageOrg()) {
-          <a routerLink="/admin">Admin</a>
-        }
-      }
-      <span class="spacer"></span>
-      @if (auth.isAuthenticated()) {
-        <app-notification-bell />
-        <span class="muted">{{ auth.user()?.displayName }}</span>
-        <button class="secondary" (click)="logout()">Log out</button>
-      } @else {
-        <a routerLink="/login">Log in</a>
-      }
-    </nav>
+    <header class="appshell border-b border-line bg-board/80 backdrop-blur sticky top-0 z-20">
+      <div class="mx-auto max-w-[1080px] px-5 h-14 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <a routerLink="/home" class="font-mono text-[13px] font-semibold tracking-[0.18em] text-ink border border-ink/70 rounded px-2 py-1 leading-none">PATRICE</a>
+          @if (auth.isAuthenticated()) {
+            <nav class="hidden sm:flex items-center gap-5 text-[13.5px] text-ink-soft">
+              <a routerLink="/home" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Home</a>
+              <a routerLink="/tasks" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Tasks</a>
+              @if (auth.canInvite()) {
+                <a routerLink="/invitations" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Invitations</a>
+              }
+              @if (auth.canManageOrg()) {
+                <a routerLink="/admin" routerLinkActive="text-ink font-medium border-b-2 border-accent" class="pb-[2px] hover:text-ink">Admin</a>
+              }
+            </nav>
+          }
+        </div>
+
+        <div class="flex items-center gap-3.5 text-[13px] text-ink-soft">
+          @if (auth.isAuthenticated()) {
+            <app-notification-bell />
+            <span class="hidden sm:inline font-medium text-ink">{{ name() }}</span>
+            <span class="avatar w-7 h-7 text-[11px]" [style.background]="avatarBg()">{{ avatarLabel() }}</span>
+            <button class="font-mono text-[12px] text-ink-soft hover:text-ink" (click)="logout()">log out</button>
+          } @else {
+            <a routerLink="/login" class="font-mono text-[12.5px] text-ink-soft hover:text-ink">log in</a>
+          }
+        </div>
+      </div>
+    </header>
+
     <div class="container">
       <router-outlet />
     </div>
+
+    <ngx-sonner-toaster position="bottom-right" />
   `,
 })
 export class AppComponent {
   readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
+
+  readonly name = computed(() => this.auth.user()?.displayName ?? '');
+  readonly avatarLabel = computed(() => initials(this.name() || '?'));
+  readonly avatarBg = computed(() => avatarColor(this.auth.user()?.id ?? this.name()));
 
   async logout(): Promise<void> {
     await this.auth.logout();

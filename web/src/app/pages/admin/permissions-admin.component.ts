@@ -35,7 +35,8 @@ const CELL_SCOPES: ScopeKind[] = ['global', 'own_division', 'own_team', 'own'];
                 <td><code>{{ a }}</code></td>
                 @for (r of activeRoles(); track r.id) {
                   <td>
-                    <select [ngModel]="cellScope(r.id, a)"
+                    <select [class]="scopeClass(cellScope(r.id, a))"
+                            [ngModel]="cellScope(r.id, a)"
                             (ngModelChange)="setCell(r.id, a, $event)">
                       <option value="">—</option>
                       @for (s of cellScopes; track s) { <option [value]="s">{{ s }}</option> }
@@ -143,6 +144,9 @@ export class PermissionsAdminComponent {
   }
   cellScope(roleId: string, action: string): string {
     return this.cellGrant(roleId, action)?.scopeKind ?? '';
+  }
+  scopeClass(scope: string): string {
+    return `perm-scope perm-scope--${scope || 'empty'}`;
   }
   isTargeted(roleId: string, action: string): boolean {
     const s = this.cellGrant(roleId, action)?.scopeKind;

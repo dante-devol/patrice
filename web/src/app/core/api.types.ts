@@ -21,6 +21,7 @@ export interface Role {
   lifecycleState: Lifecycle;
   retiredAt: string | null;
   version: number;
+  color: string | null;
 }
 
 export interface Division {
@@ -33,6 +34,7 @@ export interface Division {
   retiredAt: string | null;
   version: number;
   inherentRoleId: string;
+  color: string | null;
 }
 
 export interface Team {
@@ -43,6 +45,7 @@ export interface Team {
   retiredAt: string | null;
   version: number;
   inherentRoleId: string;
+  color: string | null;
 }
 
 export type ScopeKind =

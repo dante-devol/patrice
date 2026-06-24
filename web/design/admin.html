@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patrice — Administration</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: {
+          sans: ['"IBM Plex Sans"','system-ui','sans-serif'],
+          serif: ['"IBM Plex Serif"','Georgia','serif'],
+          mono: ['"IBM Plex Mono"','ui-monospace','monospace'],
+        },
+        colors: {
+          board:'#E7E8E1', paper:'#FBFBF8', ink:'#191B19', 'ink-soft':'#5B605C',
+          line:'#D3D5CC', accent:'#0F7A6B', 'accent-ink':'#0A5249', clay:'#99492F',
+          div:{
+            writing:'#3C5BA0', art:'#B0573C', scripting:'#2E7D5B',
+            testing:'#7E54A3', leadership:'#A9810F'
+          },
+        },
+        boxShadow:{ card:'0 1px 0 rgba(25,27,25,0.04), 0 1px 2px rgba(25,27,25,0.05)' },
+      }},
+    };
+  </script>
+  <style>
+    :root {
+      --div-writing:#3C5BA0; --div-art:#B0573C; --div-scripting:#2E7D5B;
+      --div-testing:#7E54A3; --div-leadership:#A9810F;
+      --team-usa:#4F6D7A;
+      --accent:#0F7A6B;
+    }
+    body { background-color:#E7E8E1; color:#191B19; }
+    .board-grain {
+      background-image: radial-gradient(circle at 1px 1px, rgba(25,27,25,0.035) 1px, transparent 0);
+      background-size:22px 22px;
+    }
+
+    /* Avatars */
+    .avatar {
+      border-radius:50%; display:grid; place-items:center;
+      font-family:'IBM Plex Mono',monospace; font-weight:600; color:#FBFBF8; flex:none;
+    }
+
+    /* Rubber stamps — reused for lifecycle states */
+    .stamp {
+      font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600;
+      letter-spacing:0.13em; text-transform:uppercase; line-height:1;
+      padding:4px 7px 3px; border:1.5px solid currentColor; border-radius:3px;
+      display:inline-block; white-space:nowrap;
+    }
+    .stamp--active    { color:#3F443F; background:rgba(63,68,63,0.05); }
+    .stamp--deactivated { color:#8A6A0C; background:rgba(169,129,15,0.08); border-style:dashed; }
+    .stamp--retired   { color:#8B9089; border-style:dashed; }
+
+    /* Kind badges (roles) */
+    .kind-badge {
+      font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:500;
+      letter-spacing:0.08em; text-transform:uppercase;
+      display:inline-flex; align-items:center; gap:5px;
+      padding:3px 7px; border-radius:99px; border:1px solid currentColor;
+    }
+    .kind-badge--standalone { color:#5B605C; border-color:#C4C7BD; }
+    .kind-badge--division   { color:var(--div-writing); border-color:var(--div-writing); }
+    .kind-badge--team       { color:#4F6D7A; border-color:#4F6D7A; }
+
+    /* Role pill (user table) */
+    .role-pill {
+      font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:500;
+      letter-spacing:0.06em; text-transform:uppercase;
+      display:inline-flex; align-items:center; gap:4px;
+      padding:3px 8px; border-radius:3px;
+      background:rgba(25,27,25,0.06); color:#3F443F; border:1px solid #D3D5CC;
+    }
+    .role-pill button {
+      background:none; border:none; cursor:pointer; padding:0; margin-left:2px;
+      font-size:12px; line-height:1; color:#8B9089; font-family:inherit;
+    }
+    .role-pill button:hover { color:#99492F; }
+
+    /* ─── Admin tab bar ─── */
+    .admin-tabs {
+      display:flex; border-bottom:1px solid #D3D5CC;
+      margin-bottom:0; background:#E7E8E1; position:sticky; top:56px; z-index:9;
+    }
+    .admin-tab {
+      font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:500;
+      letter-spacing:0.1em; text-transform:uppercase;
+      padding:10px 16px; border:none; background:none; cursor:pointer; color:#5B605C;
+      border-bottom:2px solid transparent; margin-bottom:-1px;
+      transition:color .12s ease, border-color .12s ease;
+    }
+    .admin-tab:hover { color:#191B19; }
+    .admin-tab.is-active { color:#191B19; border-bottom-color:#0F7A6B; }
+
+    /* ─── Content card ─── */
+    .admin-card {
+      background:#FBFBF8; border:1px solid #D3D5CC; border-radius:8px;
+      box-shadow:0 1px 0 rgba(25,27,25,0.04), 0 1px 2px rgba(25,27,25,0.05);
+      overflow:hidden;
+    }
+    .admin-card-header {
+      padding:18px 22px 14px; border-bottom:1px solid #E7E8E1;
+      display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;
+    }
+
+    /* ─── Create form strip ─── */
+    .create-strip {
+      padding:14px 22px; border-bottom:1px solid #E7E8E1;
+      display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    }
+    .create-strip .field-input {
+      font-family:'IBM Plex Sans',sans-serif; font-size:13.5px;
+      padding:7px 12px; border:1px solid #D3D5CC; border-radius:6px;
+      background:#FBFBF8; color:#191B19; outline:none; flex:1; min-width:180px;
+    }
+    .create-strip .field-input:focus {
+      border-color:#0F7A6B; box-shadow:0 0 0 2px rgba(15,122,107,0.12);
+    }
+    .create-strip .field-input::placeholder { color:#A7ABA3; }
+    .btn-primary {
+      font-family:'IBM Plex Sans',sans-serif; font-size:13.5px; font-weight:500;
+      padding:7px 16px; border-radius:6px; border:none; cursor:pointer;
+      background:#0F7A6B; color:#FBFBF8; white-space:nowrap;
+      transition:background .12s ease;
+    }
+    .btn-primary:hover { background:#0A5249; }
+    .btn-primary:disabled { opacity:0.45; cursor:not-allowed; }
+
+    /* ─── Data table ─── */
+    .data-table { width:100%; border-collapse:collapse; }
+    .data-table th {
+      font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:600;
+      letter-spacing:0.12em; text-transform:uppercase; color:#5B605C;
+      padding:9px 14px 8px; text-align:left; border-bottom:1px solid #E7E8E1;
+      background:#F4F4F1; white-space:nowrap;
+    }
+    .data-table td {
+      font-size:13.5px; padding:10px 14px; border-bottom:1px solid #F0F0EC;
+      vertical-align:middle;
+    }
+    .data-table tbody tr:last-child td { border-bottom:none; }
+    .data-table tbody tr:hover td { background:rgba(15,122,107,0.025); }
+    .data-table tbody tr.row-retired { opacity:0.62; }
+    .data-table tbody tr.row-deactivated { opacity:0.8; }
+    .data-table .muted { color:#5B605C; font-size:12px; }
+    .data-table code {
+      font-family:'IBM Plex Mono',monospace; font-size:11.5px; font-weight:400;
+      background:rgba(25,27,25,0.05); padding:2px 6px; border-radius:3px; color:#3F443F;
+    }
+    .data-table input[type="text"],
+    .data-table input[type="number"] {
+      font-family:'IBM Plex Sans',sans-serif; font-size:13.5px;
+      padding:5px 10px; border:1px solid #D3D5CC; border-radius:5px;
+      background:#FBFBF8; color:#191B19; outline:none;
+    }
+    .data-table input[type="text"]:focus,
+    .data-table input[type="number"]:focus {
+      border-color:#0F7A6B; box-shadow:0 0 0 2px rgba(15,122,107,0.10);
+    }
+    .data-table input[type="number"] { width:72px; }
+    .data-table input[type="checkbox"] {
+      width:15px; height:15px; accent-color:#0F7A6B; cursor:pointer;
+    }
+    .data-table select {
+      font-family:'IBM Plex Sans',sans-serif; font-size:12.5px;
+      padding:5px 8px; border:1px solid #D3D5CC; border-radius:5px;
+      background:#FBFBF8; color:#191B19; outline:none; cursor:pointer;
+    }
+    .data-table select:focus { border-color:#0F7A6B; }
+
+    /* Action buttons in table cells */
+    .btn-ghost {
+      font-family:'IBM Plex Sans',sans-serif; font-size:12.5px; font-weight:500;
+      padding:4px 10px; border-radius:5px; border:1px solid #D3D5CC;
+      background:transparent; color:#3F443F; cursor:pointer; white-space:nowrap;
+      transition:background .1s ease, border-color .1s ease;
+    }
+    .btn-ghost:hover { background:#F0F0EC; border-color:#B8BBB3; }
+    .btn-ghost--danger { color:#99492F; border-color:rgba(153,73,47,0.3); }
+    .btn-ghost--danger:hover { background:rgba(153,73,47,0.06); border-color:rgba(153,73,47,0.5); }
+    .btn-ghost--revive { color:#0A5249; border-color:rgba(15,122,107,0.35); }
+    .btn-ghost--revive:hover { background:rgba(15,122,107,0.06); }
+    .btn-actions { display:flex; gap:6px; align-items:center; flex-wrap:nowrap; }
+
+    /* ─── Error / success banners ─── */
+    .admin-error {
+      margin:12px 22px; padding:10px 14px; border-radius:6px;
+      background:rgba(153,73,47,0.07); border:1px solid rgba(153,73,47,0.25);
+      color:#99492F; font-size:13px;
+    }
+    .admin-saved {
+      margin:12px 22px; padding:10px 14px; border-radius:6px;
+      background:rgba(15,122,107,0.07); border:1px solid rgba(15,122,107,0.2);
+      color:#0A5249; font-family:'IBM Plex Mono',monospace; font-size:12px;
+      font-weight:500; letter-spacing:0.06em; text-transform:uppercase;
+    }
+
+    /* ─── Permissions grid ─── */
+    .perm-grid-wrap { overflow-x:auto; max-height:50vh; overflow-y:auto; }
+    .perm-table { border-collapse:collapse; font-size:12.5px; }
+    .perm-table th {
+      font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600;
+      letter-spacing:0.1em; text-transform:uppercase; color:#5B605C;
+      padding:8px 12px; text-align:left; border-bottom:1px solid #E7E8E1;
+      background:#F4F4F1; white-space:nowrap;
+      position:sticky; top:0; z-index:2;
+    }
+    .perm-table th:first-child {
+      position:sticky; left:0; z-index:3; background:#F4F4F1;
+    }
+    .perm-table td {
+      padding:7px 12px; border-bottom:1px solid #F0F0EC; vertical-align:middle;
+    }
+    .perm-table td:first-child {
+      position:sticky; left:0; background:#FBFBF8; border-right:1px solid #E7E8E1;
+      min-width:220px;
+    }
+    .perm-table tbody tr:hover td { background:rgba(15,122,107,0.025); }
+    .perm-table tbody tr:hover td:first-child { background:rgba(15,122,107,0.04); }
+    .perm-scope {
+      font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:500;
+      letter-spacing:0.06em; padding:3px 7px 2px; border-radius:3px; border:1px solid;
+      display:inline-block; white-space:nowrap; text-transform:uppercase;
+      cursor:pointer; appearance:none; background:transparent; outline:none;
+    }
+    .perm-scope:focus { box-shadow:0 0 0 2px rgba(15,122,107,0.18); }
+    /* scope color variants — empty is muted dash */
+    .perm-scope[data-v=""]      { color:#C4C7BD; border-color:#E0E2DA; }
+    .perm-scope[data-v="global"]       { color:#0A5249; border-color:rgba(15,122,107,0.4); background:rgba(15,122,107,0.06); }
+    .perm-scope[data-v="own_division"] { color:#3C5BA0; border-color:rgba(60,91,160,0.35); background:rgba(60,91,160,0.05); }
+    .perm-scope[data-v="own_team"]     { color:#4F6D7A; border-color:rgba(79,109,122,0.35); background:rgba(79,109,122,0.05); }
+    .perm-scope[data-v="own"]          { color:#5B605C; border-color:#C4C7BD; background:rgba(25,27,25,0.04); }
+
+    /* ─── Settings groups ─── */
+    .settings-group { padding:20px 22px; border-bottom:1px solid #E7E8E1; }
+    .settings-group:last-child { border-bottom:none; }
+    .settings-group-label {
+      font-family:'IBM Plex Mono',monospace; font-size:9.5px; font-weight:600;
+      letter-spacing:0.18em; text-transform:uppercase; color:#5B605C;
+      margin-bottom:14px; display:block;
+    }
+    .setting-row {
+      display:flex; align-items:flex-start; gap:10px; padding:9px 0;
+      border-bottom:1px solid #F0F0EC;
+    }
+    .setting-row:last-child { border-bottom:none; }
+    .setting-row input[type="checkbox"] {
+      width:16px; height:16px; margin-top:1px; accent-color:#0F7A6B;
+      cursor:pointer; flex:none;
+    }
+    .setting-row-body { flex:1; }
+    .setting-label {
+      font-size:14px; font-weight:500; color:#191B19; display:block; margin-bottom:2px;
+    }
+    .setting-desc { font-size:12.5px; color:#5B605C; }
+    .setting-number-row {
+      display:flex; align-items:center; gap:10px; padding:10px 0;
+      border-bottom:1px solid #F0F0EC;
+    }
+    .setting-number-row:last-child { border-bottom:none; }
+    .setting-number-label { flex:1; font-size:14px; font-weight:500; }
+    .setting-number-desc { font-size:12.5px; color:#5B605C; display:block; margin-top:1px; }
+    .setting-number-input {
+      font-family:'IBM Plex Mono',monospace; font-size:14px;
+      padding:6px 10px; border:1px solid #D3D5CC; border-radius:6px;
+      background:#FBFBF8; color:#191B19; width:80px; text-align:right; outline:none;
+    }
+    .setting-number-input:focus { border-color:#0F7A6B; box-shadow:0 0 0 2px rgba(15,122,107,0.10); }
+    .setting-unit { font-family:'IBM Plex Mono',monospace; font-size:11px; color:#5B605C; white-space:nowrap; }
+
+    /* questionnaire expand */
+    .q-expand {
+      padding:18px 22px; background:rgba(231,232,225,0.5);
+      border-top:1px solid #E7E8E1;
+    }
+    .q-expand-label {
+      font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600;
+      letter-spacing:0.14em; text-transform:uppercase; color:#5B605C;
+      margin-bottom:10px; display:block;
+    }
+    .q-placeholder {
+      border:1.5px dashed #D3D5CC; border-radius:6px; padding:24px;
+      text-align:center; color:#8B9089; font-size:13px;
+    }
+
+    /* Tab panels */
+    .tab-panel { display:none; }
+    .tab-panel.is-active { display:block; }
+
+    /* Targeted grant form */
+    .grant-form-strip {
+      padding:16px 22px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    }
+    .grant-form-strip select {
+      font-family:'IBM Plex Sans',sans-serif; font-size:13px;
+      padding:7px 10px; border:1px solid #D3D5CC; border-radius:6px;
+      background:#FBFBF8; color:#191B19; outline:none; cursor:pointer;
+    }
+    .grant-form-strip select:focus { border-color:#0F7A6B; }
+    .grant-form-label {
+      font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:500;
+      letter-spacing:0.1em; text-transform:uppercase; color:#5B605C; white-space:nowrap;
+    }
+
+    :focus-visible { outline:2px solid #0F7A6B; outline-offset:2px; }
+    @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+  </style>
+</head>
+
+<body class="board-grain font-sans">
+
+  <!-- ─── App header ─────────────────────────────────────────────── -->
+  <header class="border-b border-line bg-board/80 backdrop-blur sticky top-0 z-10">
+    <div class="mx-auto max-w-[1080px] px-5 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-[13px] font-semibold tracking-[0.18em] text-ink border border-ink/70 rounded px-2 py-1 leading-none">PATRICE</span>
+        <nav class="hidden sm:flex items-center gap-5 text-[13.5px] text-ink-soft">
+          <a href="#" class="hover:text-ink transition-colors">My work</a>
+          <a href="#" class="hover:text-ink transition-colors">Tasks</a>
+          <a href="#" class="hover:text-ink transition-colors">Divisions</a>
+          <a href="#" class="text-ink font-medium border-b-2 border-accent pb-[2px]">Admin</a>
+        </nav>
+      </div>
+      <div class="flex items-center gap-3 text-[13px] text-ink-soft">
+        <span class="font-mono text-[12px]">USA · Writing</span>
+        <span class="avatar w-7 h-7 text-[11px]" style="background:#3C5BA0">DV</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-[1080px] px-5 py-7">
+
+    <!-- ─── Page identity ─────────────────────────────────────────── -->
+    <div class="mb-4">
+      <div class="font-mono text-[11.5px] tracking-[0.16em] uppercase text-ink-soft mb-1">Administration</div>
+      <h1 class="font-serif text-[26px] leading-[1.05] font-semibold" id="page-title">Users</h1>
+    </div>
+
+    <!-- ─── Tab bar ───────────────────────────────────────────────── -->
+    <div class="admin-tabs mb-6">
+      <button class="admin-tab" data-tab="roles">Roles</button>
+      <button class="admin-tab" data-tab="divisions">Divisions</button>
+      <button class="admin-tab" data-tab="teams">Teams</button>
+      <button class="admin-tab is-active" data-tab="users">Users</button>
+      <button class="admin-tab" data-tab="permissions">Permissions</button>
+      <button class="admin-tab" data-tab="settings">Settings</button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB: ROLES
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-roles">
+      <div class="admin-card">
+
+        <div class="admin-card-header">
+          <div>
+            <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Roles</div>
+            <p class="text-[13.5px] text-ink-soft">Standalone roles can be created and assigned freely. Division and team roles are managed automatically.</p>
+          </div>
+        </div>
+
+        <!-- Create form -->
+        <div class="create-strip">
+          <span class="font-mono text-[10px] tracking-[0.14em] uppercase text-ink-soft whitespace-nowrap">New role</span>
+          <input type="text" class="field-input" placeholder="Role name" />
+          <button class="btn-primary">Create role</button>
+        </div>
+
+        <!-- Table -->
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:40%">Name</th>
+              <th>Kind</th>
+              <th>State</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <input type="text" value="Member" style="width:180px" />
+              </td>
+              <td><span class="kind-badge kind-badge--standalone">Standalone</span></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="text" value="Admin" style="width:180px" /></td>
+              <td><span class="kind-badge kind-badge--standalone">Standalone</span></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <span class="text-[13.5px]">Writing Lead</span>
+              </td>
+              <td>
+                <span class="kind-badge" style="color:var(--div-writing);border-color:var(--div-writing)">Division</span>
+              </td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <span class="muted font-mono text-[11px]">managed by division</span>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <span class="text-[13.5px]">USA Member</span>
+              </td>
+              <td>
+                <span class="kind-badge kind-badge--team">Team</span>
+              </td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <span class="muted font-mono text-[11px]">managed by team</span>
+              </td>
+            </tr>
+            <tr class="row-retired">
+              <td>
+                <span class="text-[13.5px]">Beta Tester</span>
+              </td>
+              <td><span class="kind-badge kind-badge--standalone">Standalone</span></td>
+              <td><span class="stamp stamp--retired">Retired</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--revive">Revive</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB: DIVISIONS
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-divisions">
+      <div class="admin-card">
+
+        <div class="admin-card-header">
+          <div>
+            <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Divisions</div>
+            <p class="text-[13.5px] text-ink-soft">Each division has a claim configuration and an optional intake questionnaire for task requesters.</p>
+          </div>
+        </div>
+
+        <div class="create-strip">
+          <span class="font-mono text-[10px] tracking-[0.14em] uppercase text-ink-soft whitespace-nowrap">New division</span>
+          <input type="text" class="field-input" placeholder="Division name" />
+          <button class="btn-primary">Create division</button>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:22%">Name</th>
+              <th>Default openings</th>
+              <th title="Openings count cannot be changed per-task">Openings locked</th>
+              <th title="Only members of this division may claim its tasks">Restrict claims</th>
+              <th>State</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- Writing — with questionnaire expanded -->
+            <tr>
+              <td><input type="text" value="Writing" style="width:140px" /></td>
+              <td><input type="number" value="2" /></td>
+              <td style="text-align:center"><input type="checkbox" /></td>
+              <td style="text-align:center"><input type="checkbox" checked /></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-writing')">Questionnaire</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr id="q-writing" style="display:none">
+              <td colspan="6" style="padding:0">
+                <div class="q-expand">
+                  <span class="q-expand-label">Questionnaire — Writing</span>
+                  <div class="q-placeholder">
+                    Questionnaire builder renders here — fields, ordering, field types.<br />
+                    <span style="font-size:12px;margin-top:4px;display:block;color:#A7ABA3">questionnaire-builder component</span>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td><input type="text" value="Art" style="width:140px" /></td>
+              <td><input type="number" value="1" /></td>
+              <td style="text-align:center"><input type="checkbox" checked /></td>
+              <td style="text-align:center"><input type="checkbox" /></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-art')">Questionnaire</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr id="q-art" style="display:none">
+              <td colspan="6" style="padding:0">
+                <div class="q-expand">
+                  <span class="q-expand-label">Questionnaire — Art</span>
+                  <div class="q-placeholder">Questionnaire builder renders here.</div>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td><input type="text" value="Scripting" style="width:140px" /></td>
+              <td><input type="number" value="1" /></td>
+              <td style="text-align:center"><input type="checkbox" /></td>
+              <td style="text-align:center"><input type="checkbox" checked /></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-scripting')">Questionnaire</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr id="q-scripting" style="display:none">
+              <td colspan="6" style="padding:0">
+                <div class="q-expand">
+                  <span class="q-expand-label">Questionnaire — Scripting</span>
+                  <div class="q-placeholder">Questionnaire builder renders here.</div>
+                </div>
+              </td>
+            </tr>
+
+            <tr>
+              <td><input type="text" value="Testing" style="width:140px" /></td>
+              <td><input type="number" value="1" /></td>
+              <td style="text-align:center"><input type="checkbox" /></td>
+              <td style="text-align:center"><input type="checkbox" /></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-testing')">Questionnaire</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr id="q-testing" style="display:none">
+              <td colspan="6" style="padding:0">
+                <div class="q-expand">
+                  <span class="q-expand-label">Questionnaire — Testing</span>
+                  <div class="q-placeholder">Questionnaire builder renders here.</div>
+                </div>
+              </td>
+            </tr>
+
+            <tr class="row-retired">
+              <td><span class="text-[13.5px]">QA (merged into Testing)</span></td>
+              <td class="muted">1</td>
+              <td></td><td></td>
+              <td><span class="stamp stamp--retired">Retired</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--revive">Revive</button>
+                </div>
+              </td>
+            </tr>
+
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB: TEAMS
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-teams">
+      <div class="admin-card">
+
+        <div class="admin-card-header">
+          <div>
+            <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Teams</div>
+            <p class="text-[13.5px] text-ink-soft">Teams group members for filtering and claim restrictions. Each team has an inherent role assigned automatically.</p>
+          </div>
+        </div>
+
+        <div class="create-strip">
+          <span class="font-mono text-[10px] tracking-[0.14em] uppercase text-ink-soft whitespace-nowrap">New team</span>
+          <input type="text" class="field-input" placeholder="Team name" />
+          <button class="btn-primary">Create team</button>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:40%">Name</th>
+              <th title="Only members of this team may claim tasks restricted to it">Restrict claims</th>
+              <th>State</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><input type="text" value="USA" style="width:200px" /></td>
+              <td style="text-align:center"><input type="checkbox" /></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="text" value="Artists" style="width:200px" /></td>
+              <td style="text-align:center"><input type="checkbox" checked /></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="text" value="Development" style="width:200px" /></td>
+              <td style="text-align:center"><input type="checkbox" /></td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+            <tr class="row-retired">
+              <td><span class="text-[13.5px]">Legacy Writers</span></td>
+              <td></td>
+              <td><span class="stamp stamp--retired">Retired</span></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--revive">Revive</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB: USERS  (default active)
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel is-active" id="panel-users">
+      <div class="admin-card">
+
+        <div class="admin-card-header">
+          <div>
+            <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Users</div>
+            <p class="text-[13.5px] text-ink-soft">Assign roles and manage lifecycle state. Users join via invitation; retired accounts are anonymized if that setting is on.</p>
+          </div>
+          <span class="font-mono text-[12px] text-ink-soft self-center">7 active · 1 retired</span>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:26%">User</th>
+              <th style="width:28%">Roles</th>
+              <th>State</th>
+              <th style="width:20%">Add role</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- Active admin -->
+            <tr>
+              <td>
+                <div class="flex items-center gap-2.5">
+                  <span class="avatar w-7 h-7 text-[10px]" style="background:#3C5BA0">DV</span>
+                  <div>
+                    <div class="font-medium text-[13.5px]">Dante Velasco</div>
+                    <div class="muted">calphff@gmail.com</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  <span class="role-pill">Member <button title="Remove role">×</button></span>
+                  <span class="role-pill">Admin <button title="Remove role">×</button></span>
+                </div>
+              </td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="flex gap-1.5">
+                  <select style="font-size:12px;padding:4px 6px">
+                    <option value="">Role…</option>
+                    <option>Writing Lead</option>
+                  </select>
+                  <button class="btn-ghost" style="padding:4px 8px;font-size:12px">Add</button>
+                </div>
+              </td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost">Deactivate</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Active member -->
+            <tr>
+              <td>
+                <div class="flex items-center gap-2.5">
+                  <span class="avatar w-7 h-7 text-[10px]" style="background:#4E8C6A">MY</span>
+                  <div>
+                    <div class="font-medium text-[13.5px]">Maya Osei</div>
+                    <div class="muted">maya@example.com</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  <span class="role-pill">Member <button title="Remove role">×</button></span>
+                  <span class="role-pill">Writing Lead <button title="Remove role">×</button></span>
+                </div>
+              </td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="flex gap-1.5">
+                  <select style="font-size:12px;padding:4px 6px">
+                    <option value="">Role…</option>
+                    <option>Admin</option>
+                  </select>
+                  <button class="btn-ghost" style="padding:4px 8px;font-size:12px">Add</button>
+                </div>
+              </td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost">Deactivate</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Active member -->
+            <tr>
+              <td>
+                <div class="flex items-center gap-2.5">
+                  <span class="avatar w-7 h-7 text-[10px]" style="background:#A8763E">AR</span>
+                  <div>
+                    <div class="font-medium text-[13.5px]">Aric Park</div>
+                    <div class="muted">aric@example.com</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  <span class="role-pill">Member <button title="Remove role">×</button></span>
+                </div>
+              </td>
+              <td><span class="stamp stamp--active">Active</span></td>
+              <td>
+                <div class="flex gap-1.5">
+                  <select style="font-size:12px;padding:4px 6px">
+                    <option value="">Role…</option>
+                    <option>Admin</option>
+                    <option>Writing Lead</option>
+                  </select>
+                  <button class="btn-ghost" style="padding:4px 8px;font-size:12px">Add</button>
+                </div>
+              </td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost">Deactivate</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Deactivated -->
+            <tr class="row-deactivated">
+              <td>
+                <div class="flex items-center gap-2.5">
+                  <span class="avatar w-7 h-7 text-[10px]" style="background:#7E54A3">JN</span>
+                  <div>
+                    <div class="font-medium text-[13.5px]">Joon Nam</div>
+                    <div class="muted">joon@example.com</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="flex flex-wrap gap-1">
+                  <span class="role-pill">Member <button title="Remove role">×</button></span>
+                </div>
+              </td>
+              <td><span class="stamp stamp--deactivated">Paused</span></td>
+              <td></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--revive">Reactivate</button>
+                  <button class="btn-ghost btn-ghost--danger">Retire</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Retired / anonymized -->
+            <tr class="row-retired">
+              <td>
+                <div class="flex items-center gap-2.5">
+                  <span class="avatar w-7 h-7 text-[10px]" style="background:#C4C7BD">FM</span>
+                  <div>
+                    <div class="font-medium text-[13.5px] text-ink-soft italic">Former member</div>
+                    <div class="muted font-mono text-[11px]">scrubbed</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="muted">—</span></td>
+              <td><span class="stamp stamp--retired">Retired</span></td>
+              <td></td>
+              <td>
+                <div class="btn-actions">
+                  <button class="btn-ghost btn-ghost--revive">Revive</button>
+                </div>
+              </td>
+            </tr>
+
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB: PERMISSIONS
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-permissions">
+
+      <!-- Matrix card -->
+      <div class="admin-card mb-4">
+        <div class="admin-card-header">
+          <div>
+            <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Permissions matrix</div>
+            <p class="text-[13.5px] text-ink-soft">Each cell sets a scope for that role × action pair. Targeted grants (specific division/team/role) are added below.</p>
+          </div>
+        </div>
+
+        <div class="perm-grid-wrap">
+          <table class="perm-table">
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>Member</th>
+                <th>Admin</th>
+                <th>Writing Lead</th>
+                <th>USA Member</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code class="font-mono text-[11.5px]">task:create</code></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+              </tr>
+              <tr>
+                <td><code class="font-mono text-[11.5px]">task:claim</code></td>
+                <td><select class="perm-scope" data-v="own_division" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global">global</option>
+                  <option value="own_division" selected>own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+              </tr>
+              <tr>
+                <td><code class="font-mono text-[11.5px]">task:submit</code></td>
+                <td><select class="perm-scope" data-v="own" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own" selected>own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+              </tr>
+              <tr>
+                <td><code class="font-mono text-[11.5px]">task:review</code></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="own_division" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global">global</option>
+                  <option value="own_division" selected>own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+              </tr>
+              <tr>
+                <td><code class="font-mono text-[11.5px]">user:manage</code></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_division">own_division</option>
+                  <option value="own_team">own_team</option>
+                  <option value="own">own</option>
+                </select></td>
+              </tr>
+              <tr>
+                <td><code class="font-mono text-[11.5px]">org:manage</code></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                </select></td>
+              </tr>
+              <tr>
+                <td><code class="font-mono text-[11.5px]">invite:create</code></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_team">own_team</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="global" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global" selected>global</option>
+                  <option value="own_team">own_team</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="" onchange="this.dataset.v=this.value">
+                  <option value="" selected>—</option>
+                  <option value="global">global</option>
+                  <option value="own_team">own_team</option>
+                </select></td>
+                <td><select class="perm-scope" data-v="own_team" onchange="this.dataset.v=this.value">
+                  <option value="">—</option>
+                  <option value="global">global</option>
+                  <option value="own_team" selected>own_team</option>
+                </select></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Targeted grant form -->
+      <div class="admin-card">
+        <div class="admin-card-header">
+          <div>
+            <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Targeted grant</div>
+            <p class="text-[13.5px] text-ink-soft">Add a grant scoped to a specific division, team, or role — for cases the matrix can't express.</p>
+          </div>
+        </div>
+        <div class="grant-form-strip">
+          <select>
+            <option value="">Role…</option>
+            <option>Member</option>
+            <option>Admin</option>
+            <option>Writing Lead</option>
+            <option>USA Member</option>
+          </select>
+          <select>
+            <option value="">Action…</option>
+            <option>task:create</option>
+            <option>task:claim</option>
+            <option>task:submit</option>
+            <option>task:review</option>
+            <option>user:manage</option>
+            <option>org:manage</option>
+            <option>invite:create</option>
+          </select>
+          <select id="perm-scope-kind">
+            <option value="specific_division">specific division</option>
+            <option value="specific_team">specific team</option>
+            <option value="role">role</option>
+          </select>
+          <select>
+            <option value="">Division…</option>
+            <option>Writing</option>
+            <option>Art</option>
+            <option>Scripting</option>
+            <option>Testing</option>
+            <option>Leadership</option>
+          </select>
+          <button class="btn-primary">Add grant</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB: SETTINGS
+    ═══════════════════════════════════════════════════════════════════ -->
+    <div class="tab-panel" id="panel-settings">
+      <div class="admin-card">
+
+        <div class="admin-card-header">
+          <div>
+            <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Settings</div>
+            <p class="text-[13.5px] text-ink-soft">Organization-wide configuration. Changes take effect immediately.</p>
+          </div>
+        </div>
+
+        <!-- Security group -->
+        <div class="settings-group">
+          <span class="settings-group-label">Security</span>
+
+          <div class="setting-row">
+            <input type="checkbox" id="s-verified-email" checked />
+            <div class="setting-row-body">
+              <label class="setting-label" for="s-verified-email">Require verified email to log in</label>
+              <span class="setting-desc">Members must confirm their email address before accessing Patrice.</span>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <input type="checkbox" id="s-self-review" />
+            <div class="setting-row-body">
+              <label class="setting-label" for="s-self-review">Allow self-review</label>
+              <span class="setting-desc">Members can approve their own task submissions. Off by default.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Member records group -->
+        <div class="settings-group">
+          <span class="settings-group-label">Member records</span>
+
+          <div class="setting-row">
+            <input type="checkbox" id="s-anonymize" checked />
+            <div class="setting-row-body">
+              <label class="setting-label" for="s-anonymize">Anonymize retired members as "Former member"</label>
+              <span class="setting-desc">Scrubs display name and email from retired accounts in task history and admin views.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sessions group -->
+        <div class="settings-group">
+          <span class="settings-group-label">Sessions</span>
+
+          <div class="setting-number-row">
+            <div class="setting-number-label">
+              Session absolute lifetime
+              <span class="setting-number-desc">Maximum duration of any session, regardless of activity.</span>
+            </div>
+            <input type="number" class="setting-number-input" value="30" min="1" />
+            <span class="setting-unit">days</span>
+          </div>
+
+          <div class="setting-number-row">
+            <div class="setting-number-label">
+              Session idle lifetime
+              <span class="setting-number-desc">Sessions expire after this period with no activity.</span>
+            </div>
+            <input type="number" class="setting-number-input" value="7" min="1" />
+            <span class="setting-unit">days</span>
+          </div>
+
+          <div class="setting-number-row">
+            <div class="setting-number-label">
+              Retirement grace period
+              <span class="setting-number-desc">How long a retiring member's active sessions remain valid after retirement.</span>
+            </div>
+            <input type="number" class="setting-number-input" value="24" min="0" />
+            <span class="setting-unit">hours</span>
+          </div>
+        </div>
+
+        <!-- Save -->
+        <div style="padding:16px 22px; border-top:1px solid #E7E8E1; display:flex; align-items:center; gap:12px;">
+          <button class="btn-primary">Save settings</button>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#0A5249;display:none" id="saved-msg">Saved</span>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // Tab switching
+    const tabs = document.querySelectorAll('.admin-tab');
+    const panels = document.querySelectorAll('.tab-panel');
+    const pageTitle = document.getElementById('page-title');
+    const tabTitles = {
+      roles:'Roles', divisions:'Divisions', teams:'Teams',
+      users:'Users', permissions:'Permissions', settings:'Settings'
+    };
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const key = tab.dataset.tab;
+        tabs.forEach(t => t.classList.remove('is-active'));
+        panels.forEach(p => p.classList.remove('is-active'));
+        tab.classList.add('is-active');
+        document.getElementById('panel-' + key).classList.add('is-active');
+        pageTitle.textContent = tabTitles[key];
+      });
+    });
+
+    // Division questionnaire expand/collapse
+    function toggleQ(btn, rowId) {
+      const row = document.getElementById(rowId);
+      const open = row.style.display !== 'none';
+      row.style.display = open ? 'none' : 'table-row';
+      btn.textContent = open ? 'Questionnaire' : 'Hide questionnaire';
+    }
+
+    // Settings save feedback (demo only)
+    document.querySelector('.btn-primary[onclick], .admin-card .btn-primary:last-of-type')
+    document.querySelectorAll('.settings-group ~ div .btn-primary').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const msg = document.getElementById('saved-msg');
+        msg.style.display = 'inline';
+        setTimeout(() => { msg.style.display = 'none'; }, 2200);
+      });
+    });
+
+    // Perm scope select: update data-v on change for CSS-driven styling
+    document.querySelectorAll('.perm-scope').forEach(sel => {
+      sel.addEventListener('change', () => { sel.dataset.v = sel.value; });
+    });
+  </script>
+
+</body>
+</html>

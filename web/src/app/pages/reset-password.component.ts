@@ -8,7 +8,7 @@ import { errorMessage } from '../core/errors';
   standalone: true,
   imports: [FormsModule, RouterLink],
   template: `
-    <div class="panel">
+    <div class="panel auth">
       <h2>Choose a new password</h2>
       @if (!token) {
         <p class="error">This reset link is missing its token.</p>

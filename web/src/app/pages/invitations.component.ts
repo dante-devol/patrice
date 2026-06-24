@@ -7,6 +7,7 @@ import { InvitationListItem } from '../core/api.types';
 import { errorMessage } from '../core/errors';
 
 @Component({
+  selector: 'invitations-admin',
   standalone: true,
   imports: [FormsModule, DatePipe],
   template: `
@@ -32,7 +33,7 @@ import { errorMessage } from '../core/errors';
           @for (inv of invites(); track inv.id) {
             <tr>
               <td>{{ inv.email ?? '—' }}</td>
-              <td><span class="badge">{{ inv.status }}</span></td>
+              <td><span [class]="invStamp(inv.status)">{{ inv.status }}</span></td>
               <td>{{ inv.useCount }}/{{ inv.maxUses }}</td>
               <td>{{ inv.expiresAt | date: 'short' }}</td>
               <td>
@@ -86,6 +87,15 @@ export class InvitationsComponent {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  invStamp(status: string): string {
+    const map: Record<string, string> = {
+      pending: 'stamp stamp--claimed',
+      exhausted: 'stamp stamp--approved',
+      revoked: 'stamp stamp--revising',
+    };
+    return map[status] ?? 'stamp stamp--open';
   }
 
   async revoke(id: string): Promise<void> {

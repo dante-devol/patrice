@@ -7,7 +7,7 @@ import { ApiService } from '../core/api.service';
   standalone: true,
   imports: [FormsModule, RouterLink],
   template: `
-    <div class="panel">
+    <div class="panel auth">
       <h2>Reset your password</h2>
       <p class="muted">
         Enter your email and we'll send a reset link if an account exists.

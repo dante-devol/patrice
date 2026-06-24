@@ -9,7 +9,7 @@ import { errorMessage } from '../core/errors';
   standalone: true,
   imports: [FormsModule, RouterLink],
   template: `
-    <div class="panel">
+    <div class="panel auth">
       <h2>Log in</h2>
       <label>Email</label>
       <input type="email" [(ngModel)]="email" autocomplete="username" />
