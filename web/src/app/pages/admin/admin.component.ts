@@ -6,6 +6,7 @@ import { UsersAdminComponent } from './users-admin.component';
 import { PermissionsAdminComponent } from './permissions-admin.component';
 import { SettingsAdminComponent } from './settings-admin.component';
 import { ActivityAdminComponent } from './activity-admin.component';
+import { InvitationsComponent } from '../invitations.component';
 import { IntegrationsAdminComponent } from './integrations-admin.component';
 
 type Tab =
@@ -16,6 +17,7 @@ type Tab =
   | 'permissions'
   | 'settings'
   | 'activity'
+  | 'invitations'
   | 'integrations';
 
 /** Admin-area shell (Slice 2). Tabbed host over the dumb editor components. */
@@ -29,16 +31,15 @@ type Tab =
     PermissionsAdminComponent,
     SettingsAdminComponent,
     ActivityAdminComponent,
+    InvitationsComponent,
     IntegrationsAdminComponent,
   ],
   template: `
-    <div class="panel">
-      <nav class="tabs">
-        @for (t of tabs; track t) {
-          <button [class.secondary]="tab() !== t" (click)="tab.set(t)">{{ t }}</button>
-        }
-      </nav>
-    </div>
+    <nav class="admin-tabs">
+      @for (t of tabs; track t) {
+        <button class="admin-tab" [class.is-active]="tab() === t" (click)="tab.set(t)">{{ t }}</button>
+      }
+    </nav>
     @switch (tab()) {
       @case ('roles') { <roles-admin /> }
       @case ('divisions') { <divisions-admin /> }
@@ -47,6 +48,7 @@ type Tab =
       @case ('permissions') { <permissions-admin /> }
       @case ('settings') { <settings-admin /> }
       @case ('activity') { <activity-admin /> }
+      @case ('invitations') { <invitations-admin /> }
       @case ('integrations') { <integrations-admin /> }
     }
   `,
@@ -60,6 +62,7 @@ export class AdminComponent {
     'permissions',
     'settings',
     'activity',
+    'invitations',
     'integrations',
   ];
   readonly tab = signal<Tab>('roles');

@@ -1,6 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
 import { Division, Team } from './api.types';
+import {
+  divisionColor as computeDivColor,
+  teamColor as computeTeamColor,
+} from '../pages/tasks/task-presentation';
 
 /** Shorten an id for display when its name can't be resolved. */
 function short(id: string): string {
@@ -65,5 +69,18 @@ export class LookupStore {
   userName(id: string | null): string {
     if (!id) return 'System';
     return this.userNames().get(id) ?? short(id);
+  }
+
+  /** Resolved division color: stored hex overrides the computed name-hash fallback. */
+  divisionColor(id: string): string {
+    const d = this.divisionList().find((div) => div.id === id);
+    return d ? (d.color ?? computeDivColor(d.name)) : '#a7aba3';
+  }
+
+  /** Resolved team color: stored hex overrides the computed name-hash fallback. */
+  teamColor(id: string | null): string {
+    if (!id) return '#a7aba3';
+    const t = this.teamList().find((tm) => tm.id === id);
+    return t ? (t.color ?? computeTeamColor(t.name)) : '#a7aba3';
   }
 }

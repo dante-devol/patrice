@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patrice — Localize Chapter 3 · tavern dialogue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: {
+          sans: ['"IBM Plex Sans"','system-ui','sans-serif'],
+          serif: ['"IBM Plex Serif"','Georgia','serif'],
+          mono: ['"IBM Plex Mono"','ui-monospace','monospace'],
+        },
+        colors: {
+          board:'#E7E8E1', paper:'#FBFBF8', ink:'#191B19', 'ink-soft':'#5B605C',
+          line:'#D3D5CC', accent:'#0F7A6B', 'accent-ink':'#0A5249',
+          div:{ writing:'#3C5BA0', art:'#B0573C', scripting:'#2E7D5B', testing:'#7E54A3', leadership:'#A9810F' },
+        },
+        boxShadow:{ card:'0 1px 0 rgba(25,27,25,0.04), 0 1px 2px rgba(25,27,25,0.05)' },
+      }},
+    };
+  </script>
+  <style>
+    /* Division/team colors are per-entity config (DB-backed); injected as --c / --tc. */
+    :root { --div-writing:#3C5BA0; --div-art:#B0573C; --div-scripting:#2E7D5B; --div-testing:#7E54A3; --div-leadership:#A9810F; --team-usa:#4F6D7A; --accent:#0F7A6B; }
+    body { background-color:#E7E8E1; color:#191B19; }
+    .board-grain { background-image: radial-gradient(circle at 1px 1px, rgba(25,27,25,0.035) 1px, transparent 0); background-size:22px 22px; }
+
+    .dtag, .ttag { font-family:'"IBM Plex Mono"',monospace; font-size:11px; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; display:inline-flex; align-items:center; gap:6px; }
+    .dtag { color:var(--c); } .dtag::before { content:''; width:7px; height:7px; border-radius:2px; background:var(--c); }
+    .ttag { color:var(--tc); } .ttag::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--tc); }
+
+    /* Rubber-stamp status — no tilt. Open = un-inked / dashed. */
+    .stamp { font-family:'"IBM Plex Mono"',monospace; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; line-height:1; border:1.5px solid currentColor; border-radius:3px; display:inline-block; white-space:nowrap; }
+    .stamp--lg { font-size:13px; padding:7px 11px 6px; }
+    .stamp--sm { font-size:10.5px; padding:5px 8px 4px; }
+    .stamp--open{ color:#8B9089; border-style:dashed; }
+    .stamp--claimed{ color:#3F443F; background:rgba(63,68,63,0.06); }
+    .stamp--review{ color:#8A6A0C; background:rgba(169,129,15,0.10); }
+    .stamp--revising{ color:#99492F; background:rgba(176,87,60,0.10); }
+    .stamp--approved{ color:#0A5249; background:rgba(15,122,107,0.12); border-style:double; border-width:3px; }
+
+    /* Avatars: initials are the fallback for the Discord avatar <img> (CDN-hosted). */
+    .avatar { border-radius:50%; display:grid; place-items:center; font-family:'"IBM Plex Mono"',monospace; font-weight:600; color:#FBFBF8; overflow:hidden; flex:none; }
+
+    .gauge{ display:inline-flex; align-items:center; gap:6px; }
+    .pip{ width:11px; height:11px; border-radius:50%; }
+    .pip--filled{ background:var(--accent); }
+    .pip--open{ border:1.5px solid #A7ABA3; }
+    .gauge-n{ font-family:'"IBM Plex Mono"',monospace; font-size:12.5px; color:#5B605C; }
+
+    /* History rail: a continuous hairline the event nodes sit on. */
+    .timeline { position:relative; }
+    .timeline::before { content:''; position:absolute; left:11px; top:6px; bottom:18px; width:1.5px; background:#D3D5CC; }
+    .ev { position:relative; padding-left:38px; }
+    .node { position:absolute; left:5.5px; top:2px; width:13px; height:13px; border-radius:50%; background:#FBFBF8; border:2px solid #A7ABA3; box-sizing:border-box; }
+    .node--request{ border-color:#3C5BA0; }
+    .node--claim{ border-color:#3F443F; }
+    .node--submit{ border-color:#8A6A0C; }
+    .node--return{ border-color:#99492F; }
+    /* A comment node is the author's avatar dot (their Discord color, set via --who). */
+    .node--comment{ width:0; height:0; border:none; left:4.5px; top:3px; }
+    .node--comment::after{ content:''; position:absolute; width:14px; height:14px; border-radius:50%; background:var(--who,#5B6EAE); }
+
+    .vchip{ font-family:'"IBM Plex Mono"',monospace; font-size:11px; font-weight:600; padding:1px 6px; border-radius:3px; border:1px solid #C4C7BD; color:#5B605C; }
+
+    a:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    .composer:focus-within { border-color:#0F7A6B; box-shadow:0 0 0 3px rgba(15,122,107,0.12); }
+    @media (prefers-reduced-motion: reduce){ * { transition:none !important; } }
+  </style>
+</head>
+
+<body class="board-grain font-sans">
+  <header class="border-b border-line bg-board/80 backdrop-blur sticky top-0 z-10">
+    <div class="mx-auto max-w-[1080px] px-5 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-[13px] font-semibold tracking-[0.18em] text-ink border border-ink/70 rounded px-2 py-1 leading-none">PATRICE</span>
+        <nav class="hidden sm:flex items-center gap-5 text-[13.5px] text-ink-soft">
+          <a href="tasks-overview.html" class="text-ink font-medium border-b-2 border-accent pb-[2px]">Tasks</a>
+          <a href="#" class="hover:text-ink">Divisions</a>
+          <a href="#" class="hover:text-ink">Admin</a>
+        </nav>
+      </div>
+      <span class="avatar w-7 h-7 text-[11px]" style="background:#5B6EAE">DV</span>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-[1080px] px-5 py-6">
+    <a href="tasks-overview.html" class="inline-flex items-center gap-1.5 font-mono text-[12.5px] text-ink-soft hover:text-ink mb-4">← work board</a>
+
+    <!-- Task head -->
+    <div class="flex items-start gap-3 mb-1">
+      <h1 class="font-serif text-[27px] leading-[1.12] font-semibold flex-1">Localize Chapter 3 — tavern dialogue</h1>
+      <span class="stamp stamp--lg stamp--review shrink-0 mt-1">review</span>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap mb-5">
+      <span class="font-mono text-[12.5px] text-ink-soft">#a1f2</span>
+      <span class="text-ink-soft">·</span>
+      <span class="dtag" style="--c:var(--div-writing)">Writing</span>
+      <span class="ttag" style="--tc:var(--team-usa)">USA</span>
+      <span class="font-mono text-[12.5px] text-ink-soft">requested by Devin · 5 days ago</span>
+    </div>
+
+    <div class="grid lg:grid-cols-[1fr_312px] gap-6 items-start">
+
+      <!-- MAIN: description + the unified history -->
+      <div class="min-w-0">
+        <div class="rounded-lg border border-line bg-paper shadow-card p-5 mb-5">
+          <p class="text-[15px] leading-relaxed">Pass over the 40 tavern barks in <span class="font-mono text-[13px] bg-board/70 px-1 rounded">ch3/tavern.loc</span>. Keep the cadence loose and in-character — the bartender is dry, the regulars are warm. Lines 4–9 are the priority set; the rest can follow.</p>
+          <p class="text-[15px] leading-relaxed mt-3 text-ink-soft">Source strings are final. Submit translated lines as a detail-text answer; flag anything that needs a second pass in your notes.</p>
+        </div>
+
+        <!-- HISTORY — system events and comments, one stream. -->
+        <div class="flex items-center gap-2 mb-3">
+          <h2 class="font-mono text-[11.5px] tracking-[0.16em] uppercase text-ink-soft">History</h2>
+          <span class="h-px flex-1 bg-line"></span>
+          <span class="font-mono text-[11.5px] text-ink-soft">9 events</span>
+        </div>
+
+        <div class="timeline flex flex-col gap-4">
+
+          <div class="ev"><span class="node node--request"></span>
+            <p class="text-[13.5px]"><span class="font-medium">Devin</span> requested this task <span class="font-mono text-ink-soft text-[12.5px]">· 5d</span></p>
+          </div>
+
+          <div class="ev"><span class="node node--claim"></span>
+            <p class="text-[13.5px]"><span class="font-medium">Maya</span> claimed an opening <span class="font-mono text-ink-soft text-[12.5px]">· 4d</span></p>
+          </div>
+          <div class="ev"><span class="node node--claim"></span>
+            <p class="text-[13.5px]"><span class="font-medium">Aric</span> claimed an opening <span class="font-mono text-ink-soft text-[12.5px]">· 4d</span></p>
+          </div>
+
+          <div class="ev"><span class="node node--submit"></span>
+            <p class="text-[13.5px] flex items-center gap-2"><span class="font-medium">Maya</span> submitted <span class="vchip">v1</span> for review <span class="font-mono text-ink-soft text-[12.5px]">· 3d</span></p>
+          </div>
+
+          <!-- comment -->
+          <div class="ev"><span class="node node--comment" style="--who:#5B6EAE"></span>
+            <div class="rounded-lg border border-line bg-paper shadow-card">
+              <div class="flex items-center gap-2 px-3.5 py-2 border-b border-line">
+                <span class="avatar w-5 h-5 text-[10px]" style="background:#5B6EAE">DV</span>
+                <span class="text-[13px] font-medium">Devin</span>
+                <span class="font-mono text-[11.5px] text-ink-soft">requester · 3d</span>
+              </div>
+              <p class="px-3.5 py-3 text-[14px] leading-relaxed">The barks read a little stiff — can we loosen the cadence? Especially lines 4–9, the bartender should sound bored, not formal.</p>
+            </div>
+          </div>
+
+          <div class="ev"><span class="node node--return"></span>
+            <p class="text-[13.5px] flex items-center gap-2"><span class="font-medium">Devin</span> returned <span class="vchip">v1</span> → <span class="stamp stamp--sm stamp--revising">revising</span> <span class="font-mono text-ink-soft text-[12.5px]">· 3d</span></p>
+          </div>
+
+          <!-- comment -->
+          <div class="ev"><span class="node node--comment" style="--who:#4E8C6A"></span>
+            <div class="rounded-lg border border-line bg-paper shadow-card">
+              <div class="flex items-center gap-2 px-3.5 py-2 border-b border-line">
+                <span class="avatar w-5 h-5 text-[10px]" style="background:#4E8C6A">MY</span>
+                <span class="text-[13px] font-medium">Maya</span>
+                <span class="font-mono text-[11.5px] text-ink-soft">claimant · 2d</span>
+              </div>
+              <p class="px-3.5 py-3 text-[14px] leading-relaxed">Good call. Reworked 4–9 and loosened the goodbye line — it was way too courtly.</p>
+            </div>
+          </div>
+
+          <div class="ev"><span class="node node--submit"></span>
+            <p class="text-[13.5px] flex items-center gap-2"><span class="font-medium">Maya</span> submitted <span class="vchip">v2</span> for review <span class="font-mono text-ink-soft text-[12.5px]">· 2d</span></p>
+          </div>
+          <div class="ev"><span class="node node--submit"></span>
+            <p class="text-[13.5px] flex items-center gap-2"><span class="font-medium">Aric</span> submitted <span class="vchip">v1</span> for review <span class="font-mono text-ink-soft text-[12.5px]">· 1d</span></p>
+          </div>
+
+          <!-- composer -->
+          <div class="ev pt-1"><span class="node" style="background:#E7E8E1;border-color:#C4C7BD"></span>
+            <div class="composer rounded-lg border border-line bg-paper shadow-card transition-shadow">
+              <textarea rows="2" placeholder="Add to the history — a note, a question, a review reply…" class="w-full resize-none bg-transparent px-3.5 py-3 text-[14px] leading-relaxed placeholder:text-ink-soft/70 focus:outline-none"></textarea>
+              <div class="flex items-center justify-between px-3 py-2 border-t border-line">
+                <span class="font-mono text-[11px] text-ink-soft">markdown · attach files</span>
+                <button class="rounded-md bg-ink text-paper text-[13px] font-medium px-3.5 py-1.5 hover:bg-ink/90">Comment</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RAIL: the claim strip + facts + questionnaire -->
+      <aside class="flex flex-col gap-4 lg:sticky lg:top-[72px]">
+
+        <!-- Claim strip. This task is multi-claim (2 openings) so it shows the gauge +
+             a row per opening. A normal 1-of-1 task collapses to a single assignee row. -->
+        <div class="rounded-lg border border-line bg-paper shadow-card p-4">
+          <div class="flex items-center justify-between mb-3">
+            <span class="font-mono text-[11px] tracking-[0.14em] uppercase text-ink-soft">Openings</span>
+            <div class="gauge"><span class="pip pip--filled"></span><span class="pip pip--filled"></span><span class="gauge-n">2 of 2</span></div>
+          </div>
+
+          <ul class="flex flex-col gap-2 mb-3">
+            <li class="flex items-center gap-2.5">
+              <span class="avatar w-6 h-6 text-[11px]" style="background:#4E8C6A">MY</span>
+              <span class="text-[13.5px] font-medium flex-1">Maya</span>
+              <span class="font-mono text-[11px] text-[#8A6A0C]">v2 · review</span>
+            </li>
+            <li class="flex items-center gap-2.5">
+              <span class="avatar w-6 h-6 text-[11px]" style="background:#A8763E">AR</span>
+              <span class="text-[13.5px] font-medium flex-1">Aric</span>
+              <span class="font-mono text-[11px] text-[#8A6A0C]">v1 · review</span>
+            </li>
+          </ul>
+
+          <button class="w-full rounded-md bg-accent text-paper font-medium text-[13.5px] py-2 hover:bg-accent-ink mb-2">Review submissions</button>
+          <div class="flex items-center justify-between font-mono text-[11.5px] text-ink-soft">
+            <button class="hover:text-ink">+ opening</button>
+            <button class="hover:text-ink">close claims</button>
+            <button class="hover:text-ink">complete</button>
+          </div>
+        </div>
+
+        <!-- Facts -->
+        <div class="rounded-lg border border-line bg-paper shadow-card p-4">
+          <dl class="text-[13px]">
+            <div class="flex items-center justify-between py-1.5">
+              <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Division</dt>
+              <dd><span class="dtag" style="--c:var(--div-writing)">Writing</span></dd>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-t border-line/70">
+              <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Team</dt>
+              <dd><span class="ttag" style="--tc:var(--team-usa)">USA</span></dd>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-t border-line/70">
+              <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Requester</dt>
+              <dd class="flex items-center gap-1.5"><span class="avatar w-5 h-5 text-[9px]" style="background:#5B6EAE">DV</span><span class="font-medium">Devin</span></dd>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-t border-line/70">
+              <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Status</dt>
+              <dd><span class="stamp stamp--sm stamp--review">review</span></dd>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-t border-line/70">
+              <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Requested</dt>
+              <dd class="font-mono text-[12px]">Jun 16, 2026</dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- Questionnaire summary — what this division's task collects. -->
+        <div class="rounded-lg border border-line bg-paper shadow-card p-4">
+          <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-ink-soft mb-2.5">Questionnaire</div>
+          <ul class="flex flex-col gap-2">
+            <li class="flex items-start gap-2">
+              <span class="font-mono text-[10px] uppercase tracking-wide text-ink-soft border border-line rounded px-1.5 py-[2px] mt-[1px]">detail</span>
+              <span class="text-[13px]">Translated lines <span class="text-[#99492F]">*</span></span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="font-mono text-[10px] uppercase tracking-wide text-ink-soft border border-line rounded px-1.5 py-[2px] mt-[1px]">text</span>
+              <span class="text-[13px]">Translator notes</span>
+            </li>
+          </ul>
+        </div>
+      </aside>
+
+    </div>
+  </main>
+</body>
+</html>

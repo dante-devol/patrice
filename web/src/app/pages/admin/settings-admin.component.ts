@@ -15,20 +15,32 @@ import { errorMessage } from '../../core/errors';
       @if (error()) { <p class="error">{{ error() }}</p> }
       @if (saved()) { <p class="muted">Saved.</p> }
       @if (settings(); as s) {
-        <label><input type="checkbox" [(ngModel)]="s.requireVerifiedEmailToLogIn" />
-          Require a verified email to log in</label>
-        <label><input type="checkbox" [(ngModel)]="s.selfReviewAllowed" />
-          Allow self-review</label>
-        <label><input type="checkbox" [(ngModel)]="s.anonymizeLabel" />
-          Anonymize scrubbed users as "Former member"</label>
-        <label>Session absolute lifetime (days)
-          <input type="number" min="1" [(ngModel)]="s.sessionAbsoluteDays" /></label>
-        <label>Session idle lifetime (days)
-          <input type="number" min="1" [(ngModel)]="s.sessionIdleDays" /></label>
-        <label>Retirement grace period (hours)
-          <input type="number" min="0" [(ngModel)]="s.gracePeriodHours" /></label>
-        <label><input type="checkbox" [(ngModel)]="s.requireDiscordLink" />
-          Require Discord account link before accessing tasks</label>
+        <div class="settings-group">
+          <div class="settings-group-label">Security</div>
+          <label><input type="checkbox" [(ngModel)]="s.requireVerifiedEmailToLogIn" />
+            Require a verified email to log in</label>
+          <label><input type="checkbox" [(ngModel)]="s.selfReviewAllowed" />
+            Allow self-review (submitters may review their own work)</label>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-label">Member records</div>
+          <label><input type="checkbox" [(ngModel)]="s.anonymizeLabel" />
+            Show retired members as "Former member" in task history</label>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-label">Sessions</div>
+          <label>Absolute session lifetime (days)
+            <input type="number" min="1" [(ngModel)]="s.sessionAbsoluteDays" /></label>
+          <label>Idle session lifetime (days) — sign out after this many days without activity
+            <input type="number" min="1" [(ngModel)]="s.sessionIdleDays" /></label>
+          <label>Retirement grace period (hours) — data is retained for this long before final scrub
+            <input type="number" min="0" [(ngModel)]="s.gracePeriodHours" /></label>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-label">Integrations</div>
+          <label><input type="checkbox" [(ngModel)]="s.requireDiscordLink" />
+            Require Discord account link before accessing tasks</label>
+        </div>
         <button [disabled]="busy()" (click)="save(s)">Save settings</button>
       }
     </div>

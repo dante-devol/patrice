@@ -12,16 +12,15 @@ type Step = 'register' | 'link-discord' | 'done';
   standalone: true,
   imports: [FormsModule],
   template: `
-    @if (loading()) {
-      <div class="panel"><p class="muted">Loading invitation…</p></div>
-    } @else if (!invite()) {
-      <div class="panel"><p class="error">{{ error() }}</p></div>
-    } @else if (invite()!.status !== 'pending') {
-      <div class="panel"><p class="error">This invitation is {{ invite()!.status }}.</p></div>
-
-    } @else if (step() === 'register') {
-      <div class="panel">
-        <h2>Accept invitation</h2>
+    <div class="panel auth">
+      <h2>Accept invitation</h2>
+      @if (loading()) {
+        <p class="muted">Loading invitation…</p>
+      } @else if (!invite()) {
+        <p class="error">{{ error() }}</p>
+      } @else if (invite()!.status !== 'pending') {
+        <p class="error">This invitation is {{ invite()!.status }}.</p>
+      } @else if (step() === 'register') {
         @if (invite()!.requiresPasscode) {
           <label>Passcode</label>
           <input [(ngModel)]="passcode" autocomplete="off" />
@@ -37,10 +36,7 @@ type Step = 'register' | 'link-discord' | 'done';
         <input type="password" [(ngModel)]="password" autocomplete="new-password" />
         @if (error()) { <p class="error">{{ error() }}</p> }
         <button [disabled]="busy()" (click)="submit()">Create account</button>
-      </div>
-
-    } @else if (step() === 'link-discord') {
-      <div class="panel">
+      } @else if (step() === 'link-discord') {
         <h2>Link your Discord account</h2>
         @if (settings()?.requireDiscordLink) {
           <p>
@@ -63,8 +59,8 @@ type Step = 'register' | 'link-discord' | 'done';
             {{ settings()?.requireDiscordLink ? 'Skip for now' : 'Skip' }}
           </button>
         </div>
-      </div>
-    }
+      }
+    </div>
   `,
 })
 export class AcceptInviteComponent {
@@ -116,7 +112,6 @@ export class AcceptInviteComponent {
       });
       this.auth.setUser(user);
 
-      // Check whether a Discord integration exists + whether it's required.
       const [connections, cfg] = await Promise.all([
         this.api.listIntegrations().catch(() => [] as IntegrationConnection[]),
         this.api.getConfig().catch(() => null),

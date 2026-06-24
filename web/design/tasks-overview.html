@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patrice — Tasks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {
+        fontFamily: {
+          sans: ['"IBM Plex Sans"','system-ui','sans-serif'],
+          serif: ['"IBM Plex Serif"','Georgia','serif'],
+          mono: ['"IBM Plex Mono"','ui-monospace','monospace'],
+        },
+        colors: {
+          board:'#E7E8E1', paper:'#FBFBF8', ink:'#191B19', 'ink-soft':'#5B605C',
+          line:'#D3D5CC', accent:'#0F7A6B', 'accent-ink':'#0A5249',
+          // Division + team hues are DB-configurable (see note in the list below);
+          // these are just the current defaults, mirrored as CSS vars in :root.
+          div:{ writing:'#3C5BA0', art:'#B0573C', scripting:'#2E7D5B', testing:'#7E54A3', leadership:'#A9810F' },
+        },
+        boxShadow:{ card:'0 1px 0 rgba(25,27,25,0.04), 0 1px 2px rgba(25,27,25,0.05)' },
+      }},
+    };
+  </script>
+  <style>
+    /* Division + team colors arrive per-entity (DB columns, eventually). A row sets
+       --c (its division color) and --tc (its team color) once; the spine + tags read them. */
+    :root {
+      --div-writing:#3C5BA0; --div-art:#B0573C; --div-scripting:#2E7D5B;
+      --div-testing:#7E54A3; --div-leadership:#A9810F;
+      --team-usa:#4F6D7A; --team-artists:#6D5F7A;
+      --accent:#0F7A6B;
+    }
+    body { background-color:#E7E8E1; color:#191B19; }
+    .board-grain { background-image: radial-gradient(circle at 1px 1px, rgba(25,27,25,0.035) 1px, transparent 0); background-size:22px 22px; }
+
+    /* Division spine — the colored "file tab" down the left of each task. */
+    .spine { width:4px; border-radius:4px; align-self:stretch; background:var(--c); }
+
+    /* Facet tags. Division = square chip (structural); team = round chip (grouping).
+       Shape tells you which axis you're reading; both colors are configurable. */
+    .dtag, .ttag { font-family:'"IBM Plex Mono"',monospace; font-size:11px; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; display:inline-flex; align-items:center; gap:6px; }
+    .dtag { color:var(--c); }
+    .dtag::before { content:''; width:7px; height:7px; border-radius:2px; background:var(--c); }
+    .ttag { color:var(--tc); }
+    .ttag::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--tc); }
+
+    /* Rubber-stamp status (no tilt). Open = un-inked / dashed: nothing has happened yet. */
+    .stamp { font-family:'"IBM Plex Mono"',monospace; font-size:10.5px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; line-height:1; padding:5px 8px 4px; border:1.5px solid currentColor; border-radius:3px; display:inline-block; white-space:nowrap; }
+    .stamp--open{ color:#8B9089; border-style:dashed; }
+    .stamp--claimed{ color:#3F443F; background:rgba(63,68,63,0.06); }
+    .stamp--review{ color:#8A6A0C; background:rgba(169,129,15,0.10); }
+    .stamp--revising{ color:#99492F; background:rgba(176,87,60,0.10); }
+    .stamp--approved{ color:#0A5249; background:rgba(15,122,107,0.12); border-style:double; border-width:3px; }
+
+    /* Avatars: the initials fill is just the fallback — real ones are <img> from the
+       Discord CDN (we don't host them). Solid muted circle ≈ a default Discord avatar. */
+    .avatar { border-radius:50%; display:grid; place-items:center; font-family:'"IBM Plex Mono"',monospace; font-weight:600; color:#FBFBF8; overflow:hidden; flex:none; }
+    .avatar--empty { border:1.5px dashed #A7ABA3; background:transparent !important; }
+
+    /* Slot gauge — ONLY shown for multi-claim tasks (the rare case). Single-claim tasks
+       show the assignee avatar instead, since 1-of-1 is the norm. */
+    .gauge { display:inline-flex; align-items:center; gap:5px; }
+    .pip { width:9px; height:9px; border-radius:50%; }
+    .pip--filled { background:var(--accent); }
+    .pip--open { border:1.5px solid #A7ABA3; }
+    .gauge-n { font-family:'"IBM Plex Mono"',monospace; font-size:12px; color:#5B605C; }
+
+    .ticket { transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease; }
+    .ticket:hover { transform: translateY(-1px); box-shadow:0 4px 14px -6px rgba(25,27,25,0.22); border-color:#C4C7BD; }
+    .chip { transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    @media (prefers-reduced-motion: reduce){ .ticket,.chip{transition:none;} .ticket:hover{transform:none;} }
+  </style>
+</head>
+
+<body class="board-grain font-sans">
+  <header class="border-b border-line bg-board/80 backdrop-blur sticky top-0 z-10">
+    <div class="mx-auto max-w-[1080px] px-5 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="font-mono text-[13px] font-semibold tracking-[0.18em] text-ink border border-ink/70 rounded px-2 py-1 leading-none">PATRICE</span>
+        <nav class="hidden sm:flex items-center gap-5 text-[13.5px] text-ink-soft">
+          <a href="#" class="text-ink font-medium border-b-2 border-accent pb-[2px]">Tasks</a>
+          <a href="#" class="hover:text-ink">Divisions</a>
+          <a href="#" class="hover:text-ink">Admin</a>
+        </nav>
+      </div>
+      <div class="flex items-center gap-3 text-[13px] text-ink-soft">
+        <span class="font-mono">USA · guild</span>
+        <!-- logged-in user; initials are the fallback for the Discord avatar image -->
+        <span class="avatar w-7 h-7 text-[11px]" style="background:#5B6EAE">DV</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-[1080px] px-5 py-7">
+    <div class="flex items-end justify-between gap-4 mb-5">
+      <div>
+        <div class="font-mono text-[11.5px] tracking-[0.16em] uppercase text-ink-soft mb-1">Work board</div>
+        <h1 class="font-serif text-[30px] leading-[1.05] font-semibold">
+          7 open · <span class="text-ink-soft">23 in flight</span>
+        </h1>
+      </div>
+      <!-- A task is created by its requester, so the action is "Request". -->
+      <button class="shrink-0 inline-flex items-center gap-2 rounded-md bg-accent text-paper font-medium text-[14px] px-4 py-2.5 shadow-card hover:bg-accent-ink">
+        <span class="font-mono text-[15px] leading-none">+</span> Request a task
+      </button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <button class="chip rounded-full border border-ink bg-ink text-paper text-[12.5px] px-3 py-1 font-medium">All divisions</button>
+      <button class="chip rounded-full border border-line bg-paper text-[12.5px] px-3 py-1 dtag" style="--c:var(--div-writing)">Writing</button>
+      <button class="chip rounded-full border border-line bg-paper text-[12.5px] px-3 py-1 dtag" style="--c:var(--div-art)">Art</button>
+      <button class="chip rounded-full border border-line bg-paper text-[12.5px] px-3 py-1 dtag" style="--c:var(--div-scripting)">Scripting</button>
+      <button class="chip rounded-full border border-line bg-paper text-[12.5px] px-3 py-1 dtag" style="--c:var(--div-testing)">Testing</button>
+      <button class="chip rounded-full border border-line bg-paper text-[12.5px] px-3 py-1 dtag" style="--c:var(--div-leadership)">Leadership</button>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="inline-flex rounded-md border border-line bg-paper overflow-hidden font-mono text-[11.5px] uppercase tracking-[0.08em]">
+        <button class="px-3 py-1.5 bg-ink text-paper">Any</button>
+        <button class="px-3 py-1.5 border-l border-line text-ink-soft hover:text-ink">Open</button>
+        <button class="px-3 py-1.5 border-l border-line text-ink-soft hover:text-ink">Claimed</button>
+        <button class="px-3 py-1.5 border-l border-line text-ink-soft hover:text-ink">Review</button>
+        <button class="px-3 py-1.5 border-l border-line text-ink-soft hover:text-ink">Revising</button>
+        <button class="px-3 py-1.5 border-l border-line text-ink-soft hover:text-ink">Approved</button>
+      </div>
+      <div class="font-mono text-[12px] text-ink-soft">team: <span class="text-ink">all</span> · sorted newest</div>
+    </div>
+
+    <!-- Each row sets --c (division color) and --tc (team color) once; these come from
+         the division/team config (DB-backed). Single-claim tasks show an assignee
+         avatar; only multi-claim tasks (Writing here) show the pip gauge. -->
+    <ul class="flex flex-col gap-2.5">
+
+      <!-- Art · OPEN · single slot, unclaimed -->
+      <li>
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5" style="--c:var(--div-art)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h2 class="font-serif text-[17px] font-semibold leading-tight truncate">Tavern interior — concept sheet</h2>
+              <span class="font-mono text-[12px] text-ink-soft">#93cd</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Three mood frames for the riverside tavern — warm lamplight, late evening. PNG, 2K wide.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Art</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Sela · 6h</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--open">open</span>
+            <span class="avatar avatar--empty w-[26px] h-[26px]" title="unclaimed — open to claims"></span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Writing · REVIEW · MULTI (2 of 2) → gauge -->
+      <li>
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5" style="--c:var(--div-writing); --tc:var(--team-usa)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h2 class="font-serif text-[17px] font-semibold leading-tight truncate">Localize Chapter 3 — tavern dialogue</h2>
+              <span class="font-mono text-[12px] text-ink-soft">#a1f2</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Pass over the 40 tavern barks; keep cadence loose and in-character. Two translators on it.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Writing</span>
+              <span class="ttag">USA</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Devin · 5d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--review">review</span>
+            <div class="gauge" title="2 of 2 openings filled">
+              <span class="pip pip--filled"></span><span class="pip pip--filled"></span>
+              <span class="gauge-n">2 of 2</span>
+            </div>
+          </div>
+        </a>
+      </li>
+
+      <!-- Scripting · REVISING · single slot, assignee -->
+      <li>
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5" style="--c:var(--div-scripting)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h2 class="font-serif text-[17px] font-semibold leading-tight truncate">Port save-system to the v2 schema</h2>
+              <span class="font-mono text-[12px] text-ink-soft">#77be</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Migrate legacy save blobs; returned once — needs the backwards-compat shim Joon flagged.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Scripting</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Joon · 8d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--revising">revising</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#4E8C6A" title="Maya">MY</span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Testing · CLAIMED · single slot, assignee -->
+      <li>
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5" style="--c:var(--div-testing); --tc:var(--team-usa)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h2 class="font-serif text-[17px] font-semibold leading-tight truncate">Regression pass — Act I quest flags</h2>
+              <span class="font-mono text-[12px] text-ink-soft">#b3a0</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Walk every Act I branch; confirm flags clear on completion. Custom test form attached.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Testing</span>
+              <span class="ttag">USA</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Aric · 2d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--claimed">claimed</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#A8763E" title="Aric">AR</span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Leadership · APPROVED · single slot -->
+      <li>
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5 opacity-[0.92]" style="--c:var(--div-leadership)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h2 class="font-serif text-[17px] font-semibold leading-tight truncate">Sign off Act I voice direction</h2>
+              <span class="font-mono text-[12px] text-ink-soft">#c4d1</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Final review of the Act I VO brief before recording opens. Approved by leadership.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Leadership</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Devin · 11d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--approved">approved</span>
+            <span class="avatar w-[26px] h-[26px] text-[10px]" style="background:#5B6EAE" title="Devin">DV</span>
+          </div>
+        </a>
+      </li>
+
+      <!-- Writing · OPEN · MULTI (0 of 2) → gauge -->
+      <li>
+        <a href="task-detail.html" class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5" style="--c:var(--div-writing)">
+          <div class="spine"></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <h2 class="font-serif text-[17px] font-semibold leading-tight truncate">Write merchant barks — 20 lines</h2>
+              <span class="font-mono text-[12px] text-ink-soft">#d2e3</span>
+            </div>
+            <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">Short, repeatable merchant lines for the market district. Two writers welcome.</p>
+            <div class="flex items-center gap-3 mt-2">
+              <span class="dtag">Writing</span>
+              <span class="font-mono text-[12px] text-ink-soft">requested by Maya · 1d</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-end justify-between shrink-0 gap-3">
+            <span class="stamp stamp--open">open</span>
+            <div class="gauge" title="0 of 2 openings filled">
+              <span class="pip pip--open"></span><span class="pip pip--open"></span>
+              <span class="gauge-n text-accent-ink font-medium">2 open</span>
+            </div>
+          </div>
+        </a>
+      </li>
+    </ul>
+
+    <div class="mt-6 flex justify-center">
+      <button class="font-mono text-[12.5px] text-ink-soft border border-line bg-paper rounded-md px-4 py-2 hover:text-ink hover:border-ink/40">load 20 more →</button>
+    </div>
+  </main>
+</body>
+</html>
