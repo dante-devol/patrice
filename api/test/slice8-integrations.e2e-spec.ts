@@ -527,6 +527,85 @@ describe('Slice 8 — Integrations', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // 8.5 — Secret redaction (issue #55)
+  // ---------------------------------------------------------------------------
+
+  describe('8.5 — secret redaction', () => {
+    let secretConnId: string;
+
+    beforeAll(async () => {
+      const res = await auth(http().post('/api/integrations')).send({
+        provider: 'discord',
+        externalWorkspaceId: 'secret-guild-111',
+        displayName: 'Secret Guild',
+        config: { botToken: 'Bot.secret.token.DO_NOT_LEAK' },
+        credentialsRef: 'aead:ciphertext-DO_NOT_LEAK',
+      });
+      secretConnId = res.body.id as string;
+    });
+
+    const noSecret = (body: unknown) => {
+      const json = JSON.stringify(body);
+      expect(json).not.toContain('DO_NOT_LEAK');
+      expect(json).not.toContain('botToken');
+      expect(json).not.toContain('credentialsRef');
+      expect(json).not.toContain('credentials_ref');
+    };
+
+    it('POST /integrations response omits config and credentialsRef', async () => {
+      // already created in beforeAll; check that response body itself was clean
+      const res = await auth(http().post('/api/integrations')).send({
+        provider: 'discord',
+        externalWorkspaceId: 'secret-guild-222',
+        displayName: 'Secret Guild 2',
+        config: { botToken: 'Bot.secret.2.DO_NOT_LEAK' },
+      });
+      expect(res.status).toBe(201);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+      await prisma.integrationConnection.delete({ where: { id: res.body.id as string } });
+    });
+
+    it('GET /integrations list omits config and credentialsRef', async () => {
+      const res = await auth(http().get('/api/integrations'));
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      for (const conn of res.body as unknown[]) {
+        expect(conn).not.toHaveProperty('config');
+        expect(conn).not.toHaveProperty('credentialsRef');
+      }
+    });
+
+    it('PATCH /integrations/:id omits config and credentialsRef', async () => {
+      const res = await auth(http().patch(`/api/integrations/${secretConnId}`)).send({
+        displayName: 'Secret Guild Renamed',
+      });
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+    });
+
+    it('POST /integrations/:id/retire omits config and credentialsRef', async () => {
+      const res = await auth(http().post(`/api/integrations/${secretConnId}/retire`));
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+    });
+
+    it('POST /integrations/:id/revive omits config and credentialsRef', async () => {
+      await auth(http().patch('/api/config')).send({ gracePeriodHours: 24 });
+      const res = await auth(http().post(`/api/integrations/${secretConnId}/revive`));
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // requireDiscordLink setting
   // ---------------------------------------------------------------------------
 

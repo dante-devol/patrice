@@ -362,8 +362,6 @@ export interface IntegrationConnection {
   provider: IntegrationProvider;
   externalWorkspaceId: string;
   displayName: string;
-  config: Record<string, unknown>;
-  credentialsRef: string | null;
   status: IntegrationStatus;
   lifecycleState: Lifecycle;
   retiredAt: string | null;

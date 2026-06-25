@@ -14,6 +14,17 @@ import {
   UpdateMappingDto,
 } from './integrations.dto';
 
+/**
+ * Strip secret-bearing fields from a connection row before it leaves the API.
+ * Unconditional per ADR 0004 — no role or flag overrides this.
+ */
+export function toConnectionResponse<T extends { config: unknown; credentialsRef: unknown }>(
+  conn: T,
+): Omit<T, 'config' | 'credentialsRef'> {
+  const { config: _c, credentialsRef: _r, ...rest } = conn;
+  return rest;
+}
+
 @Injectable()
 export class IntegrationsService {
   constructor(
@@ -28,10 +39,11 @@ export class IntegrationsService {
   // ---------------------------------------------------------------------------
 
   async list(organizationId: string, includeRetired: boolean) {
-    return this.prisma.integrationConnection.findMany({
+    const rows = await this.prisma.integrationConnection.findMany({
       where: { organizationId, ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
     });
+    return rows.map(toConnectionResponse);
   }
 
   async connect(organizationId: string, actorUserId: string, dto: ConnectIntegrationDto) {
@@ -65,7 +77,7 @@ export class IntegrationsService {
       verb: 'integration.connected',
       payload: { connectionId: connection.id },
     });
-    return connection;
+    return toConnectionResponse(connection);
   }
 
   async update(id: string, actorUserId: string, dto: UpdateIntegrationDto) {
@@ -86,7 +98,7 @@ export class IntegrationsService {
       verb: 'integration.updated',
       payload: { connectionId: id },
     });
-    return updated;
+    return toConnectionResponse(updated);
   }
 
   async retire(id: string, actorUserId: string) {
@@ -107,7 +119,7 @@ export class IntegrationsService {
       verb: 'integration.retired',
       payload: { connectionId: id },
     });
-    return updated;
+    return toConnectionResponse(updated);
   }
 
   async revive(id: string, actorUserId: string) {
@@ -129,7 +141,7 @@ export class IntegrationsService {
       verb: 'integration.revived',
       payload: { connectionId: id },
     });
-    return updated;
+    return toConnectionResponse(updated);
   }
 
   // ---------------------------------------------------------------------------
