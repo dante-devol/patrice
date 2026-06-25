@@ -46,6 +46,10 @@ export const envSchema = z.object({
   // Batching window: role-change events within this window collapse into one sync
   // job per connection (pg-boss singletonKey deduplication). Default 30 s.
   INTEGRATION_SYNC_DELAY_SECONDS: z.coerce.number().int().positive().default(30),
+  // AES-256-GCM key for the AEAD-env SecretCipherPort adapter (Slice C / #57).
+  // 32 raw bytes encoded as hex (64 chars). Worker-only — the api role never
+  // decrypts tokens. If absent the adapter is disabled (plaintext botToken fallback).
+  INTEGRATION_TOKEN_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

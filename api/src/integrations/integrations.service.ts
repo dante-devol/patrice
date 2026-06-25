@@ -12,7 +12,9 @@ import {
   UpdateIntegrationDto,
   CreateMappingDto,
   UpdateMappingDto,
+  RotateTokenDto,
 } from './integrations.dto';
+import { SECRET_CIPHER_PORT, type SecretCipherPort } from './secret-cipher.port';
 
 /**
  * Strip secret-bearing fields from a connection row before it leaves the API.
@@ -32,6 +34,7 @@ export class IntegrationsService {
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
     @Inject(ENV) private readonly env: Env,
+    @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -96,6 +99,31 @@ export class IntegrationsService {
       subjectType: 'integration_connection',
       subjectId: id,
       verb: 'integration.updated',
+      payload: { connectionId: id },
+    });
+    return toConnectionResponse(updated);
+  }
+
+  /**
+   * Re-encrypt the bot token and store it in credentials_ref. Clears config.botToken.
+   * Rotation is write-only — the new ciphertext is never returned.
+   */
+  async rotateToken(id: string, actorUserId: string, dto: RotateTokenDto) {
+    const connection = await this.loadActive(id);
+    const ref = await this.cipher.encrypt(dto.botToken);
+    // Strip the plaintext token from config to prevent dual-custody.
+    const safeConfig = { ...(connection.config as Record<string, unknown>) };
+    delete safeConfig['botToken'];
+    const updated = await this.prisma.integrationConnection.update({
+      where: { id },
+      data: { credentialsRef: ref, config: safeConfig as Prisma.InputJsonValue },
+    });
+    await this.activity.logActivity({
+      organizationId: connection.organizationId,
+      actorUserId,
+      subjectType: 'integration_connection',
+      subjectId: id,
+      verb: 'integration.token_rotated',
       payload: { connectionId: id },
     });
     return toConnectionResponse(updated);

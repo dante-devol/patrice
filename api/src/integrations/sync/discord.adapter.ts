@@ -13,6 +13,7 @@ import type {
 } from './integration-sync.port';
 import { reconcile } from './reconciler';
 import type { IntegrationConnection } from '@prisma/client';
+import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
 
 interface DiscordGuildMember {
   user: { id: string };
@@ -34,6 +35,7 @@ export class DiscordAdapter implements IntegrationSyncPort {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     @Inject(ENV) private readonly env: Env,
+    @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -41,7 +43,7 @@ export class DiscordAdapter implements IntegrationSyncPort {
   // ---------------------------------------------------------------------------
 
   async fetchMembership(conn: IntegrationConnection): Promise<Map<ExternalUserId, ExternalGroupId[]>> {
-    const botToken = this.resolveBotToken(conn);
+    const botToken = await this.resolveBotToken(conn);
     const members = await this.fetchGuildMembers(conn.externalWorkspaceId, botToken);
     const result = new Map<ExternalUserId, ExternalGroupId[]>();
     for (const m of members) {
@@ -51,7 +53,7 @@ export class DiscordAdapter implements IntegrationSyncPort {
   }
 
   async fetchGroups(conn: IntegrationConnection): Promise<ExternalGroup[]> {
-    const botToken = this.resolveBotToken(conn);
+    const botToken = await this.resolveBotToken(conn);
     const res = await fetch(
       `https://discord.com/api/v10/guilds/${conn.externalWorkspaceId}/roles`,
       { headers: { Authorization: `Bot ${botToken}` } },
@@ -82,7 +84,7 @@ export class DiscordAdapter implements IntegrationSyncPort {
       return;
     }
 
-    const botToken = this.resolveBotToken(connection);
+    const botToken = await this.resolveBotToken(connection);
     if (!botToken) {
       this.logger.warn(`Sync skipped: no botToken in connection ${connectionId}`);
       await this.prisma.integrationConnection.update({
@@ -234,9 +236,11 @@ export class DiscordAdapter implements IntegrationSyncPort {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  private resolveBotToken(conn: IntegrationConnection): string {
-    // Slice C (#57) will move this to SecretCipherPort.credentials_ref decryption.
-    // Until then we read from config.botToken.
+  async resolveBotToken(conn: IntegrationConnection): Promise<string> {
+    if (conn.credentialsRef && this.cipher.canHandle(conn.credentialsRef)) {
+      return this.cipher.decrypt(conn.credentialsRef);
+    }
+    // Backwards-compat: plaintext config.botToken until all connections migrated (#57).
     return (conn.config as Record<string, string>)['botToken'] ?? '';
   }
 

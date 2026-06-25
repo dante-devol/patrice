@@ -177,6 +177,7 @@ export const activityPayloadSchemas = {
   'integration.updated': z.object({ connectionId: uuid }).strict(),
   'integration.retired': z.object({ connectionId: uuid }).strict(),
   'integration.revived': z.object({ connectionId: uuid }).strict(),
+  'integration.token_rotated': z.object({ connectionId: uuid }).strict(),
   'integration.synced': z
     .object({ connectionId: uuid, grantedCount: z.number().int(), revokedCount: z.number().int() })
     .strict(),

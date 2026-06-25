@@ -26,10 +26,12 @@ import {
   createMappingSchema,
   updateIntegrationSchema,
   updateMappingSchema,
+  rotateTokenSchema,
   type ConnectIntegrationDto,
   type CreateMappingDto,
   type UpdateIntegrationDto,
   type UpdateMappingDto,
+  type RotateTokenDto,
 } from './integrations.dto';
 
 interface AuthedRequest extends Request {
@@ -71,6 +73,18 @@ export class IntegrationsController {
   ) {
     if (!req.user) throw new UnauthenticatedError();
     return this.integrations.update(id, req.user.id, body);
+  }
+
+  @Post(':id/rotate-token')
+  @HttpCode(200)
+  @Authorize(ACTIONS.integrationUpdate.action, orgResource)
+  async rotateToken(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(rotateTokenSchema)) body: RotateTokenDto,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.integrations.rotateToken(id, req.user.id, body);
   }
 
   @Post(':id/retire')
