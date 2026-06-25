@@ -143,7 +143,7 @@
       "label": "Vault: Enable transit + create key",
       "detail": "Enables the transit engine and creates the 'patrice-integration' key via the Vault HTTP API. Requires Vault running on :8200.",
       "type": "shell",
-      "command": "Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8200/v1/sys/mounts/transit -Headers @{'X-Vault-Token'='dev-root'} -ContentType 'application/json' -Body '{\"type\":\"transit\"}' -ErrorAction SilentlyContinue; Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8200/v1/transit/keys/patrice-integration -Headers @{'X-Vault-Token'='dev-root'} -ContentType 'application/json' -Body '{}'; Write-Host 'Transit engine + patrice-integration key ready.'",
+      "command": "$h = @{'X-Vault-Token'='dev-root'}; Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8200/v1/sys/mounts/transit -Headers $h -ContentType 'application/json' -Body (@{type='transit'} | ConvertTo-Json) -ErrorAction SilentlyContinue; Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8200/v1/transit/keys/patrice-integration -Headers $h -ContentType 'application/json' -Body (@{} | ConvertTo-Json); Write-Host 'Transit engine + patrice-integration key ready.'",
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
     },
