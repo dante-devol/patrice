@@ -30,7 +30,7 @@ describe('DiscordRestClient', () => {
     const client = makeClient();
     const result = await client.addMemberRole('guild-1', 'user-1', 'role-1', 'Bot.token');
     expect(result.status).toBe(204);
-    expect(result.ok).toBe(false); // 204 is technically not "ok" via fetch but we treat 204 as success
+    expect(result.ok).toBe(true);
   });
 
   it('removes a member role (DELETE 204)', async () => {

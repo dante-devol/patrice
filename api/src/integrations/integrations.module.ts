@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ActivityModule } from '../activity/activity.module';
 import { CommonModule } from '../common/common.module';
@@ -17,7 +17,7 @@ import { DiscordRestClient } from './sync/discord-rest.client';
 import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
-  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, GatewayModule],
+  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, forwardRef(() => GatewayModule)],
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,
@@ -30,6 +30,6 @@ import { GatewayModule } from './gateway/gateway.module';
     CompositeCipherAdapter,
     { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter },
   ],
-  exports: [SyncService],
+  exports: [SyncService, CompositeCipherAdapter, { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter }],
 })
 export class IntegrationsModule {}

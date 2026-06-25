@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleInit, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { WebSocket } from 'ws';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SyncService } from '../sync/sync.service';
@@ -43,7 +43,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sync: SyncService,
+    @Inject(forwardRef(() => SyncService)) private readonly sync: SyncService,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
     @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
   ) {}
