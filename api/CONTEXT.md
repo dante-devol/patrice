@@ -126,9 +126,51 @@ The cohort resolved **at event time** and written as one `notification` row per 
 _Avoid_: Recipient List, Subscriber Set
 
 **PubSubPort**:
-The fan-out seam (`publish(userId, ev)` / `subscribe(userId, cb)`). v1 binds the in-process adapter (single instance); the post-v1 multi-instance path is a Postgres `LISTEN/NOTIFY` adapter behind the same port. Carries a content-free **sync** ping only — durability never rides the stream.
+The fan-out seam (`publish(userId, ev)` / `subscribe(userId, cb)`). v1 binds the in-process adapter (single instance); the post-v1 multi-instance path is a Postgres `LISTEN/NOTIFY` adapter behind the same port. Carries a content-free **sync** ping only — durability never rides the stream. The Process Role split does **not** force the `LISTEN/NOTIFY` adapter on its own — every publisher and the SSE subscriber live in the `api` role; it is forced only when a `worker`-role path first publishes (guarded by a pre-split assertion).
 _Avoid_: Event Bus, Broker
+
+**Process Role**:
+The `PROCESS_ROLE` toggle (resolved into an injected `ProcessRole` provider) selecting a process's job from one image: `api` (HTTP only, N replicas, freely restartable) or `worker` (no HTTP — pg-boss consumers + cron + GC + the Gateway socket; holds the singletons and the only copy of the cipher key). Dev runs one combined process; prod splits. The Gateway socket is the one strict single-instance guard; multi-`worker` leader election is the deferred HA seam.
+_Avoid_: Process Type, Mode, Web/Worker Dyno
 
 **Claim Eligibility AND-Composition**:
 The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: if either is true the claimant must hold the corresponding inherent role. Evaluated in Cedar via the `task:assign @ own_as_claimant` template; reads `principal.memberDivisions` and `principal.memberTeams`.
 _Avoid_: Membership Check, Eligibility Rule
+
+### Integrations & external sync
+
+**Edge**:
+One `(connection, external user, mapped group/role)` membership fact — the unit the reconciler converges. Binary: the user either holds the mapped role or doesn't, on each side.
+_Avoid_: Membership, Assignment, Link (Link is the user↔account identity, not the role fact)
+
+**Sync Baseline**:
+The last-converged state of an Edge, persisted per `(connection, external user, external group)`. The anchor for Divergence Attribution; **every write updates it, including the bot's own outbound pushes**, so the writer never re-reacts to itself.
+_Avoid_: Watermark (implies a monotonic stream offset — this is a state snapshot), Shadow State, `last_synced_state` (the column name, not the concept)
+
+**Divergence Attribution**:
+The rule that settles ~all reconciliation: for a binary Edge against a trustworthy Sync Baseline, the two sides can only disagree if **exactly one** diverged from the baseline — that side is the unambiguous origin, and its state propagates. No tiebreaker (time or precedence) is consulted in the normal case.
+_Avoid_: Conflict Resolution (that's only the cold-baseline path), LWW (we explicitly do not time-order the common case)
+
+**Cold-Baseline Conflict**:
+The only case a tiebreaker is needed — the Sync Baseline can't attribute (first sync, lost/never-converged baseline). Resolved by **Discord audit-log time** when the entry is fetchable, else by **Source Precedence**. A Gateway/REST membership fetch carries no per-Edge timestamp, so audit-log is the sole authoritative Discord-side change-time.
+_Avoid_: Race, Flap
+
+**Source Precedence**:
+The configured fallback winner for a Cold-Baseline Conflict when no audit-log time is available — a per-mapping `conflict_winner` (`patrice | external`). Deterministic, not time-based.
+_Avoid_: Priority, Authority (Authority is the broader source-of-truth posture)
+
+**Doorbell**:
+The Gateway listener's role — on a relevant Discord event it only `enqueueSoon`s a reconcile for the connection; it never reads or writes Edge state. One writer (the reconciler), one correctness path. Fast-but-best-effort: a missed event silently degrades to the Reconcile Floor, so it is health-monitored, never trusted as a guarantee. Revocation latency on this path = debounce (~5s) + reconcile duration, an explicit monitored SLO — not the hard guarantee.
+_Avoid_: Listener (too generic), Webhook (it's a Gateway socket, not an HTTP callback), Trigger
+
+**Reconcile Floor**:
+The guaranteed max-staleness bound enforced independently of the Doorbell, **adaptive to Gateway health**: **6h** when the socket is healthy, tightened to **30min** while degraded (socket down). A single ~30-min supervisory tick enforces whichever bound applies (healthy: reconcile only past 6h; degraded: every tick) and, when degraded, also re-attempts Gateway restoration (debounced) — layered *over* fast second-scale socket backoff, which handles transient drops. Replaces the former daily 02:00 sweep.
+_Avoid_: Cron Sweep, Daily Sync, Backstop Poll
+
+**Native-Authority Carve-Out**:
+The rule that security-critical roles (Org-Admin / governance) stay Patrice-native and admin-managed — never mapped through an integration — so their revocation is a synchronous Patrice write, never gated on sync latency or a live Gateway. This, not the Doorbell SLO, is the actual revocation guarantee; it caps the blast radius of any missed or slow integration event to non-critical membership.
+_Avoid_: Critical Role Exclusion, Admin Role Lock
+
+**SecretCipherPort**:
+The seam for custodying a per-connection provider secret (the Discord bot token, the one long-lived secret Patrice must hold to push outbound). `credentials_ref` holds a **cipher-tagged handle** the port resolves: `aead:<ciphertext>` inline (self-host default, key in env), `vault:<path>` / `kms:<keyid>:<wrapped>` for cloud. Decrypted **only in the worker role**, which alone holds the key; never returned by any read endpoint. App-level secrets (`DISCORD_CLIENT_SECRET`, peppers) stay env-only and are out of scope — this narrows §2.8's "custodies nothing" to the inbound/OAuth paths.
+_Avoid_: KeyVault, Secret Store (those name one adapter, not the seam), TokenCrypto
