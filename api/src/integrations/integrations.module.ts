@@ -9,6 +9,9 @@ import { IntegrationsService } from './integrations.service';
 import { SyncService } from './sync/sync.service';
 import { DiscordAdapter } from './sync/discord.adapter';
 import { AeadEnvAdapter } from './aead-env.adapter';
+import { VaultTransitAdapter } from './vault-transit.adapter';
+import { KmsEnvelopeAdapter } from './kms-envelope.adapter';
+import { CompositeCipherAdapter } from './composite-cipher.adapter';
 import { SECRET_CIPHER_PORT } from './secret-cipher.port';
 import { DiscordRestClient } from './sync/discord-rest.client';
 import { GatewayModule } from './gateway/gateway.module';
@@ -22,7 +25,10 @@ import { GatewayModule } from './gateway/gateway.module';
     DiscordAdapter,
     DiscordRestClient,
     AeadEnvAdapter,
-    { provide: SECRET_CIPHER_PORT, useExisting: AeadEnvAdapter },
+    VaultTransitAdapter,
+    KmsEnvelopeAdapter,
+    CompositeCipherAdapter,
+    { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter },
   ],
   exports: [SyncService],
 })

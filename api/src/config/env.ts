@@ -53,6 +53,13 @@ export const envSchema = z.object({
   // Process topology split (Slice F / #60). `api` = HTTP only; `worker` = pg-boss
   // consumers + cron + GC + Gateway. Dev/test leaves this unset (combined process).
   PROCESS_ROLE: z.enum(['api', 'worker']).optional(),
+  // Vault transit adapter (Slice H / #62). Worker-only.
+  VAULT_ADDR: z.string().url().optional(),
+  VAULT_TOKEN: z.string().optional(),
+  VAULT_TRANSIT_KEY: z.string().optional(),
+  // KMS envelope adapter (Slice H / #62). Worker-only.
+  KMS_KEY_ID: z.string().optional(),
+  AWS_REGION: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
