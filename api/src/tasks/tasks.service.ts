@@ -25,7 +25,6 @@ export interface TaskView {
   teamId: string | null;
   requesterUserId: string;
   openings: number;
-  claimsClosed: boolean;
   statusCache: StatusCache | null;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
@@ -67,7 +66,6 @@ export class TasksService {
     teamId: string | null;
     requesterUserId: string;
     openings: number;
-    claimsClosed: boolean;
     statusCache: StatusCache | null;
     lifecycleState: LifecycleState;
     retiredAt: Date | null;
@@ -84,7 +82,6 @@ export class TasksService {
       teamId: t.teamId,
       requesterUserId: t.requesterUserId,
       openings: t.openings,
-      claimsClosed: t.claimsClosed,
       statusCache: t.statusCache,
       lifecycleState: t.lifecycleState,
       retiredAt: t.retiredAt,

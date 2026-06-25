@@ -232,7 +232,6 @@ export interface Task {
   teamId: string | null;
   requesterUserId: string;
   openings: number;
-  claimsClosed: boolean;
   statusCache: TaskStatus | null;
   lifecycleState: Lifecycle;
   retiredAt: string | null;

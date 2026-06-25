@@ -294,7 +294,7 @@ export class ApiService {
   }
   manageClaims(
     id: string,
-    body: { openingsDelta?: number; claimsClosed?: boolean },
+    body: { openingsDelta?: number },
   ): Promise<Task> {
     return firstValueFrom(this.http.post<Task>(`/api/tasks/${id}/claims`, body));
   }
