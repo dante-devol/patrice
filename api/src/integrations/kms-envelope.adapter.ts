@@ -107,10 +107,6 @@ export class KmsEnvelopeAdapter implements SecretCipherPort {
   }
 
   // Dynamic import so the hard dep is optional at build time.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async kmsClient(): Promise<any> {
-    // @ts-expect-error — @aws-sdk/client-kms is an optional peer dep; install it in the worker image.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return import('@aws-sdk/client-kms');
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
+  private async kmsClient(): Promise<any> { return import('@aws-sdk/client-kms'); }
 }
