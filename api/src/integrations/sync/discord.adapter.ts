@@ -3,6 +3,16 @@ import { ActivitySource, IntegrationStatus, LifecycleState, UserRoleSource } fro
 import { PrismaService } from '../../prisma/prisma.service';
 import { ActivityService } from '../../activity/activity.service';
 import { ENV, Env } from '../../config/env';
+import type {
+  IntegrationSyncPort,
+  ExternalUserId,
+  ExternalGroupId,
+  ExternalGroup,
+  ExternalRoleOp,
+  ApplyResult,
+} from './integration-sync.port';
+import { reconcile } from './reconciler';
+import type { IntegrationConnection } from '@prisma/client';
 
 interface DiscordGuildMember {
   user: { id: string };
@@ -10,16 +20,14 @@ interface DiscordGuildMember {
 }
 
 /**
- * Discord sync adapter (Slice 8.4). Runs only from pg-boss jobs — never inline.
+ * Discord sync adapter (Slice 8.4 / #56).
  *
- * For each mapping on the connection, reconciles `user_role` against the guild's
- * role membership per `sync_direction`. Conflicts resolved LWW by `updated_at` +
- * `source` (integration source wins for inbound; patrice wins for outbound on a tie).
- * Maps by stable Discord snowflake IDs so renames don't break things. A missing
- * mapped group marks the mapping `is_broken` and logs `integration.broken`.
+ * Provider I/O only — reconciliation logic lives in reconciler.ts.
+ * Runs only from pg-boss jobs, never inline.
  */
 @Injectable()
-export class DiscordAdapter {
+export class DiscordAdapter implements IntegrationSyncPort {
+  readonly provider = 'discord';
   private readonly logger = new Logger(DiscordAdapter.name);
 
   constructor(
@@ -27,6 +35,42 @@ export class DiscordAdapter {
     private readonly activity: ActivityService,
     @Inject(ENV) private readonly env: Env,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // IntegrationSyncPort implementation
+  // ---------------------------------------------------------------------------
+
+  async fetchMembership(conn: IntegrationConnection): Promise<Map<ExternalUserId, ExternalGroupId[]>> {
+    const botToken = this.resolveBotToken(conn);
+    const members = await this.fetchGuildMembers(conn.externalWorkspaceId, botToken);
+    const result = new Map<ExternalUserId, ExternalGroupId[]>();
+    for (const m of members) {
+      result.set(m.user.id, m.roles);
+    }
+    return result;
+  }
+
+  async fetchGroups(conn: IntegrationConnection): Promise<ExternalGroup[]> {
+    const botToken = this.resolveBotToken(conn);
+    const res = await fetch(
+      `https://discord.com/api/v10/guilds/${conn.externalWorkspaceId}/roles`,
+      { headers: { Authorization: `Bot ${botToken}` } },
+    );
+    if (!res.ok) {
+      throw new Error(`Discord roles fetch error ${res.status}: ${await res.text()}`);
+    }
+    const roles = (await res.json()) as { id: string; name: string }[];
+    return roles.map((r) => ({ id: r.id, name: r.name }));
+  }
+
+  async applyOutbound(_conn: IntegrationConnection, _ops: ExternalRoleOp[]): Promise<ApplyResult> {
+    // Stubbed — outbound REST push lands in Slice D (#58).
+    return { applied: 0, failed: 0, brokenGroupIds: [] };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Top-level sync entry point (called by SyncService)
+  // ---------------------------------------------------------------------------
 
   async sync(connectionId: string): Promise<void> {
     const connection = await this.prisma.integrationConnection.findUnique({
@@ -37,14 +81,10 @@ export class DiscordAdapter {
       this.logger.warn(`Sync skipped: connection ${connectionId} not found or retired`);
       return;
     }
-    if (!this.env.DISCORD_CLIENT_ID || !this.env.DISCORD_CLIENT_SECRET) {
-      this.logger.warn(`Discord sync skipped: credentials not configured`);
-      return;
-    }
 
-    const botToken = (connection.config as Record<string, string>)['botToken'];
+    const botToken = this.resolveBotToken(connection);
     if (!botToken) {
-      this.logger.warn(`Sync skipped: no botToken in connection ${connectionId} config`);
+      this.logger.warn(`Sync skipped: no botToken in connection ${connectionId}`);
       await this.prisma.integrationConnection.update({
         where: { id: connectionId },
         data: { status: IntegrationStatus.broken },
@@ -52,12 +92,15 @@ export class DiscordAdapter {
       return;
     }
 
-    const guildId = connection.externalWorkspaceId;
-    let members: DiscordGuildMember[];
+    // --- Fetch external state ---
+    let externalMembership: Map<ExternalUserId, ExternalGroupId[]>;
+    let knownGroupIds: Set<ExternalGroupId>;
     try {
-      members = await this.fetchGuildMembers(guildId, botToken);
+      externalMembership = await this.fetchMembership(connection);
+      const groups = await this.fetchGroups(connection);
+      knownGroupIds = new Set(groups.map((g) => g.id));
     } catch (err) {
-      this.logger.error(`Failed to fetch Discord guild members: ${(err as Error).message}`);
+      this.logger.error(`Discord fetch failed for ${connectionId}: ${(err as Error).message}`);
       await this.prisma.integrationConnection.update({
         where: { id: connectionId },
         data: { status: IntegrationStatus.broken },
@@ -70,105 +113,108 @@ export class DiscordAdapter {
       data: { status: IntegrationStatus.active },
     });
 
-    const org = await this.prisma.organization.findFirstOrThrow({ select: { id: true } });
+    // --- Batch-load Patrice state (no N+1) ---
+    const linkedUsers = await this.prisma.externalIdentity.findMany({
+      where: { connectionId },
+      select: { userId: true, externalUserId: true },
+    });
+
+    const linkedUserIds = linkedUsers.map((l) => l.userId);
+    const mappedRoleIds = [...new Set(connection.groupMappings.map((m) => m.roleId))];
+
+    const [existingRoleRows, roleRows] = await Promise.all([
+      this.prisma.userRole.findMany({
+        where: { userId: { in: linkedUserIds }, roleId: { in: mappedRoleIds } },
+      }),
+      this.prisma.role.findMany({ where: { id: { in: mappedRoleIds } } }),
+    ]);
+
+    const existingRoles = new Map(existingRoleRows.map((ur) => [`${ur.userId}:${ur.roleId}`, ur]));
+    const roleMap = new Map(roleRows.map((r) => [r.id, r]));
+
+    const activeMappings = connection.groupMappings.filter((m) => !m.isBroken);
+
+    const { paOps, externalOps, brokenMappingIds } = reconcile({
+      mappings: activeMappings,
+      linkedUsers,
+      externalMembership,
+      knownGroupIds,
+      existingRoles,
+      roleRows: roleMap,
+    });
+
+    // Use connection.organizationId directly — no extra DB round-trip.
+    const orgId = connection.organizationId;
+
+    // --- Apply broken-mapping flags ---
+    for (const mappingId of brokenMappingIds) {
+      const mapping = connection.groupMappings.find((m) => m.id === mappingId);
+      await this.prisma.externalGroupMapping.update({
+        where: { id: mappingId },
+        data: { isBroken: true },
+      });
+      await this.activity.logActivity({
+        organizationId: orgId,
+        actorUserId: null,
+        subjectType: 'external_group_mapping',
+        subjectId: mappingId,
+        verb: 'integration.broken',
+        payload: { connectionId, externalGroupId: mapping?.externalGroupId ?? '' },
+        source: ActivitySource.integration,
+        sourceConnectionId: connectionId,
+      });
+    }
+
+    // --- Apply Patrice-side ops ---
     let totalGranted = 0;
     let totalRevoked = 0;
 
-    for (const mapping of connection.groupMappings) {
-      if (mapping.isBroken) continue;
-
-      // Check whether this Discord role still exists in the guild.
-      const roleExistsInGuild = members.some((m) => m.roles.includes(mapping.externalGroupId));
-      const allGuildRoleIds = new Set(members.flatMap((m) => m.roles));
-
-      if (!allGuildRoleIds.has(mapping.externalGroupId) && members.length > 0) {
-        // Role is gone — flag broken.
-        await this.prisma.externalGroupMapping.update({
-          where: { id: mapping.id },
-          data: { isBroken: true },
+    for (const op of paOps) {
+      if (op.kind === 'grant') {
+        await this.prisma.userRole.create({
+          data: {
+            userId: op.userId,
+            roleId: op.roleId,
+            source: UserRoleSource.integration,
+            sourceConnectionId: connectionId,
+          },
         });
         await this.activity.logActivity({
-          organizationId: org.id,
+          organizationId: orgId,
           actorUserId: null,
-          subjectType: 'external_group_mapping',
-          subjectId: mapping.id,
-          verb: 'integration.broken',
-          payload: { connectionId, externalGroupId: mapping.externalGroupId },
+          subjectType: 'user_role',
+          subjectId: op.userId,
+          verb: 'user_role.granted',
+          payload: { userId: op.userId, roleId: op.roleId },
           source: ActivitySource.integration,
           sourceConnectionId: connectionId,
         });
-        continue;
-      }
-
-      const membersWithRole = new Set(
-        members.filter((m) => m.roles.includes(mapping.externalGroupId)).map((m) => m.user.id),
-      );
-
-      // Fetch Patrice users linked to this connection.
-      const links = await this.prisma.externalIdentity.findMany({
-        where: { connectionId },
-        select: { userId: true, externalUserId: true },
-      });
-
-      for (const link of links) {
-        const hasDiscordRole = membersWithRole.has(link.externalUserId);
-        const existingUserRole = await this.prisma.userRole.findUnique({
-          where: { userId_roleId: { userId: link.userId, roleId: mapping.roleId } },
+        totalGranted++;
+      } else {
+        await this.prisma.userRole.delete({
+          where: { userId_roleId: { userId: op.userId, roleId: op.roleId } },
         });
-        const roleRow = await this.prisma.role.findUnique({ where: { id: mapping.roleId } });
-        if (!roleRow || roleRow.lifecycleState === LifecycleState.retired) continue;
-
-        if (mapping.syncDirection === 'inbound' || mapping.syncDirection === 'bidirectional') {
-          if (hasDiscordRole && !existingUserRole) {
-            await this.prisma.userRole.create({
-              data: {
-                userId: link.userId,
-                roleId: mapping.roleId,
-                source: UserRoleSource.integration,
-                sourceConnectionId: connectionId,
-              },
-            });
-            await this.activity.logActivity({
-              organizationId: org.id,
-              actorUserId: null,
-              subjectType: 'user_role',
-              subjectId: link.userId,
-              verb: 'user_role.granted',
-              payload: { userId: link.userId, roleId: mapping.roleId },
-              source: ActivitySource.integration,
-              sourceConnectionId: connectionId,
-            });
-            totalGranted++;
-          } else if (!hasDiscordRole && existingUserRole?.source === UserRoleSource.integration) {
-            // LWW: integration-sourced memberships can be removed by inbound sync.
-            await this.prisma.userRole.delete({
-              where: { userId_roleId: { userId: link.userId, roleId: mapping.roleId } },
-            });
-            await this.activity.logActivity({
-              organizationId: org.id,
-              actorUserId: null,
-              subjectType: 'user_role',
-              subjectId: link.userId,
-              verb: 'integration.removed',
-              payload: { connectionId, userId: link.userId, roleId: mapping.roleId },
-              source: ActivitySource.integration,
-              sourceConnectionId: connectionId,
-            });
-            totalRevoked++;
-          }
-        }
-
-        if (mapping.syncDirection === 'outbound' || mapping.syncDirection === 'bidirectional') {
-          // Outbound: push Patrice role membership to Discord.
-          // The actual Discord API call would happen here; we log the intent.
-          // (Real implementation would call PATCH /guilds/{guildId}/members/{userId}/roles)
-          void roleExistsInGuild; // used for broken-check above; outbound push is stubbed
-        }
+        await this.activity.logActivity({
+          organizationId: orgId,
+          actorUserId: null,
+          subjectType: 'user_role',
+          subjectId: op.userId,
+          verb: 'integration.removed',
+          payload: { connectionId, userId: op.userId, roleId: op.roleId },
+          source: ActivitySource.integration,
+          sourceConnectionId: connectionId,
+        });
+        totalRevoked++;
       }
     }
 
+    // --- Apply external-side ops (outbound, currently stubbed) ---
+    if (externalOps.length > 0) {
+      await this.applyOutbound(connection, externalOps);
+    }
+
     await this.activity.logActivity({
-      organizationId: org.id,
+      organizationId: orgId,
       actorUserId: null,
       subjectType: 'integration_connection',
       subjectId: connectionId,
@@ -178,17 +224,23 @@ export class DiscordAdapter {
       sourceConnectionId: connectionId,
     });
 
-    // Update lastSyncedAt on all linked identities.
     await this.prisma.externalIdentity.updateMany({
       where: { connectionId },
       data: { lastSyncedAt: new Date() },
     });
   }
 
-  private async fetchGuildMembers(
-    guildId: string,
-    botToken: string,
-  ): Promise<DiscordGuildMember[]> {
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private resolveBotToken(conn: IntegrationConnection): string {
+    // Slice C (#57) will move this to SecretCipherPort.credentials_ref decryption.
+    // Until then we read from config.botToken.
+    return (conn.config as Record<string, string>)['botToken'] ?? '';
+  }
+
+  private async fetchGuildMembers(guildId: string, botToken: string): Promise<DiscordGuildMember[]> {
     const members: DiscordGuildMember[] = [];
     let after = '0';
 
