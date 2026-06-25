@@ -5,10 +5,9 @@
 #
 # Secrets / overrides: create a .env file in this directory (docker-compose reads
 # it automatically). Relevant vars:
-#   SESSION_SECRET, TOKEN_PEPPER          — override the throwaway dev defaults
-#   DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET — required for the Discord OAuth flow
-#   KMS_KEY_ID, AWS_REGION               — required for the KMS cipher adapter
-#   INTEGRATION_TOKEN_KEY                — 64-hex-char key for the AEAD adapter
+#   SESSION_SECRET, TOKEN_PEPPER  — override the throwaway dev defaults
+#   KMS_KEY_ID, AWS_REGION        — required for the KMS cipher adapter
+#   INTEGRATION_TOKEN_KEY         — 64-hex-char key for the AEAD adapter
 #
 # ⚠️  NOT a production deployment. Plain HTTP on localhost; throwaway secrets.
 #     For production you MUST at minimum:
@@ -43,8 +42,6 @@ x-common-env: &common-env
   KMS_KEY_ID: ${KMS_KEY_ID:-}
   AWS_REGION: ${AWS_REGION:-us-east-2}
   INTEGRATION_TOKEN_KEY: ${INTEGRATION_TOKEN_KEY:-}
-  DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
-  DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
 
 services:
   db:
