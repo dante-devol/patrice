@@ -10,6 +10,7 @@ import { SyncService } from './sync/sync.service';
 import { DiscordAdapter } from './sync/discord.adapter';
 import { AeadEnvAdapter } from './aead-env.adapter';
 import { SECRET_CIPHER_PORT } from './secret-cipher.port';
+import { DiscordRestClient } from './sync/discord-rest.client';
 
 @Module({
   imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule],
@@ -18,6 +19,7 @@ import { SECRET_CIPHER_PORT } from './secret-cipher.port';
     IntegrationsService,
     SyncService,
     DiscordAdapter,
+    DiscordRestClient,
     AeadEnvAdapter,
     { provide: SECRET_CIPHER_PORT, useExisting: AeadEnvAdapter },
   ],

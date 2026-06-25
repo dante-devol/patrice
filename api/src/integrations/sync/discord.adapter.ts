@@ -14,6 +14,7 @@ import type {
 import { reconcile } from './reconciler';
 import type { IntegrationConnection } from '@prisma/client';
 import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
+import { DiscordRestClient } from './discord-rest.client';
 
 interface DiscordGuildMember {
   user: { id: string };
@@ -36,6 +37,7 @@ export class DiscordAdapter implements IntegrationSyncPort {
     private readonly activity: ActivityService,
     @Inject(ENV) private readonly env: Env,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
+    private readonly rest: DiscordRestClient,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -65,9 +67,55 @@ export class DiscordAdapter implements IntegrationSyncPort {
     return roles.map((r) => ({ id: r.id, name: r.name }));
   }
 
-  async applyOutbound(_conn: IntegrationConnection, _ops: ExternalRoleOp[]): Promise<ApplyResult> {
-    // Stubbed — outbound REST push lands in Slice D (#58).
-    return { applied: 0, failed: 0, brokenGroupIds: [] };
+  /**
+   * Apply outbound role ops to Discord. One PUT/DELETE per (member, role) delta.
+   *
+   * Failure taxonomy:
+   *  - 429 / 5xx / network: transient — DiscordRestClient retries; never sets is_broken.
+   *  - 403 hierarchy/permission, 404 role/guild gone: permanent — mark broken.
+   *  - 401 invalid token: connection broken with reason.
+   *  - Partial progress: collect per-op outcomes, continue.
+   */
+  async applyOutbound(conn: IntegrationConnection, ops: ExternalRoleOp[]): Promise<ApplyResult> {
+    const botToken = await this.resolveBotToken(conn);
+    const guildId = conn.externalWorkspaceId;
+    let applied = 0;
+    let failed = 0;
+    const brokenGroupIds: ExternalGroupId[] = [];
+
+    for (const op of ops) {
+      try {
+        const result = op.action === 'add'
+          ? await this.rest.addMemberRole(guildId, op.externalUserId, op.externalGroupId, botToken)
+          : await this.rest.removeMemberRole(guildId, op.externalUserId, op.externalGroupId, botToken);
+
+        if (result.ok || result.status === 204) {
+          applied++;
+        } else if (result.status === 401) {
+          // Invalid token — mark the whole connection broken and abort.
+          await this.prisma.integrationConnection.update({
+            where: { id: conn.id },
+            data: { status: IntegrationStatus.broken },
+          });
+          this.logger.error(`Discord 401 on connection ${conn.id}: token may be invalid`);
+          return { applied, failed: ops.length - applied, brokenGroupIds };
+        } else if (result.status === 403 || result.status === 404) {
+          // Hierarchy violation or role/guild gone — mark the external group broken.
+          if (!brokenGroupIds.includes(op.externalGroupId)) {
+            brokenGroupIds.push(op.externalGroupId);
+          }
+          failed++;
+        } else {
+          failed++;
+          this.logger.warn(`Outbound op ${op.action} ${op.externalGroupId} → ${op.externalUserId} status ${result.status}`);
+        }
+      } catch (err) {
+        failed++;
+        this.logger.error(`Outbound op failed: ${(err as Error).message}`);
+      }
+    }
+
+    return { applied, failed, brokenGroupIds };
   }
 
   // ---------------------------------------------------------------------------
@@ -210,9 +258,31 @@ export class DiscordAdapter implements IntegrationSyncPort {
       }
     }
 
-    // --- Apply external-side ops (outbound, currently stubbed) ---
+    // --- Apply external-side ops (outbound) ---
     if (externalOps.length > 0) {
-      await this.applyOutbound(connection, externalOps);
+      const applyResult = await this.applyOutbound(connection, externalOps);
+      // Mark mappings broken for permanent failures (403/404 from Discord).
+      for (const brokenGroupId of applyResult.brokenGroupIds) {
+        const affectedMappings = connection.groupMappings.filter(
+          (m) => m.externalGroupId === brokenGroupId && !m.isBroken,
+        );
+        for (const m of affectedMappings) {
+          await this.prisma.externalGroupMapping.update({
+            where: { id: m.id },
+            data: { isBroken: true },
+          });
+          await this.activity.logActivity({
+            organizationId: orgId,
+            actorUserId: null,
+            subjectType: 'external_group_mapping',
+            subjectId: m.id,
+            verb: 'integration.broken',
+            payload: { connectionId, externalGroupId: brokenGroupId },
+            source: ActivitySource.integration,
+            sourceConnectionId: connectionId,
+          });
+        }
+      }
     }
 
     await this.activity.logActivity({
