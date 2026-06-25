@@ -9,6 +9,7 @@ const mapping = (overrides: Partial<ExternalGroupMapping> = {}): ExternalGroupMa
   externalGroupId: 'ext-group-1',
   syncDirection: 'inbound',
   isBroken: false,
+  conflictWinner: 'patrice',
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,
@@ -49,6 +50,7 @@ describe('reconciler', () => {
     knownGroupIds: new Set(['ext-group-1']),
     existingRoles: new Map<string, UserRole>(),
     roleRows: new Map([['role-1', role()]]),
+    baseline: undefined as Set<string> | undefined,
   });
 
   describe('inbound', () => {
@@ -146,6 +148,77 @@ describe('reconciler', () => {
       input.roleRows.set('role-1', retiredRole);
       const result = reconcile(input);
       expect(result.paOps).toHaveLength(0);
+    });
+  });
+
+  describe('bidirectional — divergence attribution (#59)', () => {
+    const biInput = () => ({
+      ...baseInput(),
+      mappings: [mapping({ syncDirection: 'bidirectional' })],
+    });
+
+    it('no-op when both sides agree (converged)', () => {
+      const input = biInput();
+      input.existingRoles.set('user-1:role-1', userRole('user-1', 'role-1'));
+      input.baseline = new Set(['ext-user-1:ext-group-1']);
+      const result = reconcile(input);
+      expect(result.paOps).toHaveLength(0);
+      expect(result.externalOps).toHaveLength(0);
+    });
+
+    it('external diverged from baseline → propagate to Patrice (grant)', () => {
+      const input = biInput();
+      // external has it, Patrice doesn't, baseline didn't have it → external added it
+      input.baseline = new Set<string>(); // baseline: absent
+      const result = reconcile(input);
+      expect(result.paOps).toHaveLength(1);
+      expect(result.paOps[0]).toMatchObject({ kind: 'grant', userId: 'user-1' });
+      expect(result.externalOps).toHaveLength(0);
+    });
+
+    it('Patrice diverged from baseline → propagate to external (add)', () => {
+      const input = biInput();
+      input.existingRoles.set('user-1:role-1', userRole('user-1', 'role-1'));
+      input.externalMembership = new Map([['ext-user-1', []]]); // external doesn't have it
+      input.baseline = new Set<string>(); // baseline: absent → Patrice added it
+      const result = reconcile(input);
+      expect(result.externalOps).toHaveLength(1);
+      expect(result.externalOps[0]).toMatchObject({ action: 'add', externalUserId: 'ext-user-1' });
+      expect(result.paOps).toHaveLength(0);
+    });
+
+    it('cold baseline (undefined) uses conflict_winner=patrice → push to external', () => {
+      const input = biInput();
+      // external has it, Patrice doesn't, no baseline → cold, patrice wins → push external
+      input.baseline = undefined;
+      const result = reconcile(input);
+      // Patrice doesn't have it, external does; patrice wins → remove from external
+      expect(result.externalOps).toHaveLength(1);
+      expect(result.externalOps[0]).toMatchObject({ action: 'remove' });
+    });
+
+    it('cold baseline with conflict_winner=external → propagate external to Patrice', () => {
+      const input = biInput();
+      (input.mappings[0] as ExternalGroupMapping & { conflictWinner: string }).conflictWinner = 'external';
+      input.baseline = undefined;
+      const result = reconcile(input);
+      expect(result.paOps).toHaveLength(1);
+      expect(result.paOps[0]).toMatchObject({ kind: 'grant' });
+    });
+  });
+
+  describe('baseline tracking', () => {
+    it('emits baselineUpserts for present edges', () => {
+      const input = baseInput();
+      const result = reconcile(input);
+      expect(result.baselineUpserts).toContainEqual(expect.objectContaining({ externalUserId: 'ext-user-1', externalGroupId: 'ext-group-1' }));
+    });
+
+    it('emits baselineDeletes for absent edges', () => {
+      const input = baseInput();
+      input.externalMembership = new Map([['ext-user-1', []]]);
+      const result = reconcile(input);
+      expect(result.baselineDeletes).toContainEqual(expect.objectContaining({ externalUserId: 'ext-user-1', externalGroupId: 'ext-group-1' }));
     });
   });
 });

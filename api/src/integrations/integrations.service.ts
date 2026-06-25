@@ -361,7 +361,10 @@ export class IntegrationsService {
     }
     const updated = await this.prisma.externalGroupMapping.update({
       where: { id: mappingId },
-      data: { ...(dto.syncDirection !== undefined && { syncDirection: dto.syncDirection }) },
+      data: {
+        ...(dto.syncDirection !== undefined && { syncDirection: dto.syncDirection }),
+        ...(dto.conflictWinner !== undefined && { conflictWinner: dto.conflictWinner }),
+      },
     });
     await this.activity.logActivity({
       organizationId: connection.organizationId,

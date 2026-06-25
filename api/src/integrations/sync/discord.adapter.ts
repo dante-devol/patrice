@@ -11,7 +11,7 @@ import type {
   ExternalRoleOp,
   ApplyResult,
 } from './integration-sync.port';
-import { reconcile } from './reconciler';
+import { reconcile, type SyncBaseline } from './reconciler';
 import type { IntegrationConnection } from '@prisma/client';
 import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
 import { DiscordRestClient } from './discord-rest.client';
@@ -183,14 +183,28 @@ export class DiscordAdapter implements IntegrationSyncPort {
     const roleMap = new Map(roleRows.map((r) => [r.id, r]));
 
     const activeMappings = connection.groupMappings.filter((m) => !m.isBroken);
+    const bidirectionalMappingIds = activeMappings
+      .filter((m) => m.syncDirection === 'bidirectional')
+      .map((m) => m.id);
 
-    const { paOps, externalOps, brokenMappingIds } = reconcile({
+    // Load sync baseline for bidirectional mappings (#59).
+    let baseline: SyncBaseline | undefined;
+    if (bidirectionalMappingIds.length > 0) {
+      const rows = await this.prisma.syncBaseline.findMany({
+        where: { connectionId, mappingId: { in: bidirectionalMappingIds } },
+        select: { externalUserId: true, externalGroupId: true },
+      });
+      baseline = new Set(rows.map((r) => `${r.externalUserId}:${r.externalGroupId}`));
+    }
+
+    const { paOps, externalOps, brokenMappingIds, baselineUpserts, baselineDeletes } = reconcile({
       mappings: activeMappings,
       linkedUsers,
       externalMembership,
       knownGroupIds,
       existingRoles,
       roleRows: roleMap,
+      baseline,
     });
 
     // Use connection.organizationId directly — no extra DB round-trip.
@@ -283,6 +297,41 @@ export class DiscordAdapter implements IntegrationSyncPort {
           });
         }
       }
+    }
+
+    // --- Update sync baseline (#59) ---
+    if (baselineUpserts.length > 0) {
+      for (const u of baselineUpserts) {
+        await this.prisma.syncBaseline.upsert({
+          where: {
+            connectionId_mappingId_externalUserId_externalGroupId: {
+              connectionId,
+              mappingId: u.mappingId,
+              externalUserId: u.externalUserId,
+              externalGroupId: u.externalGroupId,
+            },
+          },
+          create: {
+            connectionId,
+            mappingId: u.mappingId,
+            externalUserId: u.externalUserId,
+            externalGroupId: u.externalGroupId,
+          },
+          update: { updatedAt: new Date() },
+        });
+      }
+    }
+    if (baselineDeletes.length > 0) {
+      await this.prisma.syncBaseline.deleteMany({
+        where: {
+          connectionId,
+          OR: baselineDeletes.map((d) => ({
+            mappingId: d.mappingId,
+            externalUserId: d.externalUserId,
+            externalGroupId: d.externalGroupId,
+          })),
+        },
+      });
     }
 
     await this.activity.logActivity({

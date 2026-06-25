@@ -378,7 +378,17 @@ export class GcService {
     await tx.notification.deleteMany({ where: { recipientUserId: userId } });
     await tx.userRole.deleteMany({ where: { userId } });
     // Slice 8: purge integration account links (external_identity rows name user as PII).
+    const identities = await tx.externalIdentity.findMany({
+      where: { userId },
+      select: { externalUserId: true, connectionId: true },
+    });
     await tx.externalIdentity.deleteMany({ where: { userId } });
+    // Also purge sync_baseline rows keyed on the user's external IDs (#59).
+    for (const identity of identities) {
+      await tx.syncBaseline.deleteMany({
+        where: { connectionId: identity.connectionId, externalUserId: identity.externalUserId },
+      });
+    }
   }
 
   /**

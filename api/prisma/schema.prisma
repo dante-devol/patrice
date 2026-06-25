@@ -677,6 +677,7 @@ model IntegrationConnection {
   organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   externalIds    ExternalIdentity[]
   groupMappings  ExternalGroupMapping[]
+  syncBaselines  SyncBaseline[]
 
   @@unique([organizationId, provider, externalWorkspaceId])
   @@index([organizationId])
@@ -707,20 +708,49 @@ model ExternalIdentity {
 /// Maps a Patrice role to an external group (e.g. Discord role) within a
 /// connection (Slice 8.3). `external_group_id` is a stable provider snowflake,
 /// surviving renames. `is_broken` is set when the external group is deleted.
+/// `conflict_winner` is used for cold-baseline conflict resolution (Slice E/#59).
 model ExternalGroupMapping {
-  id              String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  roleId          String        @map("role_id") @db.Uuid
-  connectionId    String        @map("connection_id") @db.Uuid
-  externalGroupId String        @map("external_group_id")
-  syncDirection   SyncDirection @map("sync_direction")
-  isBroken        Boolean       @default(false) @map("is_broken")
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  roleId          String              @map("role_id") @db.Uuid
+  connectionId    String              @map("connection_id") @db.Uuid
+  externalGroupId String              @map("external_group_id")
+  syncDirection   SyncDirection       @map("sync_direction")
+  isBroken        Boolean             @default(false) @map("is_broken")
+  conflictWinner  ConflictWinner      @default(patrice) @map("conflict_winner")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  role       Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  role          Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  connection    IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  syncBaselines SyncBaseline[]
 
   @@unique([roleId, connectionId, externalGroupId])
   @@index([connectionId])
   @@map("external_group_mapping")
+}
+
+/// Sync baseline for bidirectional convergence (Slice E/#59).
+/// A row = "this (external_user, external_group) edge was present at last convergence."
+/// Absence = was absent. Every write (both sides) updates the baseline.
+/// GC'd on: user scrub, mapping delete, connection GC (but retained through grace period).
+model SyncBaseline {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  connectionId    String   @map("connection_id") @db.Uuid
+  mappingId       String   @map("mapping_id") @db.Uuid
+  externalUserId  String   @map("external_user_id")
+  externalGroupId String   @map("external_group_id")
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  mapping    ExternalGroupMapping  @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, mappingId, externalUserId, externalGroupId])
+  @@index([connectionId])
+  @@index([mappingId])
+  @@map("sync_baseline")
+}
+
+enum ConflictWinner {
+  patrice
+  external
 }

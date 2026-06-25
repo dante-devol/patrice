@@ -22,6 +22,7 @@ export const createMappingSchema = z.object({
 
 export const updateMappingSchema = z.object({
   syncDirection: z.enum(['inbound', 'outbound', 'bidirectional']).optional(),
+  conflictWinner: z.enum(['patrice', 'external']).optional(),
 });
 
 export const rotateTokenSchema = z.object({
