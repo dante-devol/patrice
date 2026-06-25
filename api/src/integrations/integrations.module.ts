@@ -11,9 +11,10 @@ import { DiscordAdapter } from './sync/discord.adapter';
 import { AeadEnvAdapter } from './aead-env.adapter';
 import { SECRET_CIPHER_PORT } from './secret-cipher.port';
 import { DiscordRestClient } from './sync/discord-rest.client';
+import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
-  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule],
+  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, GatewayModule],
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,

@@ -7,6 +7,12 @@ import { PROCESS_ROLE, isWorkerRole, type ProcessRoleValue } from '../../common/
 
 const QUEUE_INTEGRATION_SYNC = 'integration-sync';
 const QUEUE_INTEGRATION_SYNC_SCHEDULED = 'integration-sync-scheduled';
+const QUEUE_RECONCILE_FLOOR = 'integration-reconcile-floor';
+
+// Adaptive reconcile floor: 6h when Gateway is healthy, 30min when degraded.
+const FLOOR_HEALTHY_HOURS = 6;
+const FLOOR_DEGRADED_HOURS = 0.5;
+
 
 export interface SyncJobData {
   connectionId: string;
@@ -30,6 +36,9 @@ export interface SyncJobData {
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
 
+  /** Gateway health state per connectionId — updated by IntegrationGatewayService. */
+  private readonly gatewayHealth = new Map<string, boolean>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
@@ -37,6 +46,11 @@ export class SyncService implements OnModuleInit {
     @Inject(ENV) private readonly env: Env,
     @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
   ) {}
+
+  /** Called by IntegrationGatewayService when health changes. */
+  setGatewayHealth(connectionId: string, healthy: boolean): void {
+    this.gatewayHealth.set(connectionId, healthy);
+  }
 
   async onModuleInit() {
     if (!isWorkerRole(this.processRole)) {
@@ -52,12 +66,16 @@ export class SyncService implements OnModuleInit {
       await this.sweepAllConnections();
     });
 
-    // Daily full sync at 02:00 UTC — catches any drift the event-driven path missed.
+    // Adaptive Reconcile Floor (#61): 30-min tick; effective floor is 6h when
+    // Gateway is healthy, 30min when degraded. Replaces the former daily 02:00 sweep.
+    await this.queue.work(QUEUE_RECONCILE_FLOOR, async () => {
+      await this.reconcileFloorTick();
+    });
     await this.queue.schedule(
-      QUEUE_INTEGRATION_SYNC_SCHEDULED,
-      '0 2 * * *',
+      QUEUE_RECONCILE_FLOOR,
+      '*/30 * * * *', // every 30 minutes
       {},
-      { singletonKey: QUEUE_INTEGRATION_SYNC_SCHEDULED },
+      { singletonKey: QUEUE_RECONCILE_FLOOR },
     );
   }
 
@@ -119,5 +137,36 @@ export class SyncService implements OnModuleInit {
     });
     this.logger.log(`Scheduled sweep: enqueueing sync for ${connections.length} connection(s)`);
     await Promise.all(connections.map((c) => this.enqueue(c.id)));
+  }
+
+  /**
+   * Adaptive Reconcile Floor tick (#61).
+   *
+   * Runs every 30 min. For each active connection:
+   *  - If the Gateway is healthy: only sync if last run > 6h ago.
+   *  - If the Gateway is degraded: always sync (30-min effective floor).
+   * When degraded, also logs a warning so operators know the fast-path is down.
+   */
+  private async reconcileFloorTick(): Promise<void> {
+    const connections = await this.prisma.integrationConnection.findMany({
+      where: { lifecycleState: 'active', status: { not: 'disabled' } },
+      select: { id: true, updatedAt: true },
+    });
+
+    const now = Date.now();
+    for (const conn of connections) {
+      const gatewayHealthy = this.gatewayHealth.get(conn.id) ?? false;
+      const floorHours = gatewayHealthy ? FLOOR_HEALTHY_HOURS : FLOOR_DEGRADED_HOURS;
+      const staleSinceMs = floorHours * 60 * 60 * 1000;
+      const age = now - conn.updatedAt.getTime();
+
+      if (!gatewayHealthy) {
+        this.logger.warn(`Gateway degraded for ${conn.id} — floor tightened to ${FLOOR_DEGRADED_HOURS * 60}min`);
+      }
+
+      if (age >= staleSinceMs) {
+        await this.enqueue(conn.id);
+      }
+    }
   }
 }
