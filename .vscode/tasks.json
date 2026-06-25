@@ -132,7 +132,7 @@
     // ─────────────────────────────────────────────────────────────────────────
     {
       "label": "Vault: Start dev server (Docker)",
-      "detail": "Runs Vault in dev mode on :8200 with root token 'dev-root'. Token and VAULT_ADDR are printed to the terminal. Ctrl+C to stop.",
+      "detail": "Runs Vault in dev mode on :8200 with root token 'dev-root'. Ctrl+C to stop.",
       "type": "shell",
       "command": "docker run --rm -p 8200:8200 -e VAULT_DEV_ROOT_TOKEN_ID=dev-root -e VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200 hashicorp/vault:1.17 server -dev",
       "isBackground": true,
@@ -141,9 +141,9 @@
     },
     {
       "label": "Vault: Enable transit + create key",
-      "detail": "Enables the transit secrets engine and creates the 'patrice-integration' key. Requires Vault running on :8200 with VAULT_TOKEN=dev-root.",
+      "detail": "Enables the transit engine and creates the 'patrice-integration' key via the Vault HTTP API. Requires Vault running on :8200.",
       "type": "shell",
-      "command": "docker run --rm --network host -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=dev-root hashicorp/vault:1.17 sh -c \"vault secrets enable transit; vault write -f transit/keys/patrice-integration\"",
+      "command": "Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8200/v1/sys/mounts/transit -Headers @{'X-Vault-Token'='dev-root'} -ContentType 'application/json' -Body '{\"type\":\"transit\"}' -ErrorAction SilentlyContinue; Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8200/v1/transit/keys/patrice-integration -Headers @{'X-Vault-Token'='dev-root'} -ContentType 'application/json' -Body '{}'; Write-Host 'Transit engine + patrice-integration key ready.'",
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
     },
