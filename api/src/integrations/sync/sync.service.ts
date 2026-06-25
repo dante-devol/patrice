@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { QueueService } from '../../queue/queue.service';
 import { ENV, Env } from '../../config/env';
 import { DiscordAdapter } from './discord.adapter';
+import { PROCESS_ROLE, isWorkerRole, type ProcessRoleValue } from '../../common/process-role';
 
 const QUEUE_INTEGRATION_SYNC = 'integration-sync';
 const QUEUE_INTEGRATION_SYNC_SCHEDULED = 'integration-sync-scheduled';
@@ -34,9 +35,14 @@ export class SyncService implements OnModuleInit {
     private readonly queue: QueueService,
     private readonly discord: DiscordAdapter,
     @Inject(ENV) private readonly env: Env,
+    @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
   ) {}
 
   async onModuleInit() {
+    if (!isWorkerRole(this.processRole)) {
+      this.logger.log(`PROCESS_ROLE=${this.processRole} — skipping sync consumers and cron`);
+      return;
+    }
     await this.queue.work(QUEUE_INTEGRATION_SYNC, async (data) => {
       const { connectionId } = data as SyncJobData;
       await this.runSync(connectionId);

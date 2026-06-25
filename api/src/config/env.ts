@@ -50,6 +50,9 @@ export const envSchema = z.object({
   // 32 raw bytes encoded as hex (64 chars). Worker-only — the api role never
   // decrypts tokens. If absent the adapter is disabled (plaintext botToken fallback).
   INTEGRATION_TOKEN_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+  // Process topology split (Slice F / #60). `api` = HTTP only; `worker` = pg-boss
+  // consumers + cron + GC + Gateway. Dev/test leaves this unset (combined process).
+  PROCESS_ROLE: z.enum(['api', 'worker']).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
