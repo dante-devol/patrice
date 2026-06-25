@@ -149,18 +149,18 @@
     },
     {
       "label": "Integration: Smoke — Vault cipher round-trip",
-      "detail": "Encrypts a test token via the Vault adapter then decrypts it. Set VAULT_ADDR, VAULT_TOKEN, VAULT_TRANSIT_KEY, INTEGRATION_TOKEN_KEY in api/.env first.",
+      "detail": "Encrypts a test token via the Vault adapter then decrypts it. Set VAULT_ADDR, VAULT_TOKEN, VAULT_TRANSIT_KEY in api/.env first.",
       "type": "shell",
-      "command": "node -e \"process.loadEnvFile('.env'); const {AeadEnvAdapter}=require('./dist/integrations/aead-env.adapter'); const {VaultTransitAdapter}=require('./dist/integrations/vault-transit.adapter'); const env=process.env; const v=new VaultTransitAdapter({VAULT_ADDR:env.VAULT_ADDR,VAULT_TOKEN:env.VAULT_TOKEN,VAULT_TRANSIT_KEY:env.VAULT_TRANSIT_KEY}); v.encrypt('smoke-test-token').then(ref=>{console.log('ref:',ref);return v.decrypt(ref)}).then(pt=>{console.log('plaintext:',pt);process.exit(pt==='smoke-test-token'?0:1)}).catch(e=>{console.error(e);process.exit(1)})\"",
+      "command": "node scripts/smoke-vault.js",
       "options": { "cwd": "${workspaceFolder}/api" },
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
     },
     {
       "label": "Integration: Smoke — KMS cipher round-trip",
-      "detail": "Encrypts a test token via the KMS envelope adapter then decrypts it. Set KMS_KEY_ID, AWS_REGION (and AWS creds in env or ~/.aws) in api/.env first.",
+      "detail": "Encrypts a test token via the KMS envelope adapter then decrypts it. Set KMS_KEY_ID, AWS_REGION (and AWS creds in .aws/credentials) in api/.env first.",
       "type": "shell",
-      "command": "node -e \"process.loadEnvFile('.env'); const {KmsEnvelopeAdapter}=require('./dist/integrations/kms-envelope.adapter'); const env=process.env; const k=new KmsEnvelopeAdapter({KMS_KEY_ID:env.KMS_KEY_ID,AWS_REGION:env.AWS_REGION}); k.encrypt('smoke-test-token').then(ref=>{console.log('ref:',ref);return k.decrypt(ref)}).then(pt=>{console.log('plaintext:',pt);process.exit(pt==='smoke-test-token'?0:1)}).catch(e=>{console.error(e);process.exit(1)})\"",
+      "command": "node scripts/smoke-kms.js",
       "options": { "cwd": "${workspaceFolder}/api" },
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
