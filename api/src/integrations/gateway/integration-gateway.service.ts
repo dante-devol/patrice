@@ -185,9 +185,11 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
   }
 
   private dispatch(session: GatewaySession, event: GatewayEvent): void {
+    this.logger.debug(`[${session.connectionId}] event=${event.type} state=${session.ctx.state}`);
     const { context, actions } = handle(session.ctx, event, session.botToken);
     session.ctx = context;
     for (const action of actions) {
+      this.logger.debug(`[${session.connectionId}] action=${action.type}`);
       this.execute(session, action);
     }
   }

@@ -18,6 +18,15 @@ try {
 }
 
 async function bootstrap(): Promise<void> {
+  const processRole = process.env.PROCESS_ROLE;
+
+  if (processRole === 'worker') {
+    const ctx = await NestFactory.createApplicationContext(AppModule, { bufferLogs: false });
+    ctx.enableShutdownHooks();
+    new Logger('Bootstrap').log('Patrice worker started');
+    return;
+  }
+
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
   const env = app.get<Env>(ENV);
 
