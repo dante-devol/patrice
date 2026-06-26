@@ -41,7 +41,8 @@ x-common-env: &common-env
   VAULT_TRANSIT_KEY: patrice-integration
   KMS_KEY_ID: ${KMS_KEY_ID:-}
   AWS_REGION: ${AWS_REGION:-us-east-2}
-  INTEGRATION_TOKEN_KEY: ${INTEGRATION_TOKEN_KEY:-}
+  # Throwaway dev key — override via root .env for any persistent data.
+  INTEGRATION_TOKEN_KEY: ${INTEGRATION_TOKEN_KEY:-deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef}
 
 services:
   db:

@@ -8,6 +8,11 @@ const boolFromString = z
   .enum(['true', 'false', '1', '0'])
   .transform((v) => v === 'true' || v === '1');
 
+// Docker Compose passes empty string for unset interpolated vars (${VAR:-}).
+// This preprocessor treats '' the same as absent so .optional() works correctly.
+const emptyAsUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema);
+
 export const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   PUBLIC_BASE_URL: z.string().url(),
@@ -49,17 +54,17 @@ export const envSchema = z.object({
   // AES-256-GCM key for the AEAD-env SecretCipherPort adapter (Slice C / #57).
   // 32 raw bytes encoded as hex (64 chars). Worker-only — the api role never
   // decrypts tokens. If absent the adapter is disabled (plaintext botToken fallback).
-  INTEGRATION_TOKEN_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/).optional(),
+  INTEGRATION_TOKEN_KEY: emptyAsUndefined(z.string().regex(/^[0-9a-fA-F]{64}$/).optional()),
   // Process topology split (Slice F / #60). `api` = HTTP only; `worker` = pg-boss
   // consumers + cron + GC + Gateway. Dev/test leaves this unset (combined process).
-  PROCESS_ROLE: z.enum(['api', 'worker']).optional(),
+  PROCESS_ROLE: emptyAsUndefined(z.enum(['api', 'worker']).optional()),
   // Vault transit adapter (Slice H / #62). Worker-only.
-  VAULT_ADDR: z.string().url().optional(),
-  VAULT_TOKEN: z.string().optional(),
-  VAULT_TRANSIT_KEY: z.string().optional(),
+  VAULT_ADDR: emptyAsUndefined(z.string().url().optional()),
+  VAULT_TOKEN: emptyAsUndefined(z.string().optional()),
+  VAULT_TRANSIT_KEY: emptyAsUndefined(z.string().optional()),
   // KMS envelope adapter (Slice H / #62). Worker-only.
-  KMS_KEY_ID: z.string().optional(),
-  AWS_REGION: z.string().optional(),
+  KMS_KEY_ID: emptyAsUndefined(z.string().optional()),
+  AWS_REGION: emptyAsUndefined(z.string().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;
