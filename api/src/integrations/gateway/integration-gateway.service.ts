@@ -92,9 +92,17 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
     const connections = await this.prisma.integrationConnection.findMany({
       where: { lifecycleState: 'active' },
     });
+    this.logger.log(`openAllSessions: found ${connections.length} active connection(s)`);
     for (const conn of connections) {
-      const botToken = await this.resolveToken(conn).catch(() => null);
-      if (botToken) this.startSession(conn.id, botToken);
+      const botToken = await this.resolveToken(conn).catch((err) => {
+        this.logger.error(`resolveToken failed for ${conn.id}: ${(err as Error).message}`);
+        return null;
+      });
+      if (!botToken) {
+        this.logger.warn(`No bot token resolved for connection ${conn.id} — skipping`);
+        continue;
+      }
+      this.startSession(conn.id, botToken);
     }
   }
 
@@ -117,6 +125,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
 
   private connect(session: GatewaySession): void {
     const url = session.ctx.resumeGatewayUrl ?? DISCORD_GATEWAY_URL;
+    this.logger.log(`Connecting to Gateway for connection ${session.connectionId} → ${url}`);
     const ws = new WebSocket(url);
     session.ws = ws;
 
