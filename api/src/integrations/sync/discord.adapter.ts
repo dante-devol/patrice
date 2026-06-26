@@ -95,7 +95,20 @@ export class DiscordAdapter implements IntegrationSyncPort {
           // Invalid token — mark the whole connection broken and abort.
           await this.prisma.integrationConnection.update({
             where: { id: conn.id },
-            data: { status: IntegrationStatus.broken },
+            data: {
+              status: IntegrationStatus.broken,
+              lastError: 'Discord rejected the bot token (401) — rotate it',
+            },
+          });
+          await this.activity.logActivity({
+            organizationId: conn.organizationId,
+            actorUserId: null,
+            subjectType: 'integration_connection',
+            subjectId: conn.id,
+            verb: 'integration.token_invalid',
+            payload: { connectionId: conn.id },
+            source: ActivitySource.integration,
+            sourceConnectionId: conn.id,
           });
           this.logger.error(`Discord 401 on connection ${conn.id}: token may be invalid`);
           return { applied, failed: ops.length - applied, brokenGroupIds };
@@ -137,10 +150,30 @@ export class DiscordAdapter implements IntegrationSyncPort {
       this.logger.warn(`Sync skipped: no botToken in connection ${connectionId}`);
       await this.prisma.integrationConnection.update({
         where: { id: connectionId },
-        data: { status: IntegrationStatus.broken },
+        data: {
+          status: IntegrationStatus.broken,
+          syncState: 'idle',
+          lastError: 'No bot token configured',
+        },
       });
       return;
     }
+
+    // Mark running so admins see an in-flight reconcile (cleared on success/failure).
+    await this.prisma.integrationConnection.update({
+      where: { id: connectionId },
+      data: { syncState: 'running', lastSyncStartedAt: new Date() },
+    });
+    await this.activity.logActivity({
+      organizationId: connection.organizationId,
+      actorUserId: null,
+      subjectType: 'integration_connection',
+      subjectId: connectionId,
+      verb: 'integration.sync_started',
+      payload: { connectionId },
+      source: ActivitySource.integration,
+      sourceConnectionId: connectionId,
+    });
 
     // --- Fetch external state ---
     let externalMembership: Map<ExternalUserId, ExternalGroupId[]>;
@@ -150,10 +183,15 @@ export class DiscordAdapter implements IntegrationSyncPort {
       const groups = await this.fetchGroups(connection);
       knownGroupIds = new Set(groups.map((g) => g.id));
     } catch (err) {
-      this.logger.error(`Discord fetch failed for ${connectionId}: ${(err as Error).message}`);
+      const message = (err as Error).message;
+      this.logger.error(`Discord fetch failed for ${connectionId}: ${message}`);
       await this.prisma.integrationConnection.update({
         where: { id: connectionId },
-        data: { status: IntegrationStatus.broken },
+        data: {
+          status: IntegrationStatus.broken,
+          syncState: 'idle',
+          lastError: `Discord fetch failed: ${message}`.slice(0, 500),
+        },
       });
       return;
     }
@@ -333,6 +371,17 @@ export class DiscordAdapter implements IntegrationSyncPort {
         },
       });
     }
+
+    await this.prisma.integrationConnection.update({
+      where: { id: connectionId },
+      data: {
+        syncState: 'idle',
+        lastSyncAt: new Date(),
+        lastSyncGranted: totalGranted,
+        lastSyncRevoked: totalRevoked,
+        lastError: null,
+      },
+    });
 
     await this.activity.logActivity({
       organizationId: orgId,

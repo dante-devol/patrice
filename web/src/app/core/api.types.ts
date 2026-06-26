@@ -77,6 +77,8 @@ export interface AdminUser {
   displayName: string;
   lifecycleState: Lifecycle;
   roleIds: string[];
+  /** Discord avatar CDN URL when linked + a hash is known (#52). */
+  avatarUrl: string | null;
 }
 
 export interface OrgSettings {
@@ -91,13 +93,21 @@ export interface OrgSettings {
   requireDiscordLink: boolean;
 }
 
+export type AuthMethod = 'password' | 'google' | 'discord';
+
 export interface CurrentUser {
   id: string;
   organizationId: string;
   email: string | null;
   displayName: string;
   emailVerified: boolean;
+  /** Sign-in methods the user holds. */
+  authMethods: AuthMethod[];
   hasDiscordLink: boolean;
+  /** The linked Discord handle (for "Connected as …"); null when unlinked. */
+  discordHandle: string | null;
+  /** Discord avatar CDN URL when linked + a hash is known (#52). */
+  avatarUrl: string | null;
   capabilities: UserCapabilities;
 }
 
@@ -356,6 +366,8 @@ export interface ActivityFilters {
 export type IntegrationProvider = 'discord';
 export type IntegrationStatus = 'active' | 'broken' | 'disabled';
 export type SyncDirection = 'inbound' | 'outbound' | 'bidirectional';
+export type GatewayState = 'down' | 'connecting' | 'connected' | 'degraded';
+export type SyncState = 'idle' | 'queued' | 'running';
 
 export interface IntegrationConnection {
   id: string;
@@ -365,6 +377,18 @@ export interface IntegrationConnection {
   status: IntegrationStatus;
   lifecycleState: Lifecycle;
   retiredAt: string | null;
+  // Observability (admin health surface).
+  gatewayState: GatewayState;
+  gatewayLastConnectedAt: string | null;
+  gatewayLastEventAt: string | null;
+  syncState: SyncState;
+  lastSyncStartedAt: string | null;
+  lastSyncAt: string | null;
+  lastSyncGranted: number;
+  lastSyncRevoked: number;
+  lastError: string | null;
+  /** When the Reconcile Floor next guarantees a sync (computed); null until first sync. */
+  nextReconcileAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

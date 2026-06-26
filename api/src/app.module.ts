@@ -11,6 +11,7 @@ import { QueueModule } from './queue/queue.module';
 import { EmailModule } from './email/email.module';
 import { AuthModule } from './auth/auth.module';
 import { SessionGuard } from './auth/session.guard';
+import { DiscordAuthModule } from './discord-auth/discord-auth.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { RolesModule } from './roles/roles.module';
 import { DivisionsModule } from './divisions/divisions.module';
@@ -48,6 +49,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     EmailModule,
     AuthModule,
     InvitationsModule,
+    DiscordAuthModule,
     RolesModule,
     DivisionsModule,
     TeamsModule,

@@ -6,6 +6,7 @@ import { QueueModule } from '../queue/queue.module';
 import { ConfigModule } from '../config/config.module';
 import { IntegrationsController } from './integrations.controller';
 import { IntegrationsService } from './integrations.service';
+import { DiscordLinkService } from './discord-link.service';
 import { SyncService } from './sync/sync.service';
 import { DiscordAdapter } from './sync/discord.adapter';
 import { AeadEnvAdapter } from './aead-env.adapter';
@@ -21,6 +22,7 @@ import { GatewayModule } from './gateway/gateway.module';
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,
+    DiscordLinkService,
     SyncService,
     DiscordAdapter,
     DiscordRestClient,
@@ -30,6 +32,6 @@ import { GatewayModule } from './gateway/gateway.module';
     CompositeCipherAdapter,
     { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter },
   ],
-  exports: [SyncService, CompositeCipherAdapter, { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter }],
+  exports: [SyncService, DiscordLinkService, CompositeCipherAdapter, { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter }],
 })
 export class IntegrationsModule {}

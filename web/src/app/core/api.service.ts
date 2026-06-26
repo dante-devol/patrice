@@ -508,15 +508,28 @@ export class ApiService {
     );
   }
 
+  /** Clear a broken mapping's flag and re-run sync (admin recovery). */
+  retryMapping(connectionId: string, mappingId: string): Promise<ExternalGroupMapping> {
+    return firstValueFrom(
+      this.http.post<ExternalGroupMapping>(
+        `/api/integrations/${connectionId}/mappings/${mappingId}/retry`,
+        {},
+      ),
+    );
+  }
+
   triggerSync(connectionId: string): Promise<{ queued: boolean }> {
     return firstValueFrom(
       this.http.post<{ queued: boolean }>(`/api/integrations/${connectionId}/sync`, {}),
     );
   }
 
-  startDiscordLink(connectionId: string): Promise<{ redirectUrl: string }> {
-    return firstValueFrom(
-      this.http.post<{ redirectUrl: string }>(`/api/integrations/${connectionId}/link`, {}),
-    );
+  /**
+   * Disconnect the current user's Discord account (sign-in method + links).
+   * Returns the refreshed current user. The *connect* flow is a full-page
+   * navigation to `/api/auth/discord/link` (OAuth), not an XHR.
+   */
+  unlinkDiscord(): Promise<CurrentUser> {
+    return firstValueFrom(this.http.delete<CurrentUser>('/api/auth/discord'));
   }
 }

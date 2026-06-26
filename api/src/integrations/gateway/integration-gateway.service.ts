@@ -1,6 +1,8 @@
 import { Injectable, Inject, Logger, OnModuleInit, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { WebSocket } from 'ws';
+import { ActivitySource, GatewayState } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ActivityService } from '../../activity/activity.service';
 import { SyncService } from '../sync/sync.service';
 import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
 import { PROCESS_ROLE, isWorkerRole, type ProcessRoleValue } from '../../common/process-role';
@@ -19,12 +21,15 @@ const INTENTS = (1 << 0) | (1 << 1);
 
 interface GatewaySession {
   connectionId: string;
+  organizationId: string;
   botToken: string;
   ws: WebSocket | null;
   ctx: GatewayContext;
   heartbeatTimer: NodeJS.Timeout | null;
   reconnectTimer: NodeJS.Timeout | null;
   healthy: boolean;
+  /** Last state written to the DB — dedupes persistence + activity on reconnect loops. */
+  lastPersistedState: GatewayState | null;
 }
 
 /**
@@ -43,6 +48,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly activity: ActivityService,
     @Inject(forwardRef(() => SyncService)) private readonly sync: SyncService,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
     @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
@@ -69,7 +75,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
     if (!conn || conn.lifecycleState !== 'active') return;
     const botToken = await this.resolveToken(conn);
     if (!botToken) return;
-    this.startSession(connectionId, botToken);
+    this.startSession(connectionId, botToken, conn.organizationId);
   }
 
   closeSessionById(connectionId: string): void {
@@ -102,22 +108,24 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
         this.logger.warn(`No bot token resolved for connection ${conn.id} — skipping`);
         continue;
       }
-      this.startSession(conn.id, botToken);
+      this.startSession(conn.id, botToken, conn.organizationId);
     }
   }
 
-  private startSession(connectionId: string, botToken: string): void {
+  private startSession(connectionId: string, botToken: string, organizationId: string): void {
     if (this.sessions.has(connectionId)) {
       this.closeSessionById(connectionId);
     }
     const session: GatewaySession = {
       connectionId,
+      organizationId,
       botToken,
       ws: null,
       ctx: initialContext(),
       heartbeatTimer: null,
       reconnectTimer: null,
       healthy: false,
+      lastPersistedState: null,
     };
     this.sessions.set(connectionId, session);
     this.connect(session);
@@ -126,6 +134,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
   private connect(session: GatewaySession): void {
     const url = session.ctx.resumeGatewayUrl ?? DISCORD_GATEWAY_URL;
     this.logger.log(`Connecting to Gateway for connection ${session.connectionId} → ${url}`);
+    this.persistGateway(session, GatewayState.connecting);
     const ws = new WebSocket(url);
     session.ws = ws;
 
@@ -228,6 +237,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
       case 'SCHEDULE_RECONNECT':
         if (session.reconnectTimer) clearTimeout(session.reconnectTimer);
         session.ws = null;
+        this.persistGateway(session, GatewayState.down);
         session.reconnectTimer = setTimeout(() => {
           if (this.sessions.has(session.connectionId)) {
             this.connect(session);
@@ -237,6 +247,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
 
       case 'EMIT_MEMBER_EVENT':
         // Doorbell: enqueue reconcile for this connection. Never writes user_role.
+        this.persistGateway(session, GatewayState.connected, { event: true });
         this.sync.enqueueSoon(session.connectionId).catch((err) => {
           this.logger.error(`enqueueSoon failed: ${(err as Error).message}`);
         });
@@ -251,11 +262,60 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
       case 'EMIT_HEALTH':
         session.healthy = action.healthy;
         this.sync.setGatewayHealth(session.connectionId, action.healthy);
+        this.persistGateway(session, action.healthy ? GatewayState.connected : GatewayState.degraded);
         if (!action.healthy) {
           this.logger.warn(`Gateway unhealthy for connection ${session.connectionId}`);
         }
         break;
     }
+  }
+
+  /**
+   * Persist the live gateway state so the api role (and admins) can see it without
+   * reading worker logs. Activity is emitted once per *state change* (deduped) for
+   * connected/degraded/down — `connecting` updates the column silently. Fire-and-
+   * forget: a DB hiccup must never destabilise the socket.
+   */
+  private persistGateway(
+    session: GatewaySession,
+    state: GatewayState,
+    opts?: { event?: boolean },
+  ): void {
+    const data: {
+      gatewayState: GatewayState;
+      gatewayLastConnectedAt?: Date;
+      gatewayLastEventAt?: Date;
+    } = { gatewayState: state };
+    const now = new Date();
+    if (state === GatewayState.connected) data.gatewayLastConnectedAt = now;
+    if (opts?.event) data.gatewayLastEventAt = now;
+    this.prisma.integrationConnection
+      .update({ where: { id: session.connectionId }, data })
+      .catch((err) => this.logger.warn(`persist gateway state failed: ${(err as Error).message}`));
+
+    if (session.lastPersistedState === state) return;
+    session.lastPersistedState = state;
+    const verb =
+      state === GatewayState.connected
+        ? 'integration.gateway_connected'
+        : state === GatewayState.degraded
+          ? 'integration.gateway_degraded'
+          : state === GatewayState.down
+            ? 'integration.gateway_disconnected'
+            : null;
+    if (!verb) return;
+    void this.activity
+      .logActivity({
+        organizationId: session.organizationId,
+        actorUserId: null,
+        subjectType: 'integration_connection',
+        subjectId: session.connectionId,
+        verb,
+        payload: { connectionId: session.connectionId },
+        source: ActivitySource.integration,
+        sourceConnectionId: session.connectionId,
+      })
+      .catch((err) => this.logger.warn(`gateway activity log failed: ${(err as Error).message}`));
   }
 
   private closeSession(session: GatewaySession): void {

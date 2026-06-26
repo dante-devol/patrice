@@ -233,15 +233,9 @@ export class TaskListComponent {
     this.discordConnectionId.set(active?.id ?? null);
   }
 
-  async linkDiscord(): Promise<void> {
-    const id = this.discordConnectionId();
-    if (!id) return;
-    try {
-      const { redirectUrl } = await this.api.startDiscordLink(id);
-      window.location.href = redirectUrl;
-    } catch {
-      // silently ignore; user can go via profile
-    }
+  linkDiscord(): void {
+    // Full-page OAuth navigation; the callback links the account and returns to /account.
+    window.location.href = '/api/auth/discord/link';
   }
 
   // ---- view helpers ----

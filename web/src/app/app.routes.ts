@@ -11,6 +11,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/home.component').then((m) => m.HomeComponent),
   },
   {
+    path: 'account',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/account.component').then((m) => m.AccountComponent),
+  },
+  {
     path: 'setup',
     loadComponent: () => import('./pages/setup.component').then((m) => m.SetupComponent),
   },

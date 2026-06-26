@@ -1,12 +1,11 @@
-import { createHmac, timingSafeEqual } from 'crypto';
 import { Injectable, Inject } from '@nestjs/common';
 import { LifecycleState, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { GraceService } from '../common/grace.service';
-import { ENV, Env } from '../config/env';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { activeFilter, isRevivable } from '../common/lifecycle';
+import { EFFECTIVE_ADMIN_ACTIONS } from '../access/actions';
 import {
   ConnectIntegrationDto,
   UpdateIntegrationDto,
@@ -27,13 +26,31 @@ export function toConnectionResponse<T extends { config: unknown; credentialsRef
   return rest;
 }
 
+// Reconcile Floor bounds (mirror SyncService): 6h when the Gateway is healthy,
+// 30min when degraded. Used to surface "next reconcile" to admins (api/CONTEXT.md).
+const FLOOR_HEALTHY_MS = 6 * 60 * 60 * 1000;
+const FLOOR_DEGRADED_MS = 30 * 60 * 1000;
+
+/**
+ * Compute the latest time the Reconcile Floor guarantees a sync by. Null until the
+ * first sync runs. When the Gateway is degraded the floor tightens, so the next
+ * guaranteed reconcile is sooner.
+ */
+export function computeNextReconcileAt(conn: {
+  lastSyncAt: Date | null;
+  gatewayState: string;
+}): Date | null {
+  if (!conn.lastSyncAt) return null;
+  const floorMs = conn.gatewayState === 'connected' ? FLOOR_HEALTHY_MS : FLOOR_DEGRADED_MS;
+  return new Date(conn.lastSyncAt.getTime() + floorMs);
+}
+
 @Injectable()
 export class IntegrationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
-    @Inject(ENV) private readonly env: Env,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
   ) {}
 
@@ -46,7 +63,10 @@ export class IntegrationsService {
       where: { organizationId, ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map(toConnectionResponse);
+    return rows.map((c) => ({
+      ...toConnectionResponse(c),
+      nextReconcileAt: computeNextReconcileAt(c),
+    }));
   }
 
   async connect(organizationId: string, actorUserId: string, dto: ConnectIntegrationDto) {
@@ -173,128 +193,6 @@ export class IntegrationsService {
   }
 
   // ---------------------------------------------------------------------------
-  // Discord OAuth account linking (external_identity)
-  // ---------------------------------------------------------------------------
-
-  private signState(payload: string): string {
-    return createHmac('sha256', this.env.SESSION_SECRET).update(payload).digest('hex');
-  }
-
-  private buildState(connectionId: string, userId: string): string {
-    const payload = JSON.stringify({ connectionId, userId });
-    const sig = this.signState(payload);
-    return Buffer.from(JSON.stringify({ payload, sig })).toString('base64url');
-  }
-
-  private parseState(state: string): { connectionId: string; userId: string } {
-    let envelope: { payload: string; sig: string };
-    try {
-      envelope = JSON.parse(Buffer.from(state, 'base64url').toString()) as {
-        payload: string;
-        sig: string;
-      };
-    } catch {
-      throw new UnprocessableError('INVALID_STATE', 'Invalid OAuth state');
-    }
-    const expected = Buffer.from(this.signState(envelope.payload));
-    const received = Buffer.from(envelope.sig);
-    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
-      throw new UnprocessableError('INVALID_STATE', 'OAuth state signature invalid');
-    }
-    return JSON.parse(envelope.payload) as { connectionId: string; userId: string };
-  }
-
-  /** Begin Discord OAuth link flow for the current user. Returns a redirect URL. */
-  startDiscordLink(connectionId: string, userId: string, baseUrl: string): string {
-    if (!this.env.DISCORD_CLIENT_ID) {
-      throw new UnprocessableError('DISCORD_NOT_CONFIGURED', 'Discord integration is not configured');
-    }
-    const state = this.buildState(connectionId, userId);
-    const params = new URLSearchParams({
-      client_id: this.env.DISCORD_CLIENT_ID,
-      redirect_uri: `${baseUrl}/integrations/${connectionId}/link/callback`,
-      response_type: 'code',
-      scope: 'identify guilds.members.read',
-      state,
-    });
-    return `https://discord.com/oauth2/authorize?${params.toString()}`;
-  }
-
-  /** Complete Discord OAuth link: exchange code, store external_identity. */
-  async completeDiscordLink(
-    connectionId: string,
-    code: string,
-    state: string,
-    baseUrl: string,
-  ) {
-    if (!this.env.DISCORD_CLIENT_ID || !this.env.DISCORD_CLIENT_SECRET) {
-      throw new UnprocessableError('DISCORD_NOT_CONFIGURED', 'Discord integration is not configured');
-    }
-
-    const parsedState = this.parseState(state);
-    if (parsedState.connectionId !== connectionId) {
-      throw new UnprocessableError('STATE_MISMATCH', 'OAuth state connection mismatch');
-    }
-
-    const connection = await this.loadActive(connectionId);
-
-    // Exchange the authorization code for tokens.
-    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: this.env.DISCORD_CLIENT_ID,
-        client_secret: this.env.DISCORD_CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: `${baseUrl}/integrations/${connectionId}/link/callback`,
-      }),
-    });
-    if (!tokenRes.ok) {
-      throw new UnprocessableError('DISCORD_TOKEN_ERROR', 'Failed to exchange Discord OAuth code');
-    }
-    const tokens = (await tokenRes.json()) as { access_token: string };
-
-    // Fetch the Discord user to get their stable ID.
-    const userRes = await fetch('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-    if (!userRes.ok) {
-      throw new UnprocessableError('DISCORD_USER_ERROR', 'Failed to fetch Discord user');
-    }
-    const discordUser = (await userRes.json()) as { id: string; username: string };
-
-    const existing = await this.prisma.externalIdentity.findUnique({
-      where: {
-        userId_connectionId: { userId: parsedState.userId, connectionId },
-      },
-    });
-    if (existing) {
-      throw new ConflictError('ALREADY_LINKED', 'This user is already linked to this connection');
-    }
-
-    const identity = await this.prisma.externalIdentity.create({
-      data: {
-        userId: parsedState.userId,
-        connectionId,
-        externalUserId: discordUser.id,
-        externalHandle: discordUser.username,
-      },
-    });
-
-    await this.activity.logActivity({
-      organizationId: connection.organizationId,
-      actorUserId: parsedState.userId,
-      subjectType: 'external_identity',
-      subjectId: identity.id,
-      verb: 'external_identity.linked',
-      payload: { connectionId, userId: parsedState.userId, externalIdentityId: identity.id },
-    });
-
-    return identity;
-  }
-
-  // ---------------------------------------------------------------------------
   // Role↔group mapping CRUD
   // ---------------------------------------------------------------------------
 
@@ -315,6 +213,10 @@ export class IntegrationsService {
     if (role.lifecycleState === LifecycleState.retired) {
       throw new UnprocessableError('ROLE_RETIRED', 'Cannot map a retired role');
     }
+    // Native-Authority Carve-Out: governance roles stay Patrice-native and must never
+    // be granted/revoked through an integration, so their revocation can't be gated on
+    // sync latency or a live Gateway (api/CONTEXT.md).
+    await this.assertNotGovernanceRole(dto.roleId);
 
     const existing = await this.prisma.externalGroupMapping.findUnique({
       where: {
@@ -364,6 +266,11 @@ export class IntegrationsService {
       data: {
         ...(dto.syncDirection !== undefined && { syncDirection: dto.syncDirection }),
         ...(dto.conflictWinner !== undefined && { conflictWinner: dto.conflictWinner }),
+        // Re-pointing at a new external group clears the broken flag for re-evaluation.
+        ...(dto.externalGroupId !== undefined && {
+          externalGroupId: dto.externalGroupId,
+          isBroken: false,
+        }),
       },
     });
     await this.activity.logActivity({
@@ -394,9 +301,69 @@ export class IntegrationsService {
     });
   }
 
+  /** Record an admin-initiated reconcile in the audit log (the enqueue is the caller's). */
+  async requestManualSync(id: string, actorUserId: string): Promise<void> {
+    const conn = await this.loadActive(id);
+    await this.activity.logActivity({
+      organizationId: conn.organizationId,
+      actorUserId,
+      subjectType: 'integration_connection',
+      subjectId: id,
+      verb: 'integration.reconcile_scheduled',
+      payload: { connectionId: id, reason: 'manual' },
+    });
+  }
+
+  /** Clear a mapping's broken flag so the next sync re-evaluates it (admin recovery). */
+  async retryMapping(connectionId: string, mappingId: string, actorUserId: string) {
+    const connection = await this.loadActive(connectionId);
+    const mapping = await this.prisma.externalGroupMapping.findUnique({ where: { id: mappingId } });
+    if (!mapping || mapping.connectionId !== connectionId) {
+      throw new NotFoundError('MAPPING_NOT_FOUND', 'Mapping not found');
+    }
+    const updated = await this.prisma.externalGroupMapping.update({
+      where: { id: mappingId },
+      data: { isBroken: false },
+    });
+    await this.activity.logActivity({
+      organizationId: connection.organizationId,
+      actorUserId,
+      subjectType: 'external_group_mapping',
+      subjectId: mappingId,
+      verb: 'integration.mapping_retried',
+      payload: { mappingId, connectionId, roleId: mapping.roleId },
+    });
+    return updated;
+  }
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Native-Authority Carve-Out (api/CONTEXT.md): a governance role — one with a
+   * permit grant for an Effective-Admin action at global scope — must never be
+   * mapped to an external group, so admin revocation is always a synchronous native
+   * write, never gated on sync latency or a live Gateway.
+   */
+  private async assertNotGovernanceRole(roleId: string): Promise<void> {
+    const governanceGrant = await this.prisma.grant.findFirst({
+      where: {
+        roleId,
+        effect: 'permit',
+        scopeKind: 'global',
+        lifecycleState: LifecycleState.active,
+        action: { in: [...EFFECTIVE_ADMIN_ACTIONS] },
+      },
+      select: { id: true },
+    });
+    if (governanceGrant) {
+      throw new UnprocessableError(
+        'GOVERNANCE_ROLE_NOT_MAPPABLE',
+        'Security-critical (governance) roles cannot be mapped to an external group',
+      );
+    }
+  }
 
   async loadActive(id: string) {
     const connection = await this.prisma.integrationConnection.findUnique({ where: { id } });
