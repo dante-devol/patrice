@@ -50,22 +50,22 @@ export class DiscordAuthController {
   }
 
   @Get('login')
-  login(@Res() res: Response): void {
+  async login(@Res() res: Response): Promise<void> {
     try {
-      res.redirect(302, this.discordAuth.startUrl('login', {}));
+      res.redirect(302, await this.discordAuth.startUrl('login', {}));
     } catch {
       res.redirect(302, this.web('/login?error=discord_not_configured'));
     }
   }
 
   @Get('register')
-  register(@Query('invite') invite: string | undefined, @Res() res: Response): void {
+  async register(@Query('invite') invite: string | undefined, @Res() res: Response): Promise<void> {
     if (!invite) {
       res.redirect(302, this.web('/login?error=discord_invite_required'));
       return;
     }
     try {
-      res.redirect(302, this.discordAuth.startUrl('register', { inviteToken: invite }));
+      res.redirect(302, await this.discordAuth.startUrl('register', { inviteToken: invite }));
     } catch {
       res.redirect(302, this.web('/login?error=discord_not_configured'));
     }
@@ -73,13 +73,13 @@ export class DiscordAuthController {
 
   /** Authenticated "Connect Discord" — pins the acting user into the signed state. */
   @Get('link')
-  startLink(@Req() req: AuthedRequest, @Res() res: Response): void {
+  async startLink(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
     if (!req.user) {
       res.redirect(302, this.web('/login'));
       return;
     }
     try {
-      res.redirect(302, this.discordAuth.startUrl('link', { userId: req.user.id }));
+      res.redirect(302, await this.discordAuth.startUrl('link', { userId: req.user.id }));
     } catch {
       res.redirect(302, this.web('/account?error=discord_not_configured'));
     }

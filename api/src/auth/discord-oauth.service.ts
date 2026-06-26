@@ -1,5 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ENV, Env } from '../config/env';
+import { PrismaService } from '../prisma/prisma.service';
+import { decryptOAuthSecret } from './oauth-secret.cipher';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
@@ -24,10 +26,33 @@ export interface DiscordOAuthUser {
  */
 @Injectable()
 export class DiscordOAuthService {
-  constructor(@Inject(ENV) private readonly env: Env) {}
+  private readonly logger = new Logger(DiscordOAuthService.name);
 
-  isConfigured(): boolean {
-    return !!(this.env.DISCORD_CLIENT_ID && this.env.DISCORD_CLIENT_SECRET);
+  constructor(
+    @Inject(ENV) private readonly env: Env,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  /**
+   * Resolve the org's Discord OAuth app credentials from runtime config (ADR 0006),
+   * decrypting the secret with the SESSION_SECRET-derived key. Returns null when
+   * Discord sign-in isn't configured (or the secret can't be decrypted, e.g. after a
+   * SESSION_SECRET rotation — the admin must re-enter it).
+   */
+  private async loadCreds(): Promise<{ clientId: string; clientSecret: string } | null> {
+    const org = await this.prisma.organization.findFirst({ select: { settings: true } });
+    const s = (org?.settings ?? {}) as { discordClientId?: string; discordClientSecret?: string };
+    if (!s.discordClientId || !s.discordClientSecret) return null;
+    try {
+      return { clientId: s.discordClientId, clientSecret: decryptOAuthSecret(this.env.SESSION_SECRET, s.discordClientSecret) };
+    } catch (err) {
+      this.logger.error(`Discord OAuth secret failed to decrypt — re-enter it in Settings: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  async isConfigured(): Promise<boolean> {
+    return (await this.loadCreds()) !== null;
   }
 
   /** The single OAuth redirect URI for all Discord flows. */
@@ -35,9 +60,12 @@ export class DiscordOAuthService {
     return `${this.env.PUBLIC_BASE_URL.replace(/\/$/, '')}/api/auth/discord/callback`;
   }
 
-  authorizeUrl(state: string, scope = 'identify'): string {
+  /** Throws when Discord sign-in isn't configured — callers gate on `isConfigured`. */
+  async authorizeUrl(state: string, scope = 'identify'): Promise<string> {
+    const creds = await this.loadCreds();
+    if (!creds) throw new Error('Discord OAuth is not configured');
     const params = new URLSearchParams({
-      client_id: this.env.DISCORD_CLIENT_ID ?? '',
+      client_id: creds.clientId,
       redirect_uri: this.callbackUri(),
       response_type: 'code',
       scope,
@@ -48,12 +76,14 @@ export class DiscordOAuthService {
 
   /** Exchange an authorization code for a user access token. */
   async exchangeCode(code: string): Promise<string> {
+    const creds = await this.loadCreds();
+    if (!creds) throw new Error('Discord OAuth is not configured');
     const res = await fetch(`${DISCORD_API}/oauth2/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: this.env.DISCORD_CLIENT_ID ?? '',
-        client_secret: this.env.DISCORD_CLIENT_SECRET ?? '',
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
         grant_type: 'authorization_code',
         code,
         redirect_uri: this.callbackUri(),

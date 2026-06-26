@@ -25,8 +25,11 @@ export class DiscordAuthService {
   ) {}
 
   /** Build the Discord authorize URL for a given intent, encoding signed state. */
-  startUrl(intent: OAuthStatePayload['intent'], ctx: { inviteToken?: string; userId?: string }): string {
-    if (!this.oauth.isConfigured()) {
+  async startUrl(
+    intent: OAuthStatePayload['intent'],
+    ctx: { inviteToken?: string; userId?: string },
+  ): Promise<string> {
+    if (!(await this.oauth.isConfigured())) {
       throw new UnprocessableError('DISCORD_NOT_CONFIGURED', 'Discord sign-in is not configured');
     }
     // `email` is only useful to seed a contact address at registration; login/link

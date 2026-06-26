@@ -44,10 +44,10 @@ export const envSchema = z.object({
   S3_FORCE_PATH_STYLE: boolFromString.default('false'),
   // Upload cap enforced at the attachment boundary (default 25 MiB).
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(26_214_400),
-  // Discord integration OAuth credentials (Slice 8). Optional — the integration
-  // feature is disabled if absent; the core auth path is never affected.
-  DISCORD_CLIENT_ID: z.string().optional(),
-  DISCORD_CLIENT_SECRET: z.string().optional(),
+  // NB: the Discord OAuth client id/secret are NOT startup config — they live in
+  // `organization.settings` (runtime config, admin-editable; the secret encrypted
+  // with a SESSION_SECRET-derived key). See ADR 0006. Any DISCORD_CLIENT_* env vars
+  // a deployment still sets are simply ignored.
   // Batching window: role-change events within this window collapse into one sync
   // job per connection (pg-boss singletonKey deduplication). Default 5 s (#61).
   INTEGRATION_SYNC_DELAY_SECONDS: z.coerce.number().int().positive().default(5),

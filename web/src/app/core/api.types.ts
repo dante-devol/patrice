@@ -91,6 +91,24 @@ export interface OrgSettings {
   gracePeriodHours: number;
   /** Slice 8: require Discord account link before task access. */
   requireDiscordLink: boolean;
+  /** Discord sign-in OAuth app client id (public; ADR 0006). */
+  discordClientId: string | null;
+  /** Whether a Discord OAuth client secret is set (the secret is never returned). */
+  discordOAuthConfigured: boolean;
+}
+
+/** PATCH /config body — editable fields; `discordClientSecret` is write-only. */
+export interface ConfigUpdate {
+  requireVerifiedEmailToLogIn?: boolean;
+  selfReviewAllowed?: boolean;
+  anonymizeLabel?: boolean;
+  sessionAbsoluteDays?: number;
+  sessionIdleDays?: number;
+  gracePeriodHours?: number;
+  requireDiscordLink?: boolean;
+  discordClientId?: string;
+  /** Empty string clears it (disables Discord sign-in). */
+  discordClientSecret?: string;
 }
 
 export type AuthMethod = 'password' | 'google' | 'discord';

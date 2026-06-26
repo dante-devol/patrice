@@ -62,9 +62,6 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
     http().get(`/api/auth/discord/callback?code=${code}&state=${encodeURIComponent(state)}`).redirects(0);
 
   beforeAll(async () => {
-    // Must be set before the app boots — env is read once at startup.
-    process.env.DISCORD_CLIENT_ID = 'test-client-id';
-    process.env.DISCORD_CLIENT_SECRET = 'test-client-secret';
     process.env.DISABLE_QUEUE = 'true';
     await resetDatabase();
     const { stub } = createEmailCapture();
@@ -72,15 +69,36 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
     app = booted.app;
     admin = await bootstrapAdmin(booted);
     prisma = new PrismaClient();
+    // Discord OAuth app is runtime config now (ADR 0006), not env — an admin sets it.
+    await auth(http().patch('/api/config')).send({
+      discordClientId: 'test-client-id',
+      discordClientSecret: 'test-client-secret',
+    });
   });
 
   afterAll(async () => {
     await prisma?.$disconnect();
     await app?.close();
-    // Don't leak Discord config / the fetch mock into sibling e2e files.
-    global.fetch = originalFetch;
-    delete process.env.DISCORD_CLIENT_ID;
-    delete process.env.DISCORD_CLIENT_SECRET;
+    global.fetch = originalFetch; // don't leak the fetch mock into sibling e2e files
+  });
+
+  describe('runtime config (ADR 0006)', () => {
+    it('GET /config reports configured but never returns the secret', async () => {
+      const res = await auth(http().get('/api/config'));
+      expect(res.status).toBe(200);
+      expect(res.body.discordClientId).toBe('test-client-id');
+      expect(res.body.discordOAuthConfigured).toBe(true);
+      expect(JSON.stringify(res.body)).not.toContain('test-client-secret');
+      expect(res.body).not.toHaveProperty('discordClientSecret');
+    });
+
+    it('stores the client secret encrypted at rest (oauthsec: handle)', async () => {
+      const org = await prisma.organization.findFirstOrThrow({ select: { settings: true } });
+      const settings = org.settings as { discordClientSecret?: string };
+      expect(settings.discordClientSecret).toBeDefined();
+      expect(settings.discordClientSecret!.startsWith('oauthsec:')).toBe(true);
+      expect(settings.discordClientSecret).not.toContain('test-client-secret');
+    });
   });
 
   describe('login', () => {

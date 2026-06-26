@@ -17,6 +17,7 @@ import {
   InvitationListItem,
   InviteView,
   Message,
+  ConfigUpdate,
   MessageListResult,
   NotificationListResult,
   OrgSettings,
@@ -239,7 +240,7 @@ export class ApiService {
   getConfig(): Promise<OrgSettings> {
     return firstValueFrom(this.http.get<OrgSettings>('/api/config'));
   }
-  updateConfig(body: Partial<OrgSettings>): Promise<OrgSettings> {
+  updateConfig(body: ConfigUpdate): Promise<OrgSettings> {
     return firstValueFrom(this.http.patch<OrgSettings>('/api/config', body));
   }
 
