@@ -177,6 +177,13 @@ function reconcileBidirectional(args: BidirectionalArgs): void {
         paOps.push({ kind: 'grant', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
       } else if (existingUR?.source === 'integration') {
         paOps.push({ kind: 'revoke', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
+      } else {
+        // Discord dropped a role Patrice holds NATIVELY (admin-authored). Sync never
+        // revokes a native grant, so Patrice is authoritative for this edge — the
+        // Discord-side removal can't win. Re-assert it outbound instead of leaving
+        // the sides diverged (this is what makes bidirectional ⊇ outbound for native
+        // roles; see api/CONTEXT.md "Divergence Attribution").
+        externalOps.push({ externalUserId: link.externalUserId, externalGroupId: mapping.externalGroupId, action: 'add' });
       }
     } else if (patriceDiverged && !externalDiverged) {
       // Patrice moved — propagate to Discord.

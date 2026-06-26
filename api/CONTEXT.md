@@ -156,7 +156,7 @@ The last-converged state of an Edge, persisted per `(connection, external user, 
 _Avoid_: Watermark (implies a monotonic stream offset — this is a state snapshot), Shadow State, `last_synced_state` (the column name, not the concept)
 
 **Divergence Attribution**:
-The rule that settles ~all reconciliation: for a binary Edge against a trustworthy Sync Baseline, the two sides can only disagree if **exactly one** diverged from the baseline — that side is the unambiguous origin, and its state propagates. No tiebreaker (time or precedence) is consulted in the normal case.
+The rule that settles ~all reconciliation: for a binary Edge against a trustworthy Sync Baseline, the two sides can only disagree if **exactly one** diverged from the baseline — that side is the unambiguous origin, and its state propagates. No tiebreaker (time or precedence) is consulted in the normal case. **Native-grant carve-out:** when the diverging side is Discord *removing* a role that Patrice holds **natively** (`source=patrice`), the attribution can't be honored — sync never revokes an admin-authored grant — so Patrice is authoritative for that Edge and the role is **re-asserted outbound** instead of stalling. (Integration-sourced roles still propagate the Discord-side removal as a Patrice revoke.) This is what makes bidirectional ⊇ outbound for native roles.
 _Avoid_: Conflict Resolution (that's only the cold-baseline path), LWW (we explicitly do not time-order the common case)
 
 **Cold-Baseline Conflict**:

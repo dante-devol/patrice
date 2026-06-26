@@ -187,6 +187,30 @@ describe('reconciler', () => {
       expect(result.paOps).toHaveLength(0);
     });
 
+    it('Discord dropped an integration-sourced role (baseline present) → revoke in Patrice', () => {
+      const input = biInput();
+      input.existingRoles.set('user-1:role-1', userRole('user-1', 'role-1', 'integration'));
+      input.externalMembership = new Map([['ext-user-1', []]]); // external removed it
+      input.baseline = new Set(['ext-user-1:ext-group-1']); // was present at convergence
+      const result = reconcile(input);
+      expect(result.paOps).toHaveLength(1);
+      expect(result.paOps[0]).toMatchObject({ kind: 'revoke', userId: 'user-1' });
+      expect(result.externalOps).toHaveLength(0);
+    });
+
+    it('Discord dropped a NATIVE role (baseline present) → re-assert outbound, never revoke', () => {
+      const input = biInput();
+      // Patrice holds the role natively; Discord removed it; baseline says it was present.
+      // Native grants are authoritative — re-push to Discord instead of stalling.
+      input.existingRoles.set('user-1:role-1', userRole('user-1', 'role-1', 'manual'));
+      input.externalMembership = new Map([['ext-user-1', []]]);
+      input.baseline = new Set(['ext-user-1:ext-group-1']);
+      const result = reconcile(input);
+      expect(result.externalOps).toHaveLength(1);
+      expect(result.externalOps[0]).toMatchObject({ action: 'add', externalUserId: 'ext-user-1', externalGroupId: 'ext-group-1' });
+      expect(result.paOps).toHaveLength(0);
+    });
+
     it('cold baseline (undefined) uses conflict_winner=patrice → push to external', () => {
       const input = biInput();
       // external has it, Patrice doesn't, no baseline → cold, patrice wins → push external
