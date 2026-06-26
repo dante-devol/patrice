@@ -4,6 +4,7 @@ import { ActivityModule } from '../activity/activity.module';
 import { CommonModule } from '../common/common.module';
 import { QueueModule } from '../queue/queue.module';
 import { ConfigModule } from '../config/config.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { IntegrationsController } from './integrations.controller';
 import { IntegrationsService } from './integrations.service';
 import { DiscordLinkService } from './discord-link.service';
@@ -18,7 +19,7 @@ import { DiscordRestClient } from './sync/discord-rest.client';
 import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
-  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, forwardRef(() => GatewayModule)],
+  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, NotificationsModule, forwardRef(() => GatewayModule)],
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,

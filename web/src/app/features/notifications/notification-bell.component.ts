@@ -115,6 +115,7 @@ export class NotificationBellComponent {
     this.open.set(false);
     const taskId = (n.payload as { taskId?: string }).taskId;
     if (taskId) void this.router.navigate(['/tasks', taskId]);
+    else if (n.type === 'integration.push_failed') void this.router.navigate(['/admin']);
   }
 
   /** A human label for a notification, joining the actor id to a name where present. */
@@ -148,6 +149,14 @@ export class NotificationBellComponent {
         return `${actor} replied to a thread`;
       case 'message.submission_thread_replied':
         return `${actor} replied on a submission`;
+      case 'integration.push_failed': {
+        const reason = (n.payload as { reason?: string }).reason;
+        if (reason === 'permission')
+          return 'Discord roles need attention — the bot can’t change roles. Check its permissions in your server.';
+        if (reason === 'not_found')
+          return 'Discord roles need attention — a mapped role no longer exists on your server.';
+        return 'Discord roles need attention — a role change was refused.';
+      }
       default:
         return n.type;
     }

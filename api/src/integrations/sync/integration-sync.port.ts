@@ -23,7 +23,13 @@ export interface ApplyResult {
   appliedOps: ExternalRoleOp[];
   /** Permanent failures that should mark the mapping broken. */
   brokenGroupIds: ExternalGroupId[];
+  /** Human-readable reason for the last outbound failure (surfaced to admins). */
+  lastError?: string;
+  /** Machine reason code for the failure (the UI/activity humanizes it). */
+  failReason?: OutboundFailReason;
 }
+
+export type OutboundFailReason = 'permission' | 'not_found' | 'other';
 
 /**
  * Provider-agnostic seam for integration sync I/O.

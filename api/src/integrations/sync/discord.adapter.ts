@@ -10,6 +10,7 @@ import type {
   ExternalGroup,
   ExternalRoleOp,
   ApplyResult,
+  OutboundFailReason,
 } from './integration-sync.port';
 import { reconcile, type SyncBaseline, type ReconcileOutput } from './reconciler';
 import type { IntegrationConnection, ExternalGroupMapping } from '@prisma/client';
@@ -24,6 +25,8 @@ interface LinkPair {
 }
 import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
 import { DiscordRestClient } from './discord-rest.client';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { AdministrabilityService } from '../../access/administrability.service';
 
 interface DiscordGuildMember {
   user: { id: string };
@@ -47,6 +50,8 @@ export class DiscordAdapter implements IntegrationSyncPort {
     @Inject(ENV) private readonly env: Env,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
     private readonly rest: DiscordRestClient,
+    private readonly notifications: NotificationsService,
+    private readonly admin: AdministrabilityService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -89,6 +94,8 @@ export class DiscordAdapter implements IntegrationSyncPort {
     const botToken = await this.resolveBotToken(conn);
     const guildId = conn.externalWorkspaceId;
     let failed = 0;
+    let lastError: string | undefined;
+    let failReason: OutboundFailReason | undefined;
     const appliedOps: ExternalRoleOp[] = [];
     const brokenGroupIds: ExternalGroupId[] = [];
 
@@ -127,17 +134,34 @@ export class DiscordAdapter implements IntegrationSyncPort {
             brokenGroupIds.push(op.externalGroupId);
           }
           failed++;
+          // Plain-language messages — admins aren't developers; no HTTP codes here.
+          if (result.status === 403) {
+            failReason = 'permission';
+            lastError =
+              "Patrice couldn't update roles on Discord. The bot needs the “Manage Roles” permission, and its own role must sit above the roles it manages in your server's role list. Fix that in Discord, then press Retry.";
+          } else {
+            failReason = 'not_found';
+            lastError =
+              "A mapped Discord role no longer exists, so Patrice couldn't update it. Re-point or remove that mapping in the integration settings, then press Retry.";
+          }
+          // The status code stays in the server log for developers, not the admin UI.
+          this.logger.warn(`Outbound ${op.action} ${op.externalGroupId} → ${op.externalUserId}: ${result.status} (mapping flagged broken)`);
         } else {
           failed++;
+          failReason = 'other';
+          lastError =
+            "Discord wouldn't apply a role change. Check the bot's permissions in your server, then press Retry.";
           this.logger.warn(`Outbound op ${op.action} ${op.externalGroupId} → ${op.externalUserId} status ${result.status}`);
         }
       } catch (err) {
         failed++;
+        failReason = 'other';
+        lastError = "Patrice couldn't reach Discord to apply a role change. It will try again on the next sync.";
         this.logger.error(`Outbound op failed: ${(err as Error).message}`);
       }
     }
 
-    return { applied: appliedOps.length, failed, appliedOps, brokenGroupIds };
+    return { applied: appliedOps.length, failed, appliedOps, brokenGroupIds, lastError, failReason };
   }
 
   // ---------------------------------------------------------------------------
@@ -254,7 +278,11 @@ export class DiscordAdapter implements IntegrationSyncPort {
       baseline,
     });
 
-    const { totalGranted, totalRevoked } = await this.applyReconcileResult(connection, result, linkedUsers);
+    const { totalGranted, totalRevoked, outboundError } = await this.applyReconcileResult(
+      connection,
+      result,
+      linkedUsers,
+    );
 
     await this.prisma.integrationConnection.update({
       where: { id: connectionId },
@@ -263,7 +291,9 @@ export class DiscordAdapter implements IntegrationSyncPort {
         lastSyncAt: new Date(),
         lastSyncGranted: totalGranted,
         lastSyncRevoked: totalRevoked,
-        lastError: null,
+        // Surface an outbound failure (e.g. a 403 hierarchy refusal) instead of
+        // silently clearing it — otherwise a push that Discord rejects is invisible.
+        lastError: outboundError ?? null,
       },
     });
 
@@ -360,11 +390,19 @@ export class DiscordAdapter implements IntegrationSyncPort {
       baseline,
     });
 
-    await this.applyReconcileResult(connection, result, linkedUsers);
+    const { outboundError } = await this.applyReconcileResult(connection, result, linkedUsers);
     await this.prisma.externalIdentity.update({
       where: { id: linked.id },
       data: { lastSyncedAt: new Date() },
     });
+    // Surface an outbound refusal (e.g. 403 hierarchy) even on the targeted path —
+    // don't clear an existing error here, just record a new one.
+    if (outboundError) {
+      await this.prisma.integrationConnection.update({
+        where: { id: connectionId },
+        data: { lastError: outboundError },
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -375,9 +413,10 @@ export class DiscordAdapter implements IntegrationSyncPort {
     connection: ConnectionWithMappings,
     result: ReconcileOutput,
     linkedUsers: LinkPair[],
-  ): Promise<{ totalGranted: number; totalRevoked: number }> {
+  ): Promise<{ totalGranted: number; totalRevoked: number; outboundError?: string }> {
     const connectionId = connection.id;
     const orgId = connection.organizationId;
+    let outboundError: string | undefined;
     const userIdByExternal = new Map(linkedUsers.map((l) => [l.externalUserId, l.userId]));
     const roleByGroup = new Map(connection.groupMappings.map((m) => [m.externalGroupId, m.roleId]));
 
@@ -442,6 +481,7 @@ export class DiscordAdapter implements IntegrationSyncPort {
     // --- External-side (outbound) ops — one row per (user, role) pushed ---
     if (result.externalOps.length > 0) {
       const applyResult = await this.applyOutbound(connection, result.externalOps);
+      outboundError = applyResult.lastError;
 
       for (const op of applyResult.appliedOps) {
         const userId = userIdByExternal.get(op.externalUserId);
@@ -459,24 +499,33 @@ export class DiscordAdapter implements IntegrationSyncPort {
         });
       }
 
-      // Mark mappings broken for permanent failures (403/404 from Discord).
-      for (const brokenGroupId of applyResult.brokenGroupIds) {
-        const affectedMappings = connection.groupMappings.filter(
-          (m) => m.externalGroupId === brokenGroupId && !m.isBroken,
-        );
-        for (const m of affectedMappings) {
-          await this.prisma.externalGroupMapping.update({ where: { id: m.id }, data: { isBroken: true } });
-          await this.activity.logActivity({
-            organizationId: orgId,
-            actorUserId: null,
-            subjectType: 'external_group_mapping',
-            subjectId: m.id,
-            verb: 'integration.broken',
-            payload: { connectionId, externalGroupId: brokenGroupId },
-            source: ActivitySource.integration,
-            sourceConnectionId: connectionId,
-          });
+      // Mark mappings broken for permanent failures + record a humanized audit row
+      // per affected role (the UI turns `reason` into plain language).
+      if (applyResult.brokenGroupIds.length > 0) {
+        const reason: OutboundFailReason = applyResult.failReason ?? 'other';
+        for (const brokenGroupId of applyResult.brokenGroupIds) {
+          const affectedMappings = connection.groupMappings.filter(
+            (m) => m.externalGroupId === brokenGroupId && !m.isBroken,
+          );
+          for (const m of affectedMappings) {
+            await this.prisma.externalGroupMapping.update({ where: { id: m.id }, data: { isBroken: true } });
+            await this.activity.logActivity({
+              organizationId: orgId,
+              actorUserId: null,
+              subjectType: 'external_group_mapping',
+              subjectId: m.id,
+              verb: 'integration.push_failed',
+              payload: { connectionId, roleId: m.roleId, externalGroupId: brokenGroupId, reason },
+              source: ActivitySource.integration,
+              sourceConnectionId: connectionId,
+            });
+          }
         }
+        // One durable in-app alert to admins per failing sync. No SSE publish from the
+        // worker (the api owns the stream); it surfaces on the admin's next reconcile.
+        await this.alertAdminsOfPushFailure(connection, reason).catch((err) =>
+          this.logger.warn(`admin push-failure alert failed: ${(err as Error).message}`),
+        );
       }
     }
 
@@ -513,7 +562,30 @@ export class DiscordAdapter implements IntegrationSyncPort {
       });
     }
 
-    return { totalGranted, totalRevoked };
+    return { totalGranted, totalRevoked, outboundError };
+  }
+
+  /**
+   * Durable in-app notification to the org's effective admins that an outbound push
+   * was refused. Worker-safe: writes the rows but does **not** publish an SSE ping
+   * (the api owns the stream; durability never rides it — the admin's next reconcile
+   * picks it up). The bell humanizes `reason` — admins never see an HTTP status.
+   */
+  private async alertAdminsOfPushFailure(
+    connection: ConnectionWithMappings,
+    reason: OutboundFailReason,
+  ): Promise<void> {
+    const adminIds = await this.admin.effectiveAdminIds(connection.organizationId);
+    if (adminIds.length === 0) return;
+    await this.notifications.emit(this.prisma, {
+      organizationId: connection.organizationId,
+      type: 'integration.push_failed',
+      subjectType: 'integration_connection',
+      subjectId: connection.id,
+      senderUserId: null,
+      recipientUserIds: adminIds,
+      payload: { connectionId: connection.id, reason },
+    });
   }
 
   // ---------------------------------------------------------------------------

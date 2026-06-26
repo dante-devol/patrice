@@ -182,6 +182,15 @@ export const activityPayloadSchemas = {
     .object({ connectionId: uuid, grantedCount: z.number().int(), revokedCount: z.number().int() })
     .strict(),
   'integration.broken': z.object({ connectionId: uuid, externalGroupId: z.string() }).strict(),
+  // Outbound push to Discord was refused (reason is a code; the UI humanizes it).
+  'integration.push_failed': z
+    .object({
+      connectionId: uuid,
+      roleId: uuid.nullable(),
+      externalGroupId: z.string(),
+      reason: z.enum(['permission', 'not_found', 'other']),
+    })
+    .strict(),
   // Gateway socket + reconcile lifecycle (admin visibility — no log-reading needed).
   'integration.gateway_connected': z.object({ connectionId: uuid }).strict(),
   'integration.gateway_disconnected': z.object({ connectionId: uuid }).strict(),
