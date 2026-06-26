@@ -134,7 +134,7 @@ interface ClaimRow {
                   <ul class="flex flex-col gap-2 mb-2">
                     @for (c of claims(); track c.userId) {
                       <li class="flex items-center gap-2.5">
-                        <user-avatar [name]="c.name" [seed]="c.userId" [size]="24" />
+                        <user-avatar [name]="c.name" [seed]="c.userId" [size]="24" [imageUrl]="lookup.userAvatar(c.userId)" />
                         <span class="text-[13.5px] font-medium flex-1 min-w-0 truncate">{{ c.name }}</span>
                         <span class="font-mono text-[11px] shrink-0" [style.color]="stateColor(c.state)">v{{ c.version }}·{{ c.state }}</span>
                         @if (isCurrentUser(c.userId)) {
@@ -210,7 +210,7 @@ interface ClaimRow {
                               @for (u of filteredUsers(); track u.id) {
                                 <li class="px-3 py-2 text-[12.5px] hover:bg-board cursor-pointer flex items-center gap-2"
                                     (mousedown)="selectRequester(t, u)">
-                                  <user-avatar [name]="u.displayName" [seed]="u.id" [size]="18" />
+                                  <user-avatar [name]="u.displayName" [seed]="u.id" [size]="18" [imageUrl]="u.avatarUrl" />
                                   {{ u.displayName }}
                                 </li>
                               }
@@ -219,7 +219,7 @@ interface ClaimRow {
                         </div>
                       } @else {
                         <div class="flex items-center gap-1.5">
-                          <user-avatar [name]="lookup.userName(t.requesterUserId)" [seed]="t.requesterUserId" [size]="20" />
+                          <user-avatar [name]="lookup.userName(t.requesterUserId)" [seed]="t.requesterUserId" [size]="20" [imageUrl]="lookup.userAvatar(t.requesterUserId)" />
                           <span class="font-medium">{{ lookup.userName(t.requesterUserId) }}</span>
                         </div>
                       }
