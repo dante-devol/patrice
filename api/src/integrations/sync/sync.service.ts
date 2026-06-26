@@ -125,9 +125,38 @@ export class SyncService implements OnModuleInit {
   }
 
   /**
-   * Called by UsersService after any user_role grant or revoke. Finds every active
-   * connection that has at least one mapping for `roleId` and schedules a debounced
-   * sync for it. Fire-and-forget; sync failure never fails the role-change request.
+   * Called by UsersService after a Patrice-side grant/revoke for **one** user. Mirrors
+   * the Gateway Doorbell: for each mapped connection the user is linked to, enqueue a
+   * **targeted, debounced reconcile of just that user** — so a Patrice change pulses to
+   * Discord at the same ~5s pace as a Discord-side change, instead of waiting for the
+   * Reconcile Floor. The per-(connection,user) singleton key also avoids contending
+   * with the full-connection sweeps (which share `sync-{connection}`). An unlinked user
+   * has no Discord account to push to, so they simply produce no job. Fire-and-forget.
+   */
+  async notifyUserRoleChange(userId: string, roleId: string): Promise<void> {
+    try {
+      const mappings = await this.prisma.externalGroupMapping.findMany({
+        where: { roleId },
+        select: { connectionId: true },
+        distinct: ['connectionId'],
+      });
+      if (mappings.length === 0) return;
+      const links = await this.prisma.externalIdentity.findMany({
+        where: { userId, connectionId: { in: mappings.map((m) => m.connectionId) } },
+        select: { connectionId: true, externalUserId: true },
+      });
+      await Promise.all(
+        links.map((l) => this.enqueueUserSoon(l.connectionId, l.externalUserId)),
+      );
+    } catch (err) {
+      this.logger.warn(`notifyUserRoleChange for ${userId}/${roleId} failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Role-wide reconcile: schedule a full sweep of every connection mapping `roleId`.
+   * For changes that affect many holders at once (e.g. a role retirement), not a
+   * single grant/revoke — those use {@link notifyUserRoleChange}.
    */
   async notifyRoleChange(roleId: string): Promise<void> {
     try {

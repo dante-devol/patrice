@@ -339,7 +339,9 @@ export class UsersService {
       });
       await this.access.bumpConfigVersion(organizationId, tx);
     });
-    void this.sync?.notifyRoleChange(roleId);
+    // Targeted, debounced reconcile of just this user — pulses the grant to Discord
+    // at the Doorbell's ~5s pace rather than waiting for the Reconcile Floor.
+    void this.sync?.notifyUserRoleChange(user.id, roleId);
   }
 
   async revokeRole(
@@ -384,6 +386,8 @@ export class UsersService {
         await this.access.bumpConfigVersion(organizationId, tx);
       },
     );
-    void this.sync?.notifyRoleChange(roleId);
+    // Targeted, debounced reconcile of just this user — pushes the removal to Discord
+    // promptly (the per-user path, like the Doorbell), not at the next floor sweep.
+    void this.sync?.notifyUserRoleChange(user.id, roleId);
   }
 }
