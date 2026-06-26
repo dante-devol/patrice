@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { LifecycleState, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
@@ -47,12 +47,39 @@ export function computeNextReconcileAt(conn: {
 
 @Injectable()
 export class IntegrationsService {
+  private readonly logger = new Logger(IntegrationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
   ) {}
+
+  /**
+   * Never persist a bot token in plaintext `config.botToken` — encrypt it at rest
+   * into `credentials_ref` (AEAD by default; see the SecretCipherPort). Best-effort:
+   * if no cipher key is configured the token falls back to plaintext config (the
+   * worker's resolveBotToken reads either), so a keyless dev box still works. An
+   * explicit pre-encrypted `credentials_ref` is honored as-is.
+   */
+  private async secureBotToken(
+    config: Record<string, unknown>,
+    credentialsRef: string | null,
+  ): Promise<{ config: Record<string, unknown>; credentialsRef: string | null }> {
+    const botToken = typeof config.botToken === 'string' ? config.botToken.trim() : '';
+    if (!botToken) return { config, credentialsRef };
+    const { botToken: _drop, ...rest } = config;
+    if (credentialsRef) return { config: rest, credentialsRef }; // caller supplied a handle
+    try {
+      return { config: rest, credentialsRef: await this.cipher.encrypt(botToken) };
+    } catch (err) {
+      this.logger.warn(
+        `Bot token stored unencrypted (no cipher key configured): ${(err as Error).message}`,
+      );
+      return { config, credentialsRef }; // legacy plaintext fallback
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Connection CRUD
@@ -82,14 +109,18 @@ export class IntegrationsService {
       throw new ConflictError('DUPLICATE_CONNECTION', 'A connection for this workspace already exists');
     }
 
+    const secured = await this.secureBotToken(
+      { ...(dto.config ?? {}) } as Record<string, unknown>,
+      dto.credentialsRef ?? null,
+    );
     const connection = await this.prisma.integrationConnection.create({
       data: {
         organizationId,
         provider: dto.provider,
         externalWorkspaceId: dto.externalWorkspaceId,
         displayName: dto.displayName,
-        config: (dto.config ?? {}) as Prisma.InputJsonValue,
-        credentialsRef: dto.credentialsRef ?? null,
+        config: secured.config as Prisma.InputJsonValue,
+        credentialsRef: secured.credentialsRef,
       },
     });
     await this.activity.logActivity({
@@ -105,14 +136,19 @@ export class IntegrationsService {
 
   async update(id: string, actorUserId: string, dto: UpdateIntegrationDto) {
     const connection = await this.loadActive(id);
-    const updated = await this.prisma.integrationConnection.update({
-      where: { id },
-      data: {
-        ...(dto.displayName !== undefined && { displayName: dto.displayName }),
-        ...(dto.config !== undefined && { config: dto.config as Prisma.InputJsonValue }),
-        ...(dto.credentialsRef !== undefined && { credentialsRef: dto.credentialsRef }),
-      },
-    });
+    const data: Prisma.IntegrationConnectionUpdateInput = {};
+    if (dto.displayName !== undefined) data.displayName = dto.displayName;
+    if (dto.credentialsRef !== undefined) data.credentialsRef = dto.credentialsRef;
+    if (dto.config !== undefined) {
+      // Encrypt a bot token arriving via a config PATCH, same as on connect.
+      const secured = await this.secureBotToken(
+        { ...(dto.config as Record<string, unknown>) },
+        dto.credentialsRef ?? null,
+      );
+      data.config = secured.config as Prisma.InputJsonValue;
+      if (secured.credentialsRef !== null) data.credentialsRef = secured.credentialsRef;
+    }
+    const updated = await this.prisma.integrationConnection.update({ where: { id }, data });
     await this.activity.logActivity({
       organizationId: connection.organizationId,
       actorUserId,

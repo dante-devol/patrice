@@ -65,6 +65,22 @@ describe('Slice 8 — Integrations', () => {
       connectionId = res.body.id as string;
     });
 
+    it('encrypts the bot token at rest on connect (no plaintext in config)', async () => {
+      const res = await auth(http().post('/api/integrations')).send({
+        provider: 'discord',
+        externalWorkspaceId: '900900900900900900',
+        displayName: 'Encrypted Guild',
+        config: { botToken: 'Bot.SUPER.SECRET.encme' },
+      });
+      expect(res.status).toBe(201);
+      const row = await prisma.integrationConnection.findUniqueOrThrow({ where: { id: res.body.id } });
+      // Token moved out of config into an encrypted credentials_ref handle.
+      expect((row.config as Record<string, unknown>).botToken).toBeUndefined();
+      expect(row.credentialsRef).toMatch(/^aead:/);
+      expect(JSON.stringify(row.config)).not.toContain('encme');
+      await prisma.integrationConnection.delete({ where: { id: res.body.id } });
+    });
+
     it('rejects duplicate workspace connection', async () => {
       const res = await auth(http().post('/api/integrations')).send({
         provider: 'discord',
