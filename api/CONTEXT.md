@@ -168,7 +168,7 @@ The configured fallback winner for a Cold-Baseline Conflict when no audit-log ti
 _Avoid_: Priority, Authority (Authority is the broader source-of-truth posture)
 
 **Doorbell**:
-The Gateway listener's role — on a relevant Discord event it only `enqueueSoon`s a reconcile for the connection; it never reads or writes Edge state. One writer (the reconciler), one correctness path. Fast-but-best-effort: a missed event silently degrades to the Reconcile Floor, so it is health-monitored, never trusted as a guarantee. Revocation latency on this path = debounce (~5s) + reconcile duration, an explicit monitored SLO — not the hard guarantee.
+The Gateway listener's role — on a relevant Discord event it only `enqueueSoon`s a reconcile; it never reads or writes Edge state. One writer (the reconciler), one correctness path. **Scope:** a per-member event (`GUILD_MEMBER_*`) enqueues a **targeted single-user reconcile** (`syncUser` — fetches just that member, reconciles only their edges); a guild-level role event (`GUILD_ROLE_*`) names no user and enqueues a connection-wide sweep. Either way it's fast-but-best-effort: a missed event silently degrades to the Reconcile Floor, so it is health-monitored, never trusted as a guarantee. The targeted path skips broken-mapping detection (which needs the whole-guild view) — that stays with the full sweep. Revocation latency on this path = debounce (~5s) + reconcile duration, an explicit monitored SLO — not the hard guarantee.
 _Avoid_: Listener (too generic), Webhook (it's a Gateway socket, not an HTTP callback), Trigger
 
 **Reconcile Floor**:

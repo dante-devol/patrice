@@ -199,6 +199,13 @@ export const activityPayloadSchemas = {
   'integration.removed': z
     .object({ connectionId: uuid, userId: uuid, roleId: uuid })
     .strict(),
+  // Outbound (Patrice → Discord) per-user role pushes — one row per (user, role).
+  'integration.external_role_added': z
+    .object({ connectionId: uuid, userId: uuid, roleId: uuid, externalGroupId: z.string() })
+    .strict(),
+  'integration.external_role_removed': z
+    .object({ connectionId: uuid, userId: uuid, roleId: uuid, externalGroupId: z.string() })
+    .strict(),
   'external_identity.linked': z
     .object({ connectionId: uuid, userId: uuid, externalIdentityId: uuid })
     .strict(),

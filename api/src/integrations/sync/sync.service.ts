@@ -16,6 +16,8 @@ const FLOOR_DEGRADED_HOURS = 0.5;
 
 export interface SyncJobData {
   connectionId: string;
+  /** When set, reconcile only this Discord user's edges (Doorbell fast path). */
+  externalUserId?: string;
 }
 
 /**
@@ -58,8 +60,9 @@ export class SyncService implements OnModuleInit {
       return;
     }
     await this.queue.work(QUEUE_INTEGRATION_SYNC, async (data) => {
-      const { connectionId } = data as SyncJobData;
-      await this.runSync(connectionId);
+      const { connectionId, externalUserId } = data as SyncJobData;
+      if (externalUserId) await this.runSyncUser(connectionId, externalUserId);
+      else await this.runSync(connectionId);
     });
 
     await this.queue.work(QUEUE_INTEGRATION_SYNC_SCHEDULED, async () => {
@@ -105,6 +108,23 @@ export class SyncService implements OnModuleInit {
   }
 
   /**
+   * Enqueue a delayed **single-user** reconcile (Doorbell fast path). Keyed per
+   * (connection, user) so bursts for one member collapse but different members
+   * don't block each other. The connection-wide sweep remains the correctness
+   * backstop; this just narrows the common case to the user who actually changed.
+   */
+  async enqueueUserSoon(connectionId: string, externalUserId: string): Promise<void> {
+    await this.queue.publish(
+      QUEUE_INTEGRATION_SYNC,
+      { connectionId, externalUserId } satisfies SyncJobData,
+      {
+        singletonKey: `sync-${connectionId}-${externalUserId}`,
+        startAfterSeconds: this.env.INTEGRATION_SYNC_DELAY_SECONDS,
+      },
+    );
+  }
+
+  /**
    * Called by UsersService after any user_role grant or revoke. Finds every active
    * connection that has at least one mapping for `roleId` and schedules a debounced
    * sync for it. Fire-and-forget; sync failure never fails the role-change request.
@@ -127,6 +147,16 @@ export class SyncService implements OnModuleInit {
       await this.discord.sync(connectionId);
     } catch (err) {
       this.logger.error(`Sync failed for connection ${connectionId}: ${(err as Error).message}`);
+    }
+  }
+
+  private async runSyncUser(connectionId: string, externalUserId: string): Promise<void> {
+    try {
+      await this.discord.syncUser(connectionId, externalUserId);
+    } catch (err) {
+      this.logger.error(
+        `User sync failed for ${connectionId}/${externalUserId}: ${(err as Error).message}`,
+      );
     }
   }
 

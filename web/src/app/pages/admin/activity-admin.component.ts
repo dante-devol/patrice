@@ -102,6 +102,8 @@ const VERB_LABELS: Record<string, string> = {
   'integration.reconcile_scheduled': 'scheduled a reconcile',
   'integration.broken': 'flagged a broken mapping',
   'integration.removed': 'removed a synced role',
+  'integration.external_role_added': 'added a Discord role',
+  'integration.external_role_removed': 'removed a Discord role',
   'integration.token_invalid': 'bot token was rejected',
   'integration.mapping_retried': 'retried a broken mapping',
   'integration.gateway_connected': 'Gateway connected',

@@ -19,6 +19,8 @@ export interface ExternalRoleOp {
 export interface ApplyResult {
   applied: number;
   failed: number;
+  /** The ops that succeeded — used to log one activity row per (user, role) push. */
+  appliedOps: ExternalRoleOp[];
   /** Permanent failures that should mark the mapping broken. */
   brokenGroupIds: ExternalGroupId[];
 }

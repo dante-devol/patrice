@@ -245,13 +245,20 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
         }, action.delayMs);
         break;
 
-      case 'EMIT_MEMBER_EVENT':
-        // Doorbell: enqueue reconcile for this connection. Never writes user_role.
+      case 'EMIT_MEMBER_EVENT': {
+        // Doorbell: enqueue a reconcile for this connection. Never writes user_role.
+        // A per-member event (GUILD_MEMBER_*) targets just that user; a guild-level
+        // role change (GUILD_ROLE_*) has no single user, so it sweeps the connection.
         this.persistGateway(session, GatewayState.connected, { event: true });
-        this.sync.enqueueSoon(session.connectionId).catch((err) => {
-          this.logger.error(`enqueueSoon failed: ${(err as Error).message}`);
+        const externalUserId = memberIdFromEvent(action.eventName, action.data);
+        const enqueue = externalUserId
+          ? this.sync.enqueueUserSoon(session.connectionId, externalUserId)
+          : this.sync.enqueueSoon(session.connectionId);
+        enqueue.catch((err) => {
+          this.logger.error(`reconcile enqueue failed: ${(err as Error).message}`);
         });
         break;
+      }
 
       case 'TRIGGER_RECONCILE':
         this.sync.enqueue(session.connectionId).catch((err) => {
@@ -331,4 +338,16 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
     }
     return (conn.config as Record<string, string>)['botToken'] ?? null;
   }
+}
+
+/**
+ * Extract the affected Discord user id from a member event so the Doorbell can fire
+ * a per-user reconcile. `GUILD_MEMBER_ADD/UPDATE/REMOVE` all carry `user.id`; a
+ * guild-level role event (`GUILD_ROLE_*`) names no user, so we return null and the
+ * caller falls back to a connection-wide sweep.
+ */
+export function memberIdFromEvent(eventName: string, data: unknown): string | null {
+  if (!eventName.startsWith('GUILD_MEMBER_')) return null;
+  const user = (data as { user?: { id?: string } } | null)?.user;
+  return user?.id ?? null;
 }
