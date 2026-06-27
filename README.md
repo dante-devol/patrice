@@ -1,37 +1,67 @@
 # Patrice
 
-Patrice is a **task-tracking tool for a single organization** — built to replace a sprawl of
-~20 Google Drive task-tracking sheets with one structured system. Work is contributed across
-**divisions** (the kind of labor — Scripting, Writing, Art, Testing, Leadership…) and organized
-into **teams** (content-facing groups). Members **request** and **claim** tasks; what a task
-*asks for and collects* (its **questionnaire**) varies by division — writing submits text, art
-submits files, testing fills a custom form. The org runs out of Discord, so Patrice can
-optionally **sync** identity and roles with a guild — without ever depending on it.
+Patrice is a **self-hosted work-tracking platform** — an API and a web UI that give a team
+structured tools for **tracking work**, **managing users and access**, and **syncing with the
+third-party services they already run on**. It's built to be **rolled by the team that uses it**:
+you stand up your own instance, then shape it to your organization through configuration rather
+than code.
 
-> Design north stars (see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)): one organization per
-> deployment; **roles are the authorization atom**; almost everything org-specific is
-> **configuration, not code**; one centralized access engine gates every action; and core data
-> is **retired, then reference-counted-deleted**, never dropped outright.
+The premise is simple: a serious team's coordination problem is, underneath, a database problem —
+who's doing what, who's allowed to do what, what's been submitted, what's blocked. Patrice owns
+that database and puts an approachable web service in front of it, so the people running the work
+never have to touch the schema to make it fit how they actually operate.
 
-## What it does
+## Configuration, not code
 
-- **Accounts are invitation-only.** No open sign-up — a bearer-token invite (or the one-time
-  **bootstrap key** on a fresh install) is the only way in. Email/password + Google OAuth.
-- **Roles, divisions, teams, and a permission matrix** are all data. A role is the auth atom;
-  each division/team owns an **inherent role** whose possession *is* membership.
-- **One access engine.** Every gated action (`resource:verb`) is evaluated by a single
-  **Cedar**-backed pipeline in the API — configurable grants, scoped global/own/by-group.
-- **Tasks with per-division questionnaires.** Tasks deep-copy their division's default
-  questionnaire (7 question types), carry claimant **slots**, a derived **status**, a markdown
-  description, and a one-level-threaded **message** stream with **attachments**.
-- **Submissions & review.** Each claimant submits answers (versioned); requesters
-  approve / return / reject; a task's status rolls up from its slots by a min-rule.
-- **In-app notifications.** A durable `notification` table + a thin **SSE** "go sync" stream
-  (reconcile-on-connect; durability never rides the stream).
-- **Lifecycle: retire → grace → GC.** Entities are soft-retired (hidden by default, hard-denied
-  by the engine), **revivable** within a configurable grace window, then garbage-collected once
-  unreferenced — including task-aggregate deletion, **user scrub-in-place** (GDPR-style erasure
-  to a tombstone), and orphaned-blob cleanup.
+Almost everything that looks organization-specific in Patrice is **data you configure**, not
+software you fork:
+
+- **Roles** are the authorization atom. You define them; a user can hold many.
+- **Divisions** (kinds of labor) and **teams** (content-facing groups) each own an *inherent
+  role* whose possession **is** membership.
+- The **permission matrix** is editable: every gated action is a `resource:verb` grant you assign
+  to roles, scoped globally / to a group / to ownership. There's one access engine — no bespoke
+  per-feature rules.
+- **Questionnaires** define what each kind of task asks for and collects (seven question types);
+  divisions supply defaults, and task authors can customize per task.
+- **Integrations** (which external groups map to which Patrice roles, in which direction) are
+  configured per connection.
+- Org behavior — session lifetimes, the retire→revive grace window, self-review, Discord sign-in
+  credentials — is **runtime settings**, edited in the admin UI, not redeploys.
+
+The software ships the engine, the lifecycle rules, and the UI; your instance's particulars are
+just rows.
+
+## What you get
+
+**Work tracking.** Tasks carry a required division, optional team, a requester, markdown
+description, claimant **slots**, a per-division **questionnaire**, versioned **submissions**, a
+derived **status** (rolled up from slots by a min-rule), and a one-level-threaded **message**
+stream with **attachments**. Requesters approve / return / reject submissions; views are paginated
+and faceted for teams running hundreds of items.
+
+**Users & access.** Accounts are **invitation-only** — a bearer-token invite, or the one-time
+**bootstrap key** printed on a fresh install, is the only way in (no open sign-up). Sign in with
+**email/password** or **Discord**. Identity is native and never depends on an integration. A single
+**Cedar**-backed pipeline in the API authorizes *every* action; the web re-authorizes server-side
+on each call (client guards are UX only). A hard **administrability guard** keeps an instance from
+ever losing its last admin.
+
+**Third-party integrations.** Connect a Discord guild and **map Discord roles ↔ Patrice roles**,
+**inbound / outbound / bidirectional**. Members link their own Discord account (and can sign in
+with it); role changes reconcile both ways — promptly via a Gateway listener and a ~5s debounced
+per-user pulse, with a periodic floor sweep as the correctness backstop. Admins get a **health
+surface** (gateway state, last/next reconcile, broken mappings with one-click retry) and
+plain-language alerts when a push is refused — no log-reading or developer required. Security-
+critical roles are carved out so they're never gated on sync.
+
+**Lifecycle & data hygiene.** Nothing is hard-deleted on demand: entities are **retired** (hidden,
+and hard-denied by the access engine), **revivable** within a configurable grace window, then
+**garbage-collected** once unreferenced — task aggregates as a unit, users **scrubbed in place** to
+a tombstone (GDPR-style erasure), orphaned blobs reconciled.
+
+**Awareness.** A durable notification table plus a thin **SSE** "go sync" stream (reconcile-on-
+connect; durability never rides the stream).
 
 ## Architecture
 
@@ -39,110 +69,43 @@ Three strictly-bound tiers, each replaceable without rewriting its neighbors:
 
 ```
 Web (Angular)  ──HTTP / OpenAPI──▶  API (NestJS)  ──Prisma / SQL──▶  Postgres 18 + object store
-   signals-first                    Cedar engine · sessions · pg-boss queue · SSE
+  signals-first                     Cedar engine · sessions · pg-boss queue · SSE · integrations
 ```
 
-- **API** is the only tier that talks to the database and the only one that enforces
-  permissions. Ports & adapters keep the domain core framework-independent.
-- **Web** holds no domain logic — it reflects API state and re-authorizes every action
-  server-side (client guards are UX only).
-- **Postgres** is the spine (single-node target: ~200 users / ~100k tasks). Attachments live in
-  an object store (local-fs for single-instance dev, S3-compatible for production).
+- **API** is the only tier that talks to the database and the only one that enforces permissions.
+  Ports & adapters keep the domain core framework-independent. It runs in two roles from one image
+  — `api` (HTTP) and `worker` (queue consumers, cron, GC, and the integration Gateway socket).
+- **Web** holds no domain logic — it reflects API state; the OpenAPI contract is the boundary.
+- **Postgres** is the spine (single-node target: ~200 users / ~100k tasks). Attachments live in an
+  object store (local-fs for single-instance dev, S3-compatible for production).
 
-See [`CONTEXT-MAP.md`](CONTEXT-MAP.md), [`api/CONTEXT.md`](api/CONTEXT.md), and
-[`web/CONTEXT.md`](web/CONTEXT.md) for the per-tier domain language.
+One organization per deployment — Patrice is something a team **runs for itself**, not a
+multi-tenant SaaS. The multi-org seams exist in the model but multi-tenancy is deliberately not
+built.
 
-## Implementation state
+## Getting started
 
-The product is built in ordered, full-stack [slices](docs/slices/). **Slices 1–7 (v1) are
-complete**; Slice 8 (Discord) is explicitly post-v1.
-
-| Slice | Capability | Umbrella | State |
-|---|---|---|---|
-| 1 | Foundation · auth · sessions · Cedar engine · bootstrap | #2 | ✅ |
-| 2 | Org config: roles, divisions, teams, permission matrix, memberships | #7 | ✅ |
-| 3 | Questionnaires (7 question types, division defaults) | #12 | ✅ |
-| 4 | Tasks · claiming · message threads · attachments | #16 | ✅ |
-| 5 | Submissions · review · status min-rule | #20 | ✅ |
-| 6 | Notifications (durable table + SSE stream) | #24 | ✅ |
-| 7 | Retirement, grace-period revive & garbage collection | #27 | ✅ |
-| 8 | Integrations (Discord): connect · link · map · sync | #40 | ⬜ post-v1 |
-
-**Tooling.** Both tiers have `tsc` typecheck + flat-config ESLint + a test runner (Jest), and a
-GitHub Actions CI runs typecheck/lint/unit/e2e (api, against a real Postgres) and
-typecheck/lint/unit/build (web) on every PR.
-
-**Known follow-up:** the Web↔API contract is meant to be code-first **OpenAPI** with a generated
-client; v1 ships a hand-written data layer (`web/src/app/core/api.*`) to stay runnable — wiring
-the codegen pipeline is tracked on the Slice 1 umbrella (#2).
-
-## Running it locally
-
-Requires **PostgreSQL 18** (the schema uses the built-in `uuidv7()`).
-
-### Whole stack (Docker)
+The whole stack runs in Docker:
 
 ```bash
 docker compose up --build
 ```
 
-Brings up Postgres, **Mailpit** (SMTP inbox UI at http://localhost:8025), the API (`:3000`), and
-the web app (http://localhost:8080). On an empty DB the API prints a one-time **bootstrap key**
-to its logs — visit http://localhost:8080/setup, paste the key, and register the first admin.
+This brings up Postgres, a local mail sink, the API + worker, and the web UI on
+**http://localhost:8080**. On an empty database the API prints a one-time **bootstrap key** to its
+logs — open `/setup`, paste it, and register the first admin.
 
-### Tiers separately (dev)
+Full dev-environment setup (Docker details, secrets, optional AWS/KMS and Discord credentials,
+tests, and running the tiers without Docker) is in **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-**API** (`:3000`):
+## Project layout
 
-```bash
-cd api
-cp .env.example .env          # fill DATABASE_URL, secrets, SMTP; validated on boot (fail-fast)
-npm install
-npx prisma migrate deploy     # build the schema on a Postgres 18
-npm run start:dev
-```
-
-The API prints the bootstrap key whenever no **effective admin** exists (first boot or recovery).
-
-**Web** (`:4200`, proxies `/api` → `http://localhost:3000`):
-
-```bash
-cd web
-npm install
-npm start
-```
-
-Then open http://localhost:4200/setup and bootstrap as above.
-
-> A local SMTP sink is handy for the email-verification / password-reset flows — `docker compose
-> up mailpit` gives you one at `smtp://localhost:1025` (UI on `:8025`).
->
-> **Grace period** (the retire→revive window) and other behaviors are runtime **org settings**
-> (`organization.settings`, edited in the admin UI), not env — e.g. `gracePeriodHours` (default 24h).
-
-## Tests & quality
-
-```bash
-# API — unit + e2e (e2e needs a Postgres 18 with an empty `patrice_test` DB)
-cd api
-npm test                                  # unit specs
-npm run lint && npm run typecheck
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/patrice_test?schema=public \
-  npx prisma migrate deploy               # one-time: build the test schema
-npm run test:e2e                          # full slice acceptance suites
-
-# Web — unit + lint + typecheck + build
-cd web
-npm test
-npm run lint && npm run typecheck && npm run build
-```
-
-## Layout
-
-- `api/` — NestJS backend: Prisma schema/migrations, the Cedar access engine, auth / sessions /
-  invitations, attachments + object storage, notifications (SSE), the GC sweep, and the pg-boss
-  queue. See [`api/CONTEXT.md`](api/CONTEXT.md).
+- `api/` — NestJS backend: the Prisma schema/migrations, the Cedar access engine, auth / sessions /
+  invitations, tasks / questionnaires / submissions, attachments + object storage, notifications
+  (SSE), the GC sweep, the pg-boss queue, and the integrations adapter + Gateway listener. See
+  [`api/CONTEXT.md`](api/CONTEXT.md).
 - `web/` — Angular frontend (standalone components, signals-first). See [`web/CONTEXT.md`](web/CONTEXT.md).
-- `docs/` — [architecture](docs/ARCHITECTURE.md), the [build slices](docs/slices/), the
-  PRD (#1), ADRs, and agent guides.
-- `UBIQUITOUS_LANGUAGE.md` — the cross-tier glossary.
+- `docs/` — the [architecture](docs/ARCHITECTURE.md), [ADRs](docs/adr/), the ordered build
+  [slices](docs/slices/) (the project's construction history), and agent guides.
+- [`CONTEXT-MAP.md`](CONTEXT-MAP.md) / [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) — the
+  cross-tier domain language.
