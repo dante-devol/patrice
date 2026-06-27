@@ -65,6 +65,29 @@ export class AdministrabilityService {
     return (await this.effectiveAdminCount(organizationId, tx)) > 0;
   }
 
+  /** The user ids of every active effective admin — the cohort for admin alerts. */
+  async effectiveAdminIds(
+    organizationId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<string[]> {
+    const db = tx ?? this.prisma;
+    const rows = await db.$queryRaw<Array<{ id: string }>>`
+      SELECT DISTINCT u.id
+      FROM app_user u
+      JOIN user_role ur ON ur.user_id = u.id
+      JOIN role r ON r.id = ur.role_id
+      JOIN "grant" g ON g.role_id = r.id
+      WHERE u.organization_id = ${organizationId}::uuid
+        AND u.lifecycle_state = 'active'
+        AND r.lifecycle_state = 'active'
+        AND g.lifecycle_state = 'active'
+        AND g.effect = 'permit'
+        AND g.scope_kind = 'global'
+        AND g.action = ANY(${EFFECTIVE_ADMIN_ACTIONS})
+    `;
+    return rows.map((r) => r.id);
+  }
+
   /**
    * Call **inside a guarded transaction, after the candidate mutation** has been
    * applied to `tx`: if the post-write Effective Admin count is zero, throw

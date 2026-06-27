@@ -71,6 +71,28 @@ interface ConnectionRow extends IntegrationConnection {
     .section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; margin-top: 4px; }
 
     .discord-logo { width: 18px; height: 18px; opacity: .7; }
+
+    /* ── Health panel (pinned to top) ───────────────────────────── */
+    .health { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; background: var(--panel); }
+    .health-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .health-head h3 { margin: 0; font-size: 14px; flex: 1; }
+    .health-card { border-top: 1px solid var(--border); padding: 12px 0; }
+    .health-card:first-of-type { border-top: none; }
+    .health-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .health-title .name { font-weight: 600; flex: 1; }
+    .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; font-size: 13px; }
+    .hcell { display: flex; flex-direction: column; gap: 2px; }
+    .hlabel { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+    .gw-pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); width: fit-content; }
+    .gw-pill.connected { color: var(--ok); border-color: var(--ok); }
+    .gw-pill.connecting { color: var(--muted); border-color: var(--muted); }
+    .gw-pill.degraded { color: #b8860b; border-color: #b8860b; }
+    .gw-pill.down { color: var(--danger); border-color: var(--danger); }
+    .health-error { color: var(--danger); font-size: 12.5px; margin: 10px 0 0; }
+    .health-warn { color: #b8860b; font-size: 12.5px; margin: 8px 0 0; }
+    .health-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .health-actions button { margin-top: 0; padding: 5px 12px; font-size: 12px; }
+    .retry-pill { font-size: 11px; margin-top: 0; padding: 2px 8px; }
   `],
   template: `
     <div class="panel">
@@ -80,6 +102,61 @@ interface ConnectionRow extends IntegrationConnection {
       </p>
 
       @if (error()) { <p class="error">{{ error() }}</p> }
+
+      <!-- ── Health panel (pinned to top when a connection exists) ──── -->
+      @if (healthConnections().length > 0) {
+        <div class="health">
+          <div class="health-head">
+            <h3>Integration health</h3>
+            <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px"
+                    [disabled]="busy()" (click)="refreshNow()">Refresh</button>
+          </div>
+          @for (c of healthConnections(); track c.id) {
+            <div class="health-card">
+              <div class="health-title">
+                <span class="name">{{ c.displayName }}</span>
+                <span class="status-badge" [class]="statusClass(c)">{{ displayStatus(c) }}</span>
+              </div>
+              <div class="health-grid">
+                <div class="hcell">
+                  <span class="hlabel">Gateway</span>
+                  <span class="gw-pill" [class]="c.gatewayState">{{ gatewayLabel(c) }}</span>
+                </div>
+                <div class="hcell">
+                  <span class="hlabel">Sync</span>
+                  <span>{{ syncLabel(c) }}</span>
+                </div>
+                <div class="hcell">
+                  <span class="hlabel">Last sync</span>
+                  <span>{{ c.lastSyncAt ? fmtRel(c.lastSyncAt) : 'never' }}
+                    @if (c.lastSyncAt) {
+                      <span class="muted">(+{{ c.lastSyncGranted }} / −{{ c.lastSyncRevoked }})</span>
+                    }
+                  </span>
+                </div>
+                <div class="hcell">
+                  <span class="hlabel">Next reconcile</span>
+                  <span [title]="c.nextReconcileAt ?? ''">{{ c.nextReconcileAt ? fmtRel(c.nextReconcileAt) : 'pending first sync' }}</span>
+                </div>
+                <div class="hcell">
+                  <span class="hlabel">Linked members</span>
+                  <span>{{ c.gatewayLastEventAt ? ('last event ' + fmtRel(c.gatewayLastEventAt)) : '—' }}</span>
+                </div>
+              </div>
+              @if (c.lastError) { <p class="health-error">⚠ {{ c.lastError }}</p> }
+              @if (brokenCount(c) > 0) {
+                <p class="health-warn">{{ brokenCount(c) }} broken mapping(s) — expand the connection below to retry.</p>
+              }
+              <div class="health-actions">
+                <button [disabled]="c.syncBusy || c.lifecycleState !== 'active'" (click)="sync(c)">
+                  {{ c.syncBusy ? 'Queued…' : 'Sync now' }}
+                </button>
+                <button class="secondary" (click)="ensureExpanded(c)">Manage ↓</button>
+              </div>
+            </div>
+          }
+        </div>
+      }
 
       <!-- ── Connect new guild form ────────────────────────────────── -->
       <details style="margin-bottom:16px">
@@ -139,7 +216,10 @@ interface ConnectionRow extends IntegrationConnection {
                     <span class="muted">↔</span>
                     <span class="mapping-ids">{{ m.externalGroupId }}</span>
                     <span class="badge">{{ m.syncDirection }}</span>
-                    @if (m.isBroken) { <span class="broken-pill">broken</span> }
+                    @if (m.isBroken) {
+                      <span class="broken-pill">broken</span>
+                      <button class="secondary retry-pill" (click)="retryMapping(c, m)">Retry</button>
+                    }
                     <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px"
                             (click)="deleteMapping(c, m)">Remove</button>
                   </div>
@@ -331,8 +411,74 @@ export class IntegrationsAdminComponent {
     }
   }
 
+  async retryMapping(c: ConnectionRow, m: ExternalGroupMapping): Promise<void> {
+    this.error.set(null);
+    try {
+      const updated = await this.api.retryMapping(c.id, m.id);
+      c.mappings = c.mappings.map((x) => (x.id === updated.id ? updated : x));
+      this.connections.update((cs) => [...cs]);
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    }
+  }
+
+  /** Pull the latest connection state (gateway/sync/next-reconcile are server-driven). */
+  async refreshNow(): Promise<void> {
+    this.busy.set(true);
+    try {
+      await this.refresh();
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  ensureExpanded(c: ConnectionRow): void {
+    if (!c.expanded) void this.toggle(c);
+    this.connections.update((cs) => [...cs]);
+  }
+
   roleName(roleId: string): string {
     return this.roles().find((r) => r.id === roleId)?.name ?? roleId;
+  }
+
+  /** Connections worth surfacing in the health panel (active, non-retired). */
+  healthConnections(): ConnectionRow[] {
+    return this.connections().filter((c) => c.lifecycleState === 'active');
+  }
+
+  brokenCount(c: ConnectionRow): number {
+    return c.mappings.filter((m) => m.isBroken).length;
+  }
+
+  gatewayLabel(c: IntegrationConnection): string {
+    switch (c.gatewayState) {
+      case 'connected': return 'connected';
+      case 'connecting': return 'connecting…';
+      case 'degraded': return 'degraded';
+      default: return 'down';
+    }
+  }
+
+  syncLabel(c: IntegrationConnection): string {
+    switch (c.syncState) {
+      case 'running': return 'running now';
+      case 'queued': return 'queued';
+      default: return 'idle';
+    }
+  }
+
+  /** Compact relative time, e.g. "5m ago" / "in 6h". */
+  fmtRel(iso: string): string {
+    const diffMs = new Date(iso).getTime() - Date.now();
+    const future = diffMs > 0;
+    const abs = Math.abs(diffMs);
+    const mins = Math.round(abs / 60000);
+    let body: string;
+    if (mins < 1) body = 'moments';
+    else if (mins < 60) body = `${mins}m`;
+    else if (mins < 1440) body = `${Math.round(mins / 60)}h`;
+    else body = `${Math.round(mins / 1440)}d`;
+    return future ? `in ${body}` : `${body} ago`;
   }
 
   statusClass(c: IntegrationConnection): string {

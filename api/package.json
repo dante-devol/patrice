@@ -22,6 +22,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.1075.0",
     "@aws-sdk/client-s3": "^3.1073.0",
     "@aws-sdk/s3-request-presigner": "^3.1073.0",
     "@cedar-policy/cedar-wasm": "^4.4.0",
@@ -30,6 +31,7 @@
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/throttler": "^6.4.0",
     "@prisma/client": "^6.2.0",
+    "@types/ws": "^8.18.1",
     "argon2": "^0.41.1",
     "cookie-parser": "^1.4.7",
     "helmet": "^8.1.0",
@@ -39,6 +41,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "uuidv7": "^1.0.2",
+    "ws": "^8.21.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

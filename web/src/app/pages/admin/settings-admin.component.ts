@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-import { OrgSettings } from '../../core/api.types';
+import { ConfigUpdate, OrgSettings } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 
 /** Structured organization.settings editor (Slice 2.4) — not a JSON textarea. */
@@ -41,6 +41,24 @@ import { errorMessage } from '../../core/errors';
           <label><input type="checkbox" [(ngModel)]="s.requireDiscordLink" />
             Require Discord account link before accessing tasks</label>
         </div>
+        <div class="settings-group">
+          <div class="settings-group-label">Discord sign-in (OAuth app)</div>
+          <p class="muted" style="font-size:12.5px;margin:0 0 6px">
+            From your Discord application's OAuth2 settings. The redirect URI to register there
+            is <code>{{ callbackUri }}</code>. The secret is encrypted and never shown again.
+          </p>
+          <label>Client ID
+            <input [(ngModel)]="s.discordClientId" placeholder="application client id"
+                   autocomplete="off" style="font-family:monospace" /></label>
+          <label>Client secret
+            <input type="password" [(ngModel)]="newSecret"
+                   [placeholder]="s.discordOAuthConfigured ? '•••••••• (set — leave blank to keep)' : 'not set'"
+                   autocomplete="off" style="font-family:monospace" /></label>
+          @if (s.discordOAuthConfigured) {
+            <label style="font-weight:normal"><input type="checkbox" [(ngModel)]="clearSecret" />
+              Remove the stored secret (disables Discord sign-in)</label>
+          }
+        </div>
         <button [disabled]="busy()" (click)="save(s)">Save settings</button>
       }
     </div>
@@ -52,6 +70,11 @@ export class SettingsAdminComponent {
   readonly busy = signal(false);
   readonly saved = signal(false);
   readonly error = signal<string | null>(null);
+
+  /** Write-only secret entry (never populated from the server). */
+  newSecret = '';
+  clearSecret = false;
+  readonly callbackUri = `${window.location.origin}/api/auth/discord/callback`;
 
   constructor() {
     void this.load();
@@ -69,8 +92,24 @@ export class SettingsAdminComponent {
     this.busy.set(true);
     this.saved.set(false);
     this.error.set(null);
+    // Build an explicit payload — the read-only `discordOAuthConfigured` must not be
+    // sent (the API schema is strict), and the secret is sent only when set/cleared.
+    const body: ConfigUpdate = {
+      requireVerifiedEmailToLogIn: s.requireVerifiedEmailToLogIn,
+      selfReviewAllowed: s.selfReviewAllowed,
+      anonymizeLabel: s.anonymizeLabel,
+      sessionAbsoluteDays: s.sessionAbsoluteDays,
+      sessionIdleDays: s.sessionIdleDays,
+      gracePeriodHours: s.gracePeriodHours,
+      requireDiscordLink: s.requireDiscordLink,
+      discordClientId: s.discordClientId ?? '',
+    };
+    if (this.clearSecret) body.discordClientSecret = '';
+    else if (this.newSecret.trim()) body.discordClientSecret = this.newSecret.trim();
     try {
-      this.settings.set(await this.api.updateConfig(s));
+      this.settings.set(await this.api.updateConfig(body));
+      this.newSecret = '';
+      this.clearSecret = false;
       this.saved.set(true);
     } catch (e) {
       this.error.set(errorMessage(e));

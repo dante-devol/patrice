@@ -4,17 +4,13 @@ import {
   Delete,
   Get,
   HttpCode,
-  Inject,
   Param,
   Patch,
   Post,
   Query,
-  Redirect,
   Req,
-  Res,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
-import { ENV, Env } from '../config/env';
+import type { Request } from 'express';
 import { ZodValidationPipe } from '../common/zod.pipe';
 import { UnauthenticatedError } from '../common/errors';
 import { Authorize, orgResource } from '../access/authorize.decorator';
@@ -26,10 +22,12 @@ import {
   createMappingSchema,
   updateIntegrationSchema,
   updateMappingSchema,
+  rotateTokenSchema,
   type ConnectIntegrationDto,
   type CreateMappingDto,
   type UpdateIntegrationDto,
   type UpdateMappingDto,
+  type RotateTokenDto,
 } from './integrations.dto';
 
 interface AuthedRequest extends Request {
@@ -41,7 +39,6 @@ export class IntegrationsController {
   constructor(
     private readonly integrations: IntegrationsService,
     private readonly sync: SyncService,
-    @Inject(ENV) private readonly env: Env,
   ) {}
 
   @Get()
@@ -73,6 +70,18 @@ export class IntegrationsController {
     return this.integrations.update(id, req.user.id, body);
   }
 
+  @Post(':id/rotate-token')
+  @HttpCode(200)
+  @Authorize(ACTIONS.integrationUpdate.action, orgResource)
+  async rotateToken(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(rotateTokenSchema)) body: RotateTokenDto,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.integrations.rotateToken(id, req.user.id, body);
+  }
+
   @Post(':id/retire')
   @HttpCode(200)
   @Authorize(ACTIONS.integrationRetire.action, orgResource)
@@ -89,30 +98,8 @@ export class IntegrationsController {
     return this.integrations.revive(id, req.user.id);
   }
 
-  // Discord OAuth account link
-  @Post(':id/link')
-  @HttpCode(200)
-  async startLink(@Param('id') id: string, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    const redirectUrl = this.integrations.startDiscordLink(
-      id,
-      req.user.id,
-      this.env.PUBLIC_BASE_URL,
-    );
-    return { redirectUrl };
-  }
-
-  @Get(':id/link/callback')
-  @Redirect()
-  async linkCallback(
-    @Param('id') id: string,
-    @Query('code') code: string,
-    @Query('state') state: string,
-    @Res({ passthrough: true }) _res: Response,
-  ) {
-    await this.integrations.completeDiscordLink(id, code, state, this.env.PUBLIC_BASE_URL);
-    return { url: `${this.env.PUBLIC_BASE_URL}/settings/integrations?linked=1`, statusCode: 302 };
-  }
+  // Discord account linking is user-driven and lives under /auth/discord/link
+  // (DiscordAuthController) — one OAuth client + redirect URI for login/register/link.
 
   // Role↔group mappings
   @Get(':id/mappings')
@@ -158,13 +145,28 @@ export class IntegrationsController {
     await this.integrations.deleteMapping(id, mappingId, req.user.id);
   }
 
+  // Clear a broken mapping's flag and re-run sync (admin recovery, no dev needed).
+  @Post(':id/mappings/:mappingId/retry')
+  @HttpCode(200)
+  @Authorize(ACTIONS.integrationUpdate.action, orgResource)
+  async retryMapping(
+    @Param('id') id: string,
+    @Param('mappingId') mappingId: string,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    const mapping = await this.integrations.retryMapping(id, mappingId, req.user.id);
+    await this.sync.enqueue(id);
+    return mapping;
+  }
+
   // Sync trigger
   @Post(':id/sync')
   @HttpCode(202)
   @Authorize(ACTIONS.integrationUpdate.action, orgResource)
   async triggerSync(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
-    await this.integrations.loadActive(id);
+    await this.integrations.requestManualSync(id, req.user.id);
     await this.sync.enqueue(id);
     return { queued: true };
   }

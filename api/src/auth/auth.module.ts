@@ -5,6 +5,7 @@ import { PasswordService } from './password';
 import { SessionService } from './session.service';
 import { SessionGuard } from './session.guard';
 import { VerificationService } from './verification.service';
+import { DiscordOAuthService } from './discord-oauth.service';
 
 @Module({
   controllers: [AuthController],
@@ -14,6 +15,7 @@ import { VerificationService } from './verification.service';
     SessionService,
     SessionGuard,
     VerificationService,
+    DiscordOAuthService,
   ],
   exports: [
     AuthService,
@@ -21,6 +23,7 @@ import { VerificationService } from './verification.service';
     SessionService,
     SessionGuard,
     VerificationService,
+    DiscordOAuthService,
   ],
 })
 export class AuthModule {}

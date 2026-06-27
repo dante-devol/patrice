@@ -29,6 +29,8 @@ export const NOTIFICATION_TYPES = [
   'invitation.redeemed',
   'retired_block',
   'last_admin_refused',
+  // Admin alert: an outbound Discord role push was refused (e.g. bot permissions).
+  'integration.push_failed',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

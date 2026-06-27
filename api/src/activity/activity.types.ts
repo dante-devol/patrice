@@ -43,7 +43,7 @@ export const activityPayloadSchemas = {
     .object({
       userId: uuid,
       invitationId: uuid,
-      identityProvider: z.enum(['password', 'google']),
+      identityProvider: z.enum(['password', 'google', 'discord']),
     })
     .strict(),
 
@@ -177,16 +177,54 @@ export const activityPayloadSchemas = {
   'integration.updated': z.object({ connectionId: uuid }).strict(),
   'integration.retired': z.object({ connectionId: uuid }).strict(),
   'integration.revived': z.object({ connectionId: uuid }).strict(),
+  'integration.token_rotated': z.object({ connectionId: uuid }).strict(),
   'integration.synced': z
     .object({ connectionId: uuid, grantedCount: z.number().int(), revokedCount: z.number().int() })
     .strict(),
   'integration.broken': z.object({ connectionId: uuid, externalGroupId: z.string() }).strict(),
+  // Outbound push to Discord was refused (reason is a code; the UI humanizes it).
+  'integration.push_failed': z
+    .object({
+      connectionId: uuid,
+      roleId: uuid.nullable(),
+      externalGroupId: z.string(),
+      reason: z.enum(['permission', 'not_found', 'other']),
+    })
+    .strict(),
+  // Gateway socket + reconcile lifecycle (admin visibility — no log-reading needed).
+  'integration.gateway_connected': z.object({ connectionId: uuid }).strict(),
+  'integration.gateway_disconnected': z.object({ connectionId: uuid }).strict(),
+  'integration.gateway_degraded': z.object({ connectionId: uuid }).strict(),
+  // reason: why a reconcile was scheduled (doorbell | floor | manual | link | role_change).
+  'integration.reconcile_scheduled': z
+    .object({ connectionId: uuid, reason: z.string() })
+    .strict(),
+  'integration.sync_started': z.object({ connectionId: uuid }).strict(),
+  'integration.token_invalid': z.object({ connectionId: uuid }).strict(),
+  // A broken mapping was cleared by an admin to retry it.
+  'integration.mapping_retried': z
+    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+    .strict(),
   'integration.removed': z
     .object({ connectionId: uuid, userId: uuid, roleId: uuid })
+    .strict(),
+  // Outbound (Patrice → Discord) per-user role pushes — one row per (user, role).
+  'integration.external_role_added': z
+    .object({ connectionId: uuid, userId: uuid, roleId: uuid, externalGroupId: z.string() })
+    .strict(),
+  'integration.external_role_removed': z
+    .object({ connectionId: uuid, userId: uuid, roleId: uuid, externalGroupId: z.string() })
     .strict(),
   'external_identity.linked': z
     .object({ connectionId: uuid, userId: uuid, externalIdentityId: uuid })
     .strict(),
+  'external_identity.unlinked': z
+    .object({ connectionId: uuid, userId: uuid, externalIdentityId: uuid })
+    .strict(),
+  // The Discord *sign-in method* (user_identity[discord]) was added/removed — an
+  // auth-security event, distinct from the per-connection integration link above.
+  'auth.discord_linked': z.object({ userId: uuid }).strict(),
+  'auth.discord_unlinked': z.object({ userId: uuid }).strict(),
   'external_group_mapping.created': z
     .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
     .strict(),

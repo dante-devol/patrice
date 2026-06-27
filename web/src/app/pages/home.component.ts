@@ -31,7 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
 
       <!-- Identity + ledger card -->
       <div class="rounded-lg border border-line bg-paper shadow-card p-5 mb-6 flex items-center gap-5 flex-wrap">
-        <user-avatar [name]="name()" [seed]="userId()" [size]="52" />
+        <user-avatar [name]="name()" [seed]="userId()" [size]="52" [imageUrl]="auth.user()?.avatarUrl ?? null" />
         <div class="min-w-0 flex-1">
           <div class="font-serif text-[22px] font-semibold leading-tight">{{ name() }}</div>
           <div class="font-mono text-[12px] text-ink-soft mt-0.5">{{ email() }}</div>

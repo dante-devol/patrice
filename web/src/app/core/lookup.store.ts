@@ -26,6 +26,7 @@ export class LookupStore {
   private readonly divisionNames = signal<Map<string, string>>(new Map());
   private readonly teamNames = signal<Map<string, string>>(new Map());
   private readonly userNames = signal<Map<string, string>>(new Map());
+  private readonly userAvatars = signal<Map<string, string | null>>(new Map());
   private loading: Promise<void> | null = null;
 
   /** Load once and cache for the session (cheap name resolution on every page). */
@@ -57,6 +58,7 @@ export class LookupStore {
     this.divisionNames.set(new Map(divs.map((d) => [d.id, d.name])));
     this.teamNames.set(new Map(teams.map((t) => [t.id, t.name])));
     this.userNames.set(new Map(users.map((u) => [u.id, u.displayName])));
+    this.userAvatars.set(new Map(users.map((u) => [u.id, u.avatarUrl])));
   }
 
   divisionName(id: string): string {
@@ -69,6 +71,16 @@ export class LookupStore {
   userName(id: string | null): string {
     if (!id) return 'System';
     return this.userNames().get(id) ?? short(id);
+  }
+
+  /**
+   * Discord avatar URL for a user, or null (→ initials fallback). Sourced from the
+   * admin-gated user list like {@link userName}, so for non-admins it degrades to
+   * the initials avatar — Permission Reflection, never enforcement (#52).
+   */
+  userAvatar(id: string | null): string | null {
+    if (!id) return null;
+    return this.userAvatars().get(id) ?? null;
   }
 
   /** Resolved division color: stored hex overrides the computed name-hash fallback. */

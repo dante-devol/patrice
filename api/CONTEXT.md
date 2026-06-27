@@ -69,8 +69,12 @@ The ephemeral CSPRNG passcode for the system invitation. Lives only for the proc
 _Avoid_: Setup Token, Admin Key
 
 **Verified Identity**:
-A `user_identity` row with `verified_at IS NOT NULL`. Google identities start verified; password identities verify via the email-token flow. Bootstrap auto-verifies regardless of the org's verification policy.
+A `user_identity` row with `verified_at IS NOT NULL`. Google/Discord (OAuth) identities start verified; password identities verify via the email-token flow. Bootstrap auto-verifies regardless of the org's verification policy.
 _Avoid_: Confirmed Email, Validated Account
+
+**Discord Auth Identity**:
+A `user_identity` row with `provider='discord'`, `provider_subject=<discord snowflake>` — the connection-independent **sign-in** credential, minted from the app-level OAuth client (`DISCORD_CLIENT_ID/SECRET`). It is the auth path for "log in with Discord" and is **distinct** from the Discord Integration Link (`external_identity`), which is per-connection and feeds role sync only (ADR 0005). One OAuth consent may create both, but they are separate rows with different drivers.
+_Avoid_: Discord link (that names the integration link), Discord account
 
 ### Entity lifecycle
 
@@ -126,9 +130,59 @@ The cohort resolved **at event time** and written as one `notification` row per 
 _Avoid_: Recipient List, Subscriber Set
 
 **PubSubPort**:
-The fan-out seam (`publish(userId, ev)` / `subscribe(userId, cb)`). v1 binds the in-process adapter (single instance); the post-v1 multi-instance path is a Postgres `LISTEN/NOTIFY` adapter behind the same port. Carries a content-free **sync** ping only — durability never rides the stream.
+The fan-out seam (`publish(userId, ev)` / `subscribe(userId, cb)`). v1 binds the in-process adapter (single instance); the post-v1 multi-instance path is a Postgres `LISTEN/NOTIFY` adapter behind the same port. Carries a content-free **sync** ping only — durability never rides the stream. The Process Role split does **not** force the `LISTEN/NOTIFY` adapter on its own — every publisher and the SSE subscriber live in the `api` role; it is forced only when a `worker`-role path first publishes (guarded by a pre-split assertion).
 _Avoid_: Event Bus, Broker
+
+**Process Role**:
+The `PROCESS_ROLE` toggle (resolved into an injected `ProcessRole` provider) selecting a process's job from one image: `api` (HTTP only, N replicas, freely restartable) or `worker` (no HTTP — pg-boss consumers + cron + GC + the Gateway socket; holds the singletons and the only copy of the cipher key). Dev runs one combined process; prod splits. The Gateway socket is the one strict single-instance guard; multi-`worker` leader election is the deferred HA seam.
+_Avoid_: Process Type, Mode, Web/Worker Dyno
 
 **Claim Eligibility AND-Composition**:
 The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: if either is true the claimant must hold the corresponding inherent role. Evaluated in Cedar via the `task:assign @ own_as_claimant` template; reads `principal.memberDivisions` and `principal.memberTeams`.
 _Avoid_: Membership Check, Eligibility Rule
+
+### Integrations & external sync
+
+**Discord Integration Link**:
+An `external_identity` row binding a Patrice user to their Discord account **within one connection** — the unit role sync resolves per user. User-driven to opt in; carries `external_avatar_hash` (#52). Distinct from the [Discord Auth Identity] (login) — retiring a connection drops the link and its role sync, but never the user's ability to sign in (ADR 0005).
+_Avoid_: Discord auth identity (that's the sign-in credential), Account link
+
+**Edge**:
+One `(connection, external user, mapped group/role)` membership fact — the unit the reconciler converges. Binary: the user either holds the mapped role or doesn't, on each side.
+_Avoid_: Membership, Assignment, Link (Link is the user↔account identity, not the role fact)
+
+**Sync Baseline**:
+The last-converged state of an Edge, persisted per `(connection, external user, external group)`. The anchor for Divergence Attribution; **every write updates it, including the bot's own outbound pushes**, so the writer never re-reacts to itself.
+_Avoid_: Watermark (implies a monotonic stream offset — this is a state snapshot), Shadow State, `last_synced_state` (the column name, not the concept)
+
+**Divergence Attribution**:
+The rule that settles ~all reconciliation: for a binary Edge against a trustworthy Sync Baseline, the two sides can only disagree if **exactly one** diverged from the baseline — that side is the unambiguous origin, and its state propagates. No tiebreaker (time or precedence) is consulted in the normal case. **Native-grant carve-out:** when the diverging side is Discord *removing* a role that Patrice holds **natively** (`source=patrice`), the attribution can't be honored — sync never revokes an admin-authored grant — so Patrice is authoritative for that Edge and the role is **re-asserted outbound** instead of stalling. (Integration-sourced roles still propagate the Discord-side removal as a Patrice revoke.) This is what makes bidirectional ⊇ outbound for native roles.
+_Avoid_: Conflict Resolution (that's only the cold-baseline path), LWW (we explicitly do not time-order the common case)
+
+**Cold-Baseline Conflict**:
+The only case a tiebreaker is needed — the Sync Baseline can't attribute (first sync, lost/never-converged baseline). Resolved by **Discord audit-log time** when the entry is fetchable, else by **Source Precedence**. A Gateway/REST membership fetch carries no per-Edge timestamp, so audit-log is the sole authoritative Discord-side change-time.
+_Avoid_: Race, Flap
+
+**Source Precedence**:
+The configured fallback winner for a Cold-Baseline Conflict when no audit-log time is available — a per-mapping `conflict_winner` (`patrice | external`). Deterministic, not time-based.
+_Avoid_: Priority, Authority (Authority is the broader source-of-truth posture)
+
+**Doorbell**:
+The Gateway listener's role — on a relevant Discord event it only `enqueueSoon`s a reconcile; it never reads or writes Edge state. One writer (the reconciler), one correctness path. **Scope:** a per-member event (`GUILD_MEMBER_*`) enqueues a **targeted single-user reconcile** (`syncUser` — fetches just that member, reconciles only their edges); a guild-level role event (`GUILD_ROLE_*`) names no user and enqueues a connection-wide sweep. Either way it's fast-but-best-effort: a missed event silently degrades to the Reconcile Floor, so it is health-monitored, never trusted as a guarantee. The targeted path skips broken-mapping detection (which needs the whole-guild view) — that stays with the full sweep. Revocation latency on this path = debounce (~5s) + reconcile duration, an explicit monitored SLO — not the hard guarantee.
+_Avoid_: Listener (too generic), Webhook (it's a Gateway socket, not an HTTP callback), Trigger
+
+**Reconcile Floor**:
+The guaranteed max-staleness bound enforced independently of the Doorbell, **adaptive to Gateway health**: **6h** when the socket is healthy, tightened to **30min** while degraded (socket down). A single ~30-min supervisory tick enforces whichever bound applies (healthy: reconcile only past 6h; degraded: every tick) and, when degraded, also re-attempts Gateway restoration (debounced) — layered *over* fast second-scale socket backoff, which handles transient drops. Replaces the former daily 02:00 sweep. Surfaced to admins as `next_reconcile_at` = `last_sync_at` + the active floor.
+_Avoid_: Cron Sweep, Daily Sync, Backstop Poll
+
+**Gateway State**:
+The persisted, admin-visible projection of the Doorbell socket's health — `gateway_state` on the connection (`down` / `connecting` / `connected` / `degraded`), written by the worker on each transition and read by the api role. The in-memory `session.healthy` drives the live socket; this column is its durable mirror so admins (and the api role) see Gateway health without reading worker logs. Transitions also emit `integration.gateway_*` activity. `degraded` = socket down past backoff (the Reconcile Floor has tightened).
+_Avoid_: Socket Status, Health Flag (that's the in-memory `healthy` bool)
+
+**Native-Authority Carve-Out**:
+The rule that security-critical roles (Org-Admin / governance) stay Patrice-native and admin-managed — never mapped through an integration — so their revocation is a synchronous Patrice write, never gated on sync latency or a live Gateway. This, not the Doorbell SLO, is the actual revocation guarantee; it caps the blast radius of any missed or slow integration event to non-critical membership.
+_Avoid_: Critical Role Exclusion, Admin Role Lock
+
+**SecretCipherPort**:
+The seam for custodying a per-connection provider secret (the Discord bot token, the one long-lived secret Patrice must hold to push outbound). `credentials_ref` holds a **cipher-tagged handle** the port resolves: `aead:<ciphertext>` inline (self-host default, key in env), `vault:<path>` / `kms:<keyid>:<wrapped>` for cloud. Decrypted **only in the worker role**, which alone holds the key; never returned by any read endpoint. App-level secrets (`DISCORD_CLIENT_SECRET`, peppers) stay env-only and are out of scope — this narrows §2.8's "custodies nothing" to the inbound/OAuth paths.
+_Avoid_: KeyVault, Secret Store (those name one adapter, not the seam), TokenCrypto

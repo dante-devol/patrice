@@ -14,3 +14,6 @@ process.env.TRUST_PROXY = 'false';
 // Disable pg-boss in tests — the queue is exercised separately; Slice 1 acceptance
 // does not depend on email delivery, and skipping it avoids slow worker startup.
 process.env.DISABLE_QUEUE = 'true';
+// Throwaway AEAD key so the bot-token cipher is exercised (encrypt-on-connect).
+process.env.INTEGRATION_TOKEN_KEY ||=
+  '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';

@@ -38,8 +38,14 @@ import { avatarColor, initials } from './pages/tasks/task-presentation';
         <div class="flex items-center gap-3.5 text-[13px] text-ink-soft">
           @if (auth.isAuthenticated()) {
             <app-notification-bell />
-            <span class="hidden sm:inline font-medium text-ink">{{ name() }}</span>
-            <span class="avatar w-7 h-7 text-[11px]" [style.background]="avatarBg()">{{ avatarLabel() }}</span>
+            <a routerLink="/account" routerLinkActive="text-ink" class="hidden sm:inline font-medium text-ink-soft hover:text-ink">{{ name() }}</a>
+            <a routerLink="/account" title="Account" class="avatar w-7 h-7 text-[11px] overflow-hidden" [style.background]="avatarUrl() ? 'transparent' : avatarBg()">
+              @if (avatarUrl()) {
+                <img [src]="avatarUrl()" alt="avatar" class="w-7 h-7 rounded-full object-cover" />
+              } @else {
+                {{ avatarLabel() }}
+              }
+            </a>
             <button class="font-mono text-[12px] text-ink-soft hover:text-ink" (click)="logout()">log out</button>
           } @else {
             <a routerLink="/login" class="font-mono text-[12.5px] text-ink-soft hover:text-ink">log in</a>
@@ -62,6 +68,7 @@ export class AppComponent {
   readonly name = computed(() => this.auth.user()?.displayName ?? '');
   readonly avatarLabel = computed(() => initials(this.name() || '?'));
   readonly avatarBg = computed(() => avatarColor(this.auth.user()?.id ?? this.name()));
+  readonly avatarUrl = computed(() => this.auth.user()?.avatarUrl ?? null);
 
   async logout(): Promise<void> {
     await this.auth.logout();

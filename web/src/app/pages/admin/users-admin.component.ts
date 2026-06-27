@@ -22,7 +22,7 @@ import { avatarColor, initials } from '../tasks/task-presentation';
             <tr [class.row--retired]="u.lifecycleState === 'retired'" [class.row--deactivated]="u.lifecycleState === 'deactivated'">
               <td>
                 <div class="row" style="gap:10px;flex-wrap:nowrap;justify-content:flex-start">
-                  <user-avatar [name]="u.displayName" [seed]="u.id" [size]="28" />
+                  <user-avatar [name]="u.displayName" [seed]="u.id" [size]="28" [imageUrl]="u.avatarUrl" />
                   <div>{{ u.displayName }}<br /><span class="muted">{{ u.email }}</span></div>
                 </div>
               </td>

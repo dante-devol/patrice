@@ -2,60 +2,63 @@
   "version": "2.0.0",
   "tasks": [
     // ─────────────────────────────────────────────────────────────────────────
-    // Path A — local dev (no Docker). Uses your local Postgres 18 + api/.env.
+    // Docker stack (primary dev environment).
+    // Add DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, KMS_KEY_ID, AWS_REGION,
+    // INTEGRATION_TOKEN_KEY to a .env file in the repo root before starting.
     // ─────────────────────────────────────────────────────────────────────────
     {
-      "label": "Dev: Start API + Web",
-      "detail": "Path A — launch both dev servers in their own terminals.",
-      "dependsOn": ["API: Start (dev)", "Web: Start (dev)"],
-      "dependsOrder": "parallel",
-      "group": "build",
-      "problemMatcher": []
-    },
-    {
-      "label": "API: Start (dev)",
-      "detail": "nest start --watch. Frees port 3000 first, then prints the BOOTSTRAP KEY.",
+      "label": "Docker: Up (full stack)",
+      "detail": "Builds and starts db, mailpit, vault, vault-init, api, worker, web. Web on :8080, API on :3000, Mailpit on :8025, Vault on :8200.",
       "type": "shell",
-      "command": "npm run start:dev",
-      "options": { "cwd": "${workspaceFolder}/api" },
+      "command": "docker compose up --build",
+      "options": { "cwd": "${workspaceFolder}" },
       "isBackground": true,
-      "dependsOn": ["Free port 3000"],
-      "presentation": { "panel": "dedicated", "group": "patrice-dev" },
+      "presentation": { "panel": "dedicated", "clear": true },
       "problemMatcher": []
     },
     {
-      "label": "Free port 3000",
-      "detail": "Kill any leftover process holding the API port (fixes EADDRINUSE).",
+      "label": "Docker: Down",
+      "detail": "Stop the stack (keeps the DB volume).",
       "type": "shell",
-      "command": "npx --yes kill-port 3000",
-      "presentation": { "panel": "shared", "reveal": "silent", "close": true },
-      "problemMatcher": []
-    },
-    {
-      "label": "Free ports (3000 + 4200)",
-      "detail": "Kill leftover API (3000) and web (4200) dev servers.",
-      "type": "shell",
-      "command": "npx --yes kill-port 3000 4200",
+      "command": "docker compose down",
+      "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
     },
     {
-      "label": "Web: Start (dev)",
-      "detail": "ng serve on http://localhost:4200 (proxies API calls to :3000).",
+      "label": "Docker: Down + wipe volume",
+      "detail": "Stop the stack and delete the DB volume (next up gets a fresh bootstrap key).",
       "type": "shell",
-      "command": "npm start",
-      "options": { "cwd": "${workspaceFolder}/web" },
-      "isBackground": true,
-      "presentation": { "panel": "dedicated", "group": "patrice-dev" },
+      "command": "docker compose down -v",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Logs — worker",
+      "detail": "Stream logs from the worker container (Gateway sessions, sync, cron).",
+      "type": "shell",
+      "command": "docker compose logs -f worker",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Logs — api",
+      "detail": "Stream logs from the api container.",
+      "type": "shell",
+      "command": "docker compose logs -f api",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "dedicated", "clear": true },
       "problemMatcher": []
     },
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Database helpers (local, no Docker).
+    // Database helpers (run against local Postgres for e2e tests).
     // ─────────────────────────────────────────────────────────────────────────
     {
       "label": "DB: Migrate (deploy)",
-      "detail": "Apply pending migrations to the patrice DB (from api/.env).",
+      "detail": "Apply pending migrations to the patrice DB.",
       "type": "shell",
       "command": "npx prisma migrate deploy",
       "options": { "cwd": "${workspaceFolder}/api" },
@@ -73,55 +76,54 @@
     },
 
     // ─────────────────────────────────────────────────────────────────────────
-    // API-only checks.
+    // API checks (run locally against the test DB).
     // ─────────────────────────────────────────────────────────────────────────
     {
-      "label": "API: e2e tests (acceptance suite)",
-      "detail": "Runs the Slice 1 acceptance suite against the patrice_test DB.",
+      "label": "API: Unit tests",
+      "detail": "Run the Jest unit test suite.",
       "type": "shell",
-      "command": "npm run test:e2e",
+      "command": "npm test",
       "options": { "cwd": "${workspaceFolder}/api" },
       "group": { "kind": "test", "isDefault": true },
       "presentation": { "panel": "dedicated", "clear": true },
       "problemMatcher": []
     },
     {
-      "label": "API: Smoke check (health + bootstrap)",
-      "detail": "Curl /health and /bootstrap on a running API (:3000).",
+      "label": "API: e2e tests",
+      "detail": "Run the e2e acceptance suite against the patrice_test DB.",
       "type": "shell",
-      "command": "curl -s http://localhost:3000/health && echo \"\" && curl -s http://localhost:3000/bootstrap && echo \"\"",
+      "command": "npm run test:e2e",
+      "options": { "cwd": "${workspaceFolder}/api" },
+      "presentation": { "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "API: Smoke check (health + bootstrap)",
+      "detail": "Curl /health and /bootstrap on the running stack (:3000).",
+      "type": "shell",
+      "command": "curl -s http://localhost:3000/health && echo '' && curl -s http://localhost:3000/bootstrap && echo ''",
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
     },
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Path B — full stack via Docker (includes Mailpit for email capture).
+    // Slice H (#62) — SecretCipherPort smoke tests (run locally, not in Docker).
     // ─────────────────────────────────────────────────────────────────────────
     {
-      "label": "Docker: Up (build full stack)",
-      "detail": "Path B — db + mailpit + api + web. Web http://localhost:8080, Mailpit :8025.",
+      "label": "Integration: Smoke — KMS cipher round-trip",
+      "detail": "Encrypts and decrypts a test token via the KMS adapter. Requires KMS_KEY_ID + AWS_REGION in api/.env and .aws/credentials populated.",
       "type": "shell",
-      "command": "docker compose up --build",
-      "options": { "cwd": "${workspaceFolder}" },
-      "isBackground": true,
-      "presentation": { "panel": "dedicated", "clear": true },
-      "problemMatcher": []
-    },
-    {
-      "label": "Docker: Down",
-      "detail": "Stop and remove the Docker stack (keeps the DB volume).",
-      "type": "shell",
-      "command": "docker compose down",
-      "options": { "cwd": "${workspaceFolder}" },
+      "command": "node scripts/smoke-kms.js",
+      "options": { "cwd": "${workspaceFolder}/api" },
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
     },
     {
-      "label": "Docker: Down + wipe volume",
-      "detail": "Stop the stack and delete the DB volume (next up gets a fresh bootstrap key).",
+      "label": "Integration: Smoke — Vault cipher round-trip",
+      "detail": "Encrypts and decrypts a test token via the Vault adapter. Requires the Docker stack running (Vault on :8200) and VAULT_ADDR=http://127.0.0.1:8200 etc. in api/.env.",
       "type": "shell",
-      "command": "docker compose down -v",
-      "options": { "cwd": "${workspaceFolder}" },
+      "command": "node scripts/smoke-vault.js",
+      "options": { "cwd": "${workspaceFolder}/api" },
       "presentation": { "panel": "shared", "clear": true },
       "problemMatcher": []
     }

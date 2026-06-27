@@ -8,6 +8,11 @@ const boolFromString = z
   .enum(['true', 'false', '1', '0'])
   .transform((v) => v === 'true' || v === '1');
 
+// Docker Compose passes empty string for unset interpolated vars (${VAR:-}).
+// This preprocessor treats '' the same as absent so .optional() works correctly.
+const emptyAsUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema);
+
 export const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   PUBLIC_BASE_URL: z.string().url(),
@@ -39,13 +44,27 @@ export const envSchema = z.object({
   S3_FORCE_PATH_STYLE: boolFromString.default('false'),
   // Upload cap enforced at the attachment boundary (default 25 MiB).
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(26_214_400),
-  // Discord integration OAuth credentials (Slice 8). Optional — the integration
-  // feature is disabled if absent; the core auth path is never affected.
-  DISCORD_CLIENT_ID: z.string().optional(),
-  DISCORD_CLIENT_SECRET: z.string().optional(),
+  // NB: the Discord OAuth client id/secret are NOT startup config — they live in
+  // `organization.settings` (runtime config, admin-editable; the secret encrypted
+  // with a SESSION_SECRET-derived key). See ADR 0006. Any DISCORD_CLIENT_* env vars
+  // a deployment still sets are simply ignored.
   // Batching window: role-change events within this window collapse into one sync
-  // job per connection (pg-boss singletonKey deduplication). Default 30 s.
-  INTEGRATION_SYNC_DELAY_SECONDS: z.coerce.number().int().positive().default(30),
+  // job per connection (pg-boss singletonKey deduplication). Default 5 s (#61).
+  INTEGRATION_SYNC_DELAY_SECONDS: z.coerce.number().int().positive().default(5),
+  // AES-256-GCM key for the AEAD-env SecretCipherPort adapter (Slice C / #57).
+  // 32 raw bytes encoded as hex (64 chars). Worker-only — the api role never
+  // decrypts tokens. If absent the adapter is disabled (plaintext botToken fallback).
+  INTEGRATION_TOKEN_KEY: emptyAsUndefined(z.string().regex(/^[0-9a-fA-F]{64}$/).optional()),
+  // Process topology split (Slice F / #60). `api` = HTTP only; `worker` = pg-boss
+  // consumers + cron + GC + Gateway. Dev/test leaves this unset (combined process).
+  PROCESS_ROLE: emptyAsUndefined(z.enum(['api', 'worker']).optional()),
+  // Vault transit adapter (Slice H / #62). Worker-only.
+  VAULT_ADDR: emptyAsUndefined(z.string().url().optional()),
+  VAULT_TOKEN: emptyAsUndefined(z.string().optional()),
+  VAULT_TRANSIT_KEY: emptyAsUndefined(z.string().optional()),
+  // KMS envelope adapter (Slice H / #62). Worker-only.
+  KMS_KEY_ID: emptyAsUndefined(z.string().optional()),
+  AWS_REGION: emptyAsUndefined(z.string().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;

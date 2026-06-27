@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ADMIN_SEED_ACTIONS } from '../access/actions';
 import { generateInviteToken, generateOpaqueToken, hashToken } from '../common/tokens';
+import { PROCESS_ROLE, isApiRole, type ProcessRoleValue } from '../common/process-role';
 
 const ADMIN_ROLE_NAME = 'Admin';
 const ORG_NAME = 'Patrice';
@@ -42,9 +43,11 @@ export class BootstrapService implements OnApplicationBootstrap {
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly admin: AdministrabilityService,
+    @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    if (!isApiRole(this.processRole)) return;
     const org = await this.ensureSeed();
     await this.refreshBootstrap(org.id);
   }

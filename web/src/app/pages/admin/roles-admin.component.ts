@@ -1,18 +1,36 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-import { Division, Role, Team } from '../../core/api.types';
+import { Division, Role, SyncDirection, Team } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import {
   divisionColor as computeDivColor,
   teamColor as computeTeamColor,
 } from '../tasks/task-presentation';
 
+/** One role↔Discord-group mapping, flattened for display in the roles table. */
+interface RoleMapping {
+  connectionName: string;
+  externalGroupId: string;
+  syncDirection: SyncDirection;
+  isBroken: boolean;
+}
+
 /** Standalone-role list/editor (Slice 2.1). Inherent roles are read-only here. */
 @Component({
   selector: 'roles-admin',
   standalone: true,
   imports: [FormsModule],
+  styles: [`
+    .map-chip {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+      border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px;
+      font-family: monospace; color: var(--ink-soft, var(--muted));
+    }
+    .map-chip + .map-chip { margin-left: 4px; }
+    .map-chip.broken { border-color: var(--danger); color: var(--danger); }
+    .map-chip .dir { font-weight: 600; }
+  `],
   template: `
     <div class="panel">
       <h2>Roles</h2>
@@ -22,7 +40,7 @@ import {
       </div>
       @if (error()) { <p class="error">{{ error() }}</p> }
       <table>
-        <thead><tr><th>Name</th><th>Color</th><th>Kind</th><th>State</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Color</th><th>Kind</th><th>Integration</th><th>State</th><th></th></tr></thead>
         <tbody>
           @for (r of roles(); track r.id) {
             <tr [class.row--retired]="r.lifecycleState === 'retired'" [class.row--deactivated]="r.lifecycleState === 'deactivated'">
@@ -49,6 +67,22 @@ import {
                 }
               </td>
               <td><span [class]="kindBadge(r.kind)">{{ r.kind }}</span></td>
+              <td>
+                @if (roleMappings(r.id); as maps) {
+                  @if (maps.length === 0) {
+                    <span class="muted">—</span>
+                  } @else {
+                    @for (m of maps; track m.externalGroupId) {
+                      <span class="map-chip" [class.broken]="m.isBroken"
+                            [title]="mapTitle(m)">
+                        <span class="dir">{{ dirArrow(m.syncDirection) }}</span>
+                        {{ short(m.externalGroupId) }}
+                        @if (m.isBroken) { <span title="This mapping is broken — open Integrations to fix">⚠</span> }
+                      </span>
+                    }
+                  }
+                }
+              </td>
               <td><span [class]="lcStamp(r.lifecycleState)">{{ r.lifecycleState }}</span></td>
               <td>
                 @if (r.kind === 'standalone') {
@@ -62,7 +96,7 @@ import {
                 }
               </td>
             </tr>
-          } @empty { <tr><td colspan="5" class="muted">No roles.</td></tr> }
+          } @empty { <tr><td colspan="6" class="muted">No roles.</td></tr> }
         </tbody>
       </table>
     </div>
@@ -73,6 +107,7 @@ export class RolesAdminComponent {
   readonly roles = signal<Role[]>([]);
   readonly divisions = signal<Division[]>([]);
   readonly teams = signal<Team[]>([]);
+  readonly mappingsByRole = signal<Map<string, RoleMapping[]>>(new Map());
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   newName = '';
@@ -91,9 +126,63 @@ export class RolesAdminComponent {
       this.roles.set(roles);
       this.divisions.set(divisions);
       this.teams.set(teams);
+      void this.loadMappings();
     } catch (e) {
       this.error.set(errorMessage(e));
     }
+  }
+
+  /**
+   * Best-effort: index every active connection's role↔group mappings by Patrice role.
+   * Integration reads are separately gated, so a role-manager without that grant just
+   * sees no mapping column data (Permission Reflection — it degrades, never errors).
+   */
+  private async loadMappings(): Promise<void> {
+    try {
+      const conns = await this.api.listIntegrations(false);
+      const byRole = new Map<string, RoleMapping[]>();
+      for (const c of conns) {
+        const maps = await this.api.listMappings(c.id).catch(() => []);
+        for (const m of maps) {
+          const list = byRole.get(m.roleId) ?? [];
+          list.push({
+            connectionName: c.displayName,
+            externalGroupId: m.externalGroupId,
+            syncDirection: m.syncDirection,
+            isBroken: m.isBroken,
+          });
+          byRole.set(m.roleId, list);
+        }
+      }
+      this.mappingsByRole.set(byRole);
+    } catch {
+      // No integration read access (or none configured) — leave the column blank.
+    }
+  }
+
+  roleMappings(roleId: string): RoleMapping[] {
+    return this.mappingsByRole().get(roleId) ?? [];
+  }
+
+  /** Direction as a glanceable arrow: ← from Discord, → to Discord, ↔ two-way. */
+  dirArrow(dir: SyncDirection): string {
+    return dir === 'inbound' ? '←' : dir === 'outbound' ? '→' : '↔';
+  }
+
+  private dirWord(dir: SyncDirection): string {
+    return dir === 'inbound'
+      ? 'from Discord (inbound)'
+      : dir === 'outbound'
+        ? 'to Discord (outbound)'
+        : 'two-way (bidirectional)';
+  }
+
+  mapTitle(m: RoleMapping): string {
+    return `${m.connectionName} · Discord role ${m.externalGroupId} · syncs ${this.dirWord(m.syncDirection)}${m.isBroken ? ' · BROKEN — fix in Integrations' : ''}`;
+  }
+
+  short(id: string): string {
+    return id.length > 10 ? `${id.slice(0, 6)}…${id.slice(-2)}` : id;
   }
 
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }

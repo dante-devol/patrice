@@ -65,6 +65,22 @@ describe('Slice 8 — Integrations', () => {
       connectionId = res.body.id as string;
     });
 
+    it('encrypts the bot token at rest on connect (no plaintext in config)', async () => {
+      const res = await auth(http().post('/api/integrations')).send({
+        provider: 'discord',
+        externalWorkspaceId: '900900900900900900',
+        displayName: 'Encrypted Guild',
+        config: { botToken: 'Bot.SUPER.SECRET.encme' },
+      });
+      expect(res.status).toBe(201);
+      const row = await prisma.integrationConnection.findUniqueOrThrow({ where: { id: res.body.id } });
+      // Token moved out of config into an encrypted credentials_ref handle.
+      expect((row.config as Record<string, unknown>).botToken).toBeUndefined();
+      expect(row.credentialsRef).toMatch(/^aead:/);
+      expect(JSON.stringify(row.config)).not.toContain('encme');
+      await prisma.integrationConnection.delete({ where: { id: res.body.id } });
+    });
+
     it('rejects duplicate workspace connection', async () => {
       const res = await auth(http().post('/api/integrations')).send({
         provider: 'discord',
@@ -149,10 +165,12 @@ describe('Slice 8 — Integrations', () => {
       userId = uid;
     });
 
-    it('POST /integrations/:id/link returns 422 when DISCORD_CLIENT_ID absent', async () => {
-      const res = await auth(http().post(`/api/integrations/${connectionId}/link`));
-      expect(res.status).toBe(422);
-      expect(res.body.error.code).toBe('DISCORD_NOT_CONFIGURED');
+    it('GET /auth/discord/login redirects to an error when Discord is not configured', async () => {
+      // No DISCORD_CLIENT_ID in this app → the start route redirects (full-page nav),
+      // never a JSON 422 the user would never see.
+      const res = await http().get('/api/auth/discord/login').redirects(0);
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toContain('discord_not_configured');
     });
 
     it('stores an external_identity row directly (simulates callback)', async () => {
@@ -372,7 +390,6 @@ describe('Slice 8 — Integrations', () => {
 
   describe('8.4 — GC extension', () => {
     it('user scrub deletes external_identity rows', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const conn = await prisma.integrationConnection.findFirst({
         where: { lifecycleState: 'active' },
       });
@@ -527,6 +544,85 @@ describe('Slice 8 — Integrations', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // 8.5 — Secret redaction (issue #55)
+  // ---------------------------------------------------------------------------
+
+  describe('8.5 — secret redaction', () => {
+    let secretConnId: string;
+
+    beforeAll(async () => {
+      const res = await auth(http().post('/api/integrations')).send({
+        provider: 'discord',
+        externalWorkspaceId: 'secret-guild-111',
+        displayName: 'Secret Guild',
+        config: { botToken: 'Bot.secret.token.DO_NOT_LEAK' },
+        credentialsRef: 'aead:ciphertext-DO_NOT_LEAK',
+      });
+      secretConnId = res.body.id as string;
+    });
+
+    const noSecret = (body: unknown) => {
+      const json = JSON.stringify(body);
+      expect(json).not.toContain('DO_NOT_LEAK');
+      expect(json).not.toContain('botToken');
+      expect(json).not.toContain('credentialsRef');
+      expect(json).not.toContain('credentials_ref');
+    };
+
+    it('POST /integrations response omits config and credentialsRef', async () => {
+      // already created in beforeAll; check that response body itself was clean
+      const res = await auth(http().post('/api/integrations')).send({
+        provider: 'discord',
+        externalWorkspaceId: 'secret-guild-222',
+        displayName: 'Secret Guild 2',
+        config: { botToken: 'Bot.secret.2.DO_NOT_LEAK' },
+      });
+      expect(res.status).toBe(201);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+      await prisma.integrationConnection.delete({ where: { id: res.body.id as string } });
+    });
+
+    it('GET /integrations list omits config and credentialsRef', async () => {
+      const res = await auth(http().get('/api/integrations'));
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      for (const conn of res.body as unknown[]) {
+        expect(conn).not.toHaveProperty('config');
+        expect(conn).not.toHaveProperty('credentialsRef');
+      }
+    });
+
+    it('PATCH /integrations/:id omits config and credentialsRef', async () => {
+      const res = await auth(http().patch(`/api/integrations/${secretConnId}`)).send({
+        displayName: 'Secret Guild Renamed',
+      });
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+    });
+
+    it('POST /integrations/:id/retire omits config and credentialsRef', async () => {
+      const res = await auth(http().post(`/api/integrations/${secretConnId}/retire`));
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+    });
+
+    it('POST /integrations/:id/revive omits config and credentialsRef', async () => {
+      await auth(http().patch('/api/config')).send({ gracePeriodHours: 24 });
+      const res = await auth(http().post(`/api/integrations/${secretConnId}/revive`));
+      expect(res.status).toBe(200);
+      noSecret(res.body);
+      expect(res.body).not.toHaveProperty('config');
+      expect(res.body).not.toHaveProperty('credentialsRef');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // requireDiscordLink setting
   // ---------------------------------------------------------------------------
 
@@ -551,6 +647,127 @@ describe('Slice 8 — Integrations', () => {
       });
       expect(res.status).toBe(200);
       expect(res.body.requireDiscordLink).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 8.6 — Admin observability + safety surfaces
+  // ---------------------------------------------------------------------------
+
+  describe('8.6 — observability & safety', () => {
+    let connectionId: string;
+
+    beforeAll(async () => {
+      const conn = await prisma.integrationConnection.findFirst({
+        where: { lifecycleState: 'active' },
+      });
+      connectionId = conn!.id;
+    });
+
+    it('connection list carries gateway + sync observability fields', async () => {
+      const res = await auth(http().get('/api/integrations'));
+      expect(res.status).toBe(200);
+      const conn = (res.body as Array<Record<string, unknown>>).find((c) => c.id === connectionId);
+      expect(conn).toBeDefined();
+      expect(conn).toHaveProperty('gatewayState');
+      expect(conn).toHaveProperty('syncState');
+      expect(conn).toHaveProperty('lastSyncAt');
+      expect(conn).toHaveProperty('nextReconcileAt');
+      expect(conn).toHaveProperty('lastError');
+      // Still never leaks secrets.
+      expect(conn).not.toHaveProperty('config');
+      expect(conn).not.toHaveProperty('credentialsRef');
+    });
+
+    it('Native-Authority Carve-Out: cannot map a governance role', async () => {
+      const orgId = (await prisma.organization.findFirstOrThrow()).id;
+      const roleRes = await auth(http().post('/api/roles')).send({ name: 'Governance Role' });
+      const govRoleId = roleRes.body.id as string;
+      // Make it a governance role: a global permit grant on an effective-admin action.
+      await prisma.grant.create({
+        data: {
+          organizationId: orgId,
+          roleId: govRoleId,
+          action: 'role:create',
+          effect: 'permit',
+          scopeKind: 'global',
+        },
+      });
+      const res = await auth(
+        http().post(`/api/integrations/${connectionId}/mappings`),
+      ).send({
+        roleId: govRoleId,
+        externalGroupId: 'gov-snowflake-1',
+        syncDirection: 'inbound',
+      });
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe('GOVERNANCE_ROLE_NOT_MAPPABLE');
+    });
+
+    it('retry clears a broken mapping flag and re-queues sync', async () => {
+      const roleRes = await auth(http().post('/api/roles')).send({ name: 'Retry Role' });
+      const roleId = roleRes.body.id as string;
+      const mapRes = await auth(
+        http().post(`/api/integrations/${connectionId}/mappings`),
+      ).send({ roleId, externalGroupId: 'retry-snowflake-1', syncDirection: 'inbound' });
+      const mappingId = mapRes.body.id as string;
+
+      await prisma.externalGroupMapping.update({
+        where: { id: mappingId },
+        data: { isBroken: true },
+      });
+
+      const res = await auth(
+        http().post(`/api/integrations/${connectionId}/mappings/${mappingId}/retry`),
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.isBroken).toBe(false);
+      const row = await prisma.externalGroupMapping.findUnique({ where: { id: mappingId } });
+      expect(row?.isBroken).toBe(false);
+    });
+
+    it('re-pointing a mapping clears the broken flag', async () => {
+      const roleRes = await auth(http().post('/api/roles')).send({ name: 'Repoint Role' });
+      const roleId = roleRes.body.id as string;
+      const mapRes = await auth(
+        http().post(`/api/integrations/${connectionId}/mappings`),
+      ).send({ roleId, externalGroupId: 'old-snowflake', syncDirection: 'inbound' });
+      const mappingId = mapRes.body.id as string;
+      await prisma.externalGroupMapping.update({
+        where: { id: mappingId },
+        data: { isBroken: true },
+      });
+      const res = await auth(
+        http().patch(`/api/integrations/${connectionId}/mappings/${mappingId}`),
+      ).send({ externalGroupId: 'new-snowflake-99' });
+      expect(res.status).toBe(200);
+      expect(res.body.externalGroupId).toBe('new-snowflake-99');
+      expect(res.body.isBroken).toBe(false);
+    });
+
+    it('manual sync logs a reconcile_scheduled activity row', async () => {
+      await auth(http().post(`/api/integrations/${connectionId}/sync`));
+      const activity = await auth(
+        http().get('/api/activity?verbPrefix=integration.reconcile_scheduled'),
+      );
+      expect(activity.status).toBe(200);
+      expect(activity.body.items.length).toBeGreaterThan(0);
+      expect(activity.body.items[0].payload.reason).toBe('manual');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // /me identity projection (authMethods, avatar)
+  // ---------------------------------------------------------------------------
+
+  describe('/me identity projection', () => {
+    it('exposes authMethods + avatarUrl shape', async () => {
+      const res = await auth(http().get('/api/me'));
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.authMethods)).toBe(true);
+      expect(res.body.authMethods).toContain('password');
+      expect(res.body).toHaveProperty('avatarUrl');
+      expect(res.body).toHaveProperty('discordHandle');
     });
   });
 });

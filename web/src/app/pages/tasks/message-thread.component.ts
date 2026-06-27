@@ -136,7 +136,7 @@ import { HistoryEvent, HistoryReply, buildHistory, relativeTime, userOrderColor 
     <ng-template #commentCard let-m="m" let-small="small">
       <div class="rounded-lg border border-line bg-paper shadow-card">
         <div class="flex items-center gap-2 px-3.5 border-b border-line" [class.py-2]="!small" [class.py-1.5]="small">
-          <user-avatar [name]="lookup.userName(m.senderUserId)" [seed]="m.senderUserId ?? ''" [size]="small ? 18 : 20" />
+          <user-avatar [name]="lookup.userName(m.senderUserId)" [seed]="m.senderUserId ?? ''" [size]="small ? 18 : 20" [imageUrl]="lookup.userAvatar(m.senderUserId)" />
           <span class="font-medium" [class.text-[13px]]="!small" [class.text-[12.5px]]="small">{{ lookup.userName(m.senderUserId) }}</span>
           <span class="font-mono text-[11.5px] text-ink-soft">{{ roleLabel(m.senderUserId) }}· {{ rel(m.createdAt) }}</span>
           @if (m.editedAt) { <span class="font-mono text-[11px] text-ink-soft">(edited)</span> }

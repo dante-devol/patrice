@@ -8,6 +8,7 @@ import { ActivityService } from '../activity/activity.service';
 import { ConflictError, DeniedError, NotFoundError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
+import { discordAvatarUrl } from '../common/discord-avatar';
 import { UpdateUserDto } from './users.dto';
 import { SyncService } from '../integrations/sync/sync.service';
 
@@ -17,6 +18,8 @@ export interface UserView {
   displayName: string;
   lifecycleState: LifecycleState;
   roleIds: string[];
+  /** Discord avatar CDN URL when linked + a hash is known (#52). */
+  avatarUrl: string | null;
 }
 
 /**
@@ -52,6 +55,12 @@ export class UsersService {
           displayName: true,
           lifecycleState: true,
           userRoles: { select: { roleId: true } },
+          externalIdentities: {
+            where: { externalAvatarHash: { not: null }, connection: { lifecycleState: 'active' } },
+            orderBy: { lastSyncedAt: { sort: 'desc', nulls: 'last' } },
+            take: 1,
+            select: { externalUserId: true, externalAvatarHash: true },
+          },
         },
       }),
     ]);
@@ -68,6 +77,10 @@ export class UsersService {
           : u.displayName,
       lifecycleState: u.lifecycleState,
       roleIds: u.userRoles.map((r) => r.roleId),
+      avatarUrl: discordAvatarUrl(
+        u.externalIdentities[0]?.externalUserId,
+        u.externalIdentities[0]?.externalAvatarHash,
+      ),
     }));
   }
 
@@ -326,7 +339,9 @@ export class UsersService {
       });
       await this.access.bumpConfigVersion(organizationId, tx);
     });
-    void this.sync?.notifyRoleChange(roleId);
+    // Targeted, debounced reconcile of just this user — pulses the grant to Discord
+    // at the Doorbell's ~5s pace rather than waiting for the Reconcile Floor.
+    void this.sync?.notifyUserRoleChange(user.id, roleId);
   }
 
   async revokeRole(
@@ -371,6 +386,8 @@ export class UsersService {
         await this.access.bumpConfigVersion(organizationId, tx);
       },
     );
-    void this.sync?.notifyRoleChange(roleId);
+    // Targeted, debounced reconcile of just this user — pushes the removal to Discord
+    // promptly (the per-user path, like the Doorbell), not at the next floor sweep.
+    void this.sync?.notifyUserRoleChange(user.id, roleId);
   }
 }

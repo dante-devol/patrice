@@ -26,11 +26,13 @@ enum LifecycleState {
 enum AuthProvider {
   password
   google
+  discord
 }
 
 enum AuthMethod {
   password
   google
+  discord
 }
 
 enum RoleKind {
@@ -128,6 +130,25 @@ enum SyncDirection {
   inbound
   outbound
   bidirectional
+}
+
+/// Live Discord Gateway socket state for a connection, persisted by the worker so
+/// the api role (and admins) can see it. `degraded` = socket down past backoff, the
+/// Reconcile Floor has tightened to 30min (api/CONTEXT.md "Reconcile Floor").
+enum GatewayState {
+  down
+  connecting
+  connected
+  degraded
+}
+
+/// Where a connection sits in its sync cycle, for admin visibility. `queued` = a
+/// pg-boss job is scheduled (debounce window or manual); `running` = the adapter is
+/// mid-reconcile. Distinct from IntegrationStatus, which is the health verdict.
+enum SyncState {
+  idle
+  queued
+  running
 }
 
 model Organization {
@@ -671,12 +692,25 @@ model IntegrationConnection {
   status              IntegrationStatus   @default(active)
   lifecycleState      LifecycleState      @default(active) @map("lifecycle_state")
   retiredAt           DateTime?           @map("retired_at") @db.Timestamptz(6)
+  // Observability (admin visibility). Gateway fields are written by the worker's
+  // IntegrationGatewayService; sync fields by SyncService/DiscordAdapter. The api
+  // role only reads these. `lastError` is a short operator-facing reason, never PII.
+  gatewayState           GatewayState @default(down) @map("gateway_state")
+  gatewayLastConnectedAt DateTime?    @map("gateway_last_connected_at") @db.Timestamptz(6)
+  gatewayLastEventAt     DateTime?    @map("gateway_last_event_at") @db.Timestamptz(6)
+  syncState              SyncState    @default(idle) @map("sync_state")
+  lastSyncStartedAt      DateTime?    @map("last_sync_started_at") @db.Timestamptz(6)
+  lastSyncAt             DateTime?    @map("last_sync_at") @db.Timestamptz(6)
+  lastSyncGranted        Int          @default(0) @map("last_sync_granted")
+  lastSyncRevoked        Int          @default(0) @map("last_sync_revoked")
+  lastError              String?      @map("last_error")
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   externalIds    ExternalIdentity[]
   groupMappings  ExternalGroupMapping[]
+  syncBaselines  SyncBaseline[]
 
   @@unique([organizationId, provider, externalWorkspaceId])
   @@index([organizationId])
@@ -692,6 +726,9 @@ model ExternalIdentity {
   connectionId   String    @map("connection_id") @db.Uuid
   externalUserId String    @map("external_user_id")
   externalHandle String?   @map("external_handle")
+  // Discord avatar hash from the OAuth /users/@me response (#52). Rendered via the
+  // CDN URL pattern; `a_`-prefixed hashes are animated (we serve the static .png).
+  externalAvatarHash String? @map("external_avatar_hash")
   linkedAt       DateTime  @default(now()) @map("linked_at") @db.Timestamptz(6)
   lastSyncedAt   DateTime? @map("last_synced_at") @db.Timestamptz(6)
 
@@ -707,20 +744,49 @@ model ExternalIdentity {
 /// Maps a Patrice role to an external group (e.g. Discord role) within a
 /// connection (Slice 8.3). `external_group_id` is a stable provider snowflake,
 /// surviving renames. `is_broken` is set when the external group is deleted.
+/// `conflict_winner` is used for cold-baseline conflict resolution (Slice E/#59).
 model ExternalGroupMapping {
-  id              String        @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  roleId          String        @map("role_id") @db.Uuid
-  connectionId    String        @map("connection_id") @db.Uuid
-  externalGroupId String        @map("external_group_id")
-  syncDirection   SyncDirection @map("sync_direction")
-  isBroken        Boolean       @default(false) @map("is_broken")
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  roleId          String              @map("role_id") @db.Uuid
+  connectionId    String              @map("connection_id") @db.Uuid
+  externalGroupId String              @map("external_group_id")
+  syncDirection   SyncDirection       @map("sync_direction")
+  isBroken        Boolean             @default(false) @map("is_broken")
+  conflictWinner  ConflictWinner      @default(patrice) @map("conflict_winner")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  role       Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  role          Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  connection    IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  syncBaselines SyncBaseline[]
 
   @@unique([roleId, connectionId, externalGroupId])
   @@index([connectionId])
   @@map("external_group_mapping")
+}
+
+/// Sync baseline for bidirectional convergence (Slice E/#59).
+/// A row = "this (external_user, external_group) edge was present at last convergence."
+/// Absence = was absent. Every write (both sides) updates the baseline.
+/// GC'd on: user scrub, mapping delete, connection GC (but retained through grace period).
+model SyncBaseline {
+  id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  connectionId    String   @map("connection_id") @db.Uuid
+  mappingId       String   @map("mapping_id") @db.Uuid
+  externalUserId  String   @map("external_user_id")
+  externalGroupId String   @map("external_group_id")
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  mapping    ExternalGroupMapping  @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, mappingId, externalUserId, externalGroupId])
+  @@index([connectionId])
+  @@index([mappingId])
+  @@map("sync_baseline")
+}
+
+enum ConflictWinner {
+  patrice
+  external
 }

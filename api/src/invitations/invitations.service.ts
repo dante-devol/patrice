@@ -51,6 +51,11 @@ export interface AcceptResult {
   isBootstrap: boolean;
 }
 
+/** How the redeeming user's first `user_identity` (sign-in method) is created. */
+type IdentitySpec =
+  | { provider: typeof AuthProvider.password; passwordHash: string }
+  | { provider: typeof AuthProvider.discord; providerSubject: string };
+
 /**
  * Invitations are the **only** account-creation path (no open sign-up). A bootstrap
  * invitation is the same model with `created_by = NULL` + a passcode; redeeming it
@@ -208,8 +213,8 @@ export class InvitationsService {
   }
 
   /**
-   * Redeem an invitation: atomic FCFS consumption, then user/identity creation,
-   * role grants, and (for bootstrap) auto-verification + config bump.
+   * Redeem an invitation with email + password (the email/password registration
+   * path). Delegates to {@link redeem} with a password identity.
    */
   async accept(args: {
     token: string;
@@ -217,6 +222,57 @@ export class InvitationsService {
     email: string;
     password: string;
     displayName: string;
+  }): Promise<AcceptResult> {
+    const passwordHash = await this.passwords.hash(args.password);
+    return this.redeem({
+      token: args.token,
+      passcode: args.passcode,
+      email: args.email,
+      displayName: args.displayName,
+      identity: { provider: AuthProvider.password, passwordHash },
+    });
+  }
+
+  /**
+   * Redeem an invitation with Discord as the sign-in method ("Continue with
+   * Discord" on the accept page). The resulting `user_identity[discord]` is the
+   * auth record; the integration link (`external_identity`) is a *separate*,
+   * user-driven concern handled after login (Phase 2). Consumption still happens
+   * on the OAuth callback, which requires a valid one-time Discord `code` — so the
+   * POST-only redemption protection against link-scanners (§2.13) is preserved
+   * even though the callback is a GET (a scanner can't forge the code).
+   *
+   * `email` may be null (the user declined the `email` scope); it is captured only
+   * as a contact attribute, never the join key.
+   */
+  async acceptWithDiscord(args: {
+    token: string;
+    passcode?: string;
+    email: string | null;
+    displayName: string;
+    discordUserId: string;
+  }): Promise<AcceptResult> {
+    return this.redeem({
+      token: args.token,
+      passcode: args.passcode,
+      email: args.email,
+      displayName: args.displayName,
+      identity: { provider: AuthProvider.discord, providerSubject: args.discordUserId },
+    });
+  }
+
+  /**
+   * The shared redemption core: atomic FCFS consumption, then user/identity
+   * creation, role grants, and (for bootstrap) auto-verification + config bump.
+   * OAuth identities (Discord/Google) are verified-on-create and never trigger a
+   * verification email; password identities verify via the email-token flow.
+   */
+  private async redeem(args: {
+    token: string;
+    passcode?: string;
+    email: string | null;
+    displayName: string;
+    identity: IdentitySpec;
   }): Promise<AcceptResult> {
     const inv = await this.findByToken(args.token);
     if (!inv) throw new NotFoundError('INVITE_NOT_FOUND', 'Invitation not found');
@@ -237,9 +293,10 @@ export class InvitationsService {
     // Email gate: an invite bound to a specific email may only be redeemed with
     // that email. The bound value is never exposed by the API, so the redeemer must
     // already know it — this is the knowledge factor that makes email-gating
-    // meaningful against a leaked invite link. (Binding to a *verified* email —
-    // proving control, not just knowledge — remains a deferred hardening.)
-    if (inv.email && args.email.toLowerCase() !== inv.email.toLowerCase()) {
+    // meaningful against a leaked invite link. A Discord login that shares no email
+    // (or a mismatched one) cannot satisfy an email-bound invite — the user must
+    // register with that email instead.
+    if (inv.email && args.email?.toLowerCase() !== inv.email.toLowerCase()) {
       throw new DeniedError(
         'EMAIL_MISMATCH',
         'This invitation was issued to a different email address',
@@ -253,19 +310,40 @@ export class InvitationsService {
       await this.assertRolesGrantable(inv.createdBy!, inv.intendedRoleIds);
     }
 
-    // Friendly, field-targeted message for the common duplicate-email case (the DB
-    // unique index is still the authoritative backstop for the concurrent race).
-    const existingEmail = await this.prisma.appUser.findFirst({
-      where: { organizationId: inv.organizationId, email: args.email },
-      select: { id: true },
-    });
-    if (existingEmail) {
-      throw new ValidationError('An account with this email address already exists', [
-        { field: 'email', message: 'An account with this email address already exists' },
-      ]);
+    // One Discord account maps to one Patrice user ((provider, subject) unique).
+    // Pre-check for a friendly error before the DB constraint fires.
+    if (args.identity.provider === AuthProvider.discord) {
+      const linked = await this.prisma.userIdentity.findUnique({
+        where: {
+          provider_providerSubject: {
+            provider: AuthProvider.discord,
+            providerSubject: args.identity.providerSubject,
+          },
+        },
+        select: { id: true },
+      });
+      if (linked) {
+        throw new ConflictError(
+          'DISCORD_ALREADY_LINKED',
+          'This Discord account is already linked to a Patrice account',
+        );
+      }
     }
 
-    const passwordHash = await this.passwords.hash(args.password);
+    // Friendly, field-targeted message for the common duplicate-email case (the DB
+    // unique index is still the authoritative backstop for the concurrent race).
+    // Skipped when no email is supplied (a Discord login without the email scope).
+    if (args.email) {
+      const existingEmail = await this.prisma.appUser.findFirst({
+        where: { organizationId: inv.organizationId, email: args.email },
+        select: { id: true },
+      });
+      if (existingEmail) {
+        throw new ValidationError('An account with this email address already exists', [
+          { field: 'email', message: 'An account with this email address already exists' },
+        ]);
+      }
+    }
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Atomic FCFS: exactly one concurrent accept wins the use.
@@ -293,11 +371,22 @@ export class InvitationsService {
       await tx.userIdentity.create({
         data: {
           userId: user.id,
-          provider: AuthProvider.password,
-          passwordHash,
-          // Bootstrap auto-verifies unconditionally (brick-on-SMTP risk for the
-          // first user outranks the verification flag).
-          verifiedAt: isBootstrap ? new Date() : null,
+          provider: args.identity.provider,
+          passwordHash:
+            args.identity.provider === AuthProvider.password
+              ? args.identity.passwordHash
+              : null,
+          providerSubject:
+            args.identity.provider === AuthProvider.discord
+              ? args.identity.providerSubject
+              : null,
+          // OAuth identities prove control of the account at consent time, so they
+          // start verified. Password identities verify via email — except bootstrap,
+          // which auto-verifies (brick-on-SMTP risk for the first user outranks it).
+          verifiedAt:
+            args.identity.provider !== AuthProvider.password || isBootstrap
+              ? new Date()
+              : null,
         },
       });
 
@@ -326,6 +415,7 @@ export class InvitationsService {
         invitationId: inv.id,
         grantedRoleIds: inv.intendedRoleIds,
         isBootstrap,
+        identityProvider: args.identity.provider,
       });
 
       return { userId: user.id };
@@ -334,8 +424,8 @@ export class InvitationsService {
     // Drop the stale projection cache now that grants/membership changed.
     this.access.invalidate();
 
-    if (!isBootstrap) {
-      // Send a verification email for normal registrations (best-effort).
+    if (!isBootstrap && args.identity.provider === AuthProvider.password && args.email) {
+      // Send a verification email for normal password registrations (best-effort).
       await this.verification
         .issueVerification(result.userId, args.email)
         .catch(() => undefined);
@@ -352,6 +442,7 @@ export class InvitationsService {
       invitationId: string;
       grantedRoleIds: string[];
       isBootstrap: boolean;
+      identityProvider: 'password' | 'discord';
     },
   ): Promise<void> {
     await this.activity.logActivity({
@@ -364,7 +455,7 @@ export class InvitationsService {
       payload: {
         userId: args.userId,
         invitationId: args.invitationId,
-        identityProvider: 'password',
+        identityProvider: args.identityProvider,
       },
     });
     await this.activity.logActivity({

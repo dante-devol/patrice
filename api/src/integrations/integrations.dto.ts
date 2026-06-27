@@ -22,9 +22,18 @@ export const createMappingSchema = z.object({
 
 export const updateMappingSchema = z.object({
   syncDirection: z.enum(['inbound', 'outbound', 'bidirectional']).optional(),
+  conflictWinner: z.enum(['patrice', 'external']).optional(),
+  // Re-point a mapping at a different Discord role (e.g. after the group was
+  // recreated). Clears the broken flag so the next sync re-evaluates it.
+  externalGroupId: z.string().min(1).optional(),
+});
+
+export const rotateTokenSchema = z.object({
+  botToken: z.string().min(1),
 });
 
 export type ConnectIntegrationDto = z.infer<typeof connectIntegrationSchema>;
 export type UpdateIntegrationDto = z.infer<typeof updateIntegrationSchema>;
 export type CreateMappingDto = z.infer<typeof createMappingSchema>;
 export type UpdateMappingDto = z.infer<typeof updateMappingSchema>;
+export type RotateTokenDto = z.infer<typeof rotateTokenSchema>;

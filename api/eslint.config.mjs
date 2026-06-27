@@ -43,4 +43,11 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
+  {
+    // CommonJS ops/smoke scripts (run via `node scripts/*.js`): require() is correct
+    // here — the package is `type: commonjs` and these load the compiled dist.
+    files: ['scripts/**/*.js'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 );

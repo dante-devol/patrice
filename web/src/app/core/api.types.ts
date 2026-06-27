@@ -77,6 +77,8 @@ export interface AdminUser {
   displayName: string;
   lifecycleState: Lifecycle;
   roleIds: string[];
+  /** Discord avatar CDN URL when linked + a hash is known (#52). */
+  avatarUrl: string | null;
 }
 
 export interface OrgSettings {
@@ -89,7 +91,27 @@ export interface OrgSettings {
   gracePeriodHours: number;
   /** Slice 8: require Discord account link before task access. */
   requireDiscordLink: boolean;
+  /** Discord sign-in OAuth app client id (public; ADR 0006). */
+  discordClientId: string | null;
+  /** Whether a Discord OAuth client secret is set (the secret is never returned). */
+  discordOAuthConfigured: boolean;
 }
+
+/** PATCH /config body — editable fields; `discordClientSecret` is write-only. */
+export interface ConfigUpdate {
+  requireVerifiedEmailToLogIn?: boolean;
+  selfReviewAllowed?: boolean;
+  anonymizeLabel?: boolean;
+  sessionAbsoluteDays?: number;
+  sessionIdleDays?: number;
+  gracePeriodHours?: number;
+  requireDiscordLink?: boolean;
+  discordClientId?: string;
+  /** Empty string clears it (disables Discord sign-in). */
+  discordClientSecret?: string;
+}
+
+export type AuthMethod = 'password' | 'google' | 'discord';
 
 export interface CurrentUser {
   id: string;
@@ -97,7 +119,13 @@ export interface CurrentUser {
   email: string | null;
   displayName: string;
   emailVerified: boolean;
+  /** Sign-in methods the user holds. */
+  authMethods: AuthMethod[];
   hasDiscordLink: boolean;
+  /** The linked Discord handle (for "Connected as …"); null when unlinked. */
+  discordHandle: string | null;
+  /** Discord avatar CDN URL when linked + a hash is known (#52). */
+  avatarUrl: string | null;
   capabilities: UserCapabilities;
 }
 
@@ -356,17 +384,29 @@ export interface ActivityFilters {
 export type IntegrationProvider = 'discord';
 export type IntegrationStatus = 'active' | 'broken' | 'disabled';
 export type SyncDirection = 'inbound' | 'outbound' | 'bidirectional';
+export type GatewayState = 'down' | 'connecting' | 'connected' | 'degraded';
+export type SyncState = 'idle' | 'queued' | 'running';
 
 export interface IntegrationConnection {
   id: string;
   provider: IntegrationProvider;
   externalWorkspaceId: string;
   displayName: string;
-  config: Record<string, unknown>;
-  credentialsRef: string | null;
   status: IntegrationStatus;
   lifecycleState: Lifecycle;
   retiredAt: string | null;
+  // Observability (admin health surface).
+  gatewayState: GatewayState;
+  gatewayLastConnectedAt: string | null;
+  gatewayLastEventAt: string | null;
+  syncState: SyncState;
+  lastSyncStartedAt: string | null;
+  lastSyncAt: string | null;
+  lastSyncGranted: number;
+  lastSyncRevoked: number;
+  lastError: string | null;
+  /** When the Reconcile Floor next guarantees a sync (computed); null until first sync. */
+  nextReconcileAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

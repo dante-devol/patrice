@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AuthMethod, AuthProvider } from '@prisma/client';
+import { discordAvatarUrl } from '../common/discord-avatar';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeniedError, UnauthenticatedError } from '../common/errors';
 import { AccessService } from '../access/access.service';
@@ -24,8 +25,14 @@ export interface AuthenticatedUser {
   email: string | null;
   displayName: string;
   emailVerified: boolean;
-  /** True if the user has at least one active Discord account link. */
+  /** Sign-in methods the user holds (password / google / discord). */
+  authMethods: AuthMethod[];
+  /** True if the user has at least one active Discord account link (integration). */
   hasDiscordLink: boolean;
+  /** The linked Discord handle (for "Connected as …"); null when unlinked. */
+  discordHandle: string | null;
+  /** Discord avatar CDN URL when linked + an avatar hash is known (#52). */
+  avatarUrl: string | null;
   capabilities: UserCapabilities;
 }
 
@@ -98,8 +105,7 @@ export class AuthService {
         email: true,
         displayName: true,
         identities: {
-          where: { provider: AuthProvider.password },
-          select: { verifiedAt: true },
+          select: { provider: true, verifiedAt: true },
         },
       },
     });
@@ -112,7 +118,7 @@ export class AuthService {
       type: 'Organization' as const,
       id: user.organizationId,
     };
-    const [inviteCreate, manageOrg, discordLinkCount] = await Promise.all([
+    const [inviteCreate, manageOrg, avatarLink] = await Promise.all([
       this.access.decide({
         userId: user.id,
         action: ACTIONS.inviteCreate.action,
@@ -123,18 +129,32 @@ export class AuthService {
         action: ACTIONS.grantCreate.action,
         resource: orgResource,
       }),
-      this.prisma.externalIdentity.count({
-        where: { userId: user.id, connection: { lifecycleState: 'active' } },
+      // Most recently synced active link (carries handle + avatar hash, #52).
+      this.prisma.externalIdentity.findFirst({
+        where: {
+          userId: user.id,
+          connection: { lifecycleState: 'active' },
+        },
+        orderBy: { lastSyncedAt: { sort: 'desc', nulls: 'last' } },
+        select: { externalUserId: true, externalAvatarHash: true, externalHandle: true },
       }),
     ]);
+
+    const passwordIdentity = user.identities.find(
+      (i) => i.provider === AuthProvider.password,
+    );
 
     return {
       id: user.id,
       organizationId: user.organizationId,
       email: user.email,
       displayName: user.displayName,
-      emailVerified: user.identities[0]?.verifiedAt != null,
-      hasDiscordLink: discordLinkCount > 0,
+      // An OAuth-only user (no password identity) has nothing to verify — don't nag.
+      emailVerified: passwordIdentity ? passwordIdentity.verifiedAt != null : true,
+      authMethods: user.identities.map((i) => i.provider),
+      hasDiscordLink: avatarLink != null,
+      discordHandle: avatarLink?.externalHandle ?? null,
+      avatarUrl: discordAvatarUrl(avatarLink?.externalUserId, avatarLink?.externalAvatarHash),
       capabilities: { inviteCreate, manageOrg },
     };
   }

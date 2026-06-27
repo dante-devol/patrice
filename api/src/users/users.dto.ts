@@ -30,6 +30,10 @@ export const updateConfigSchema = z
     gracePeriodHours: z.number().int().nonnegative().max(8760).optional(),
     // Slice 8: gate task access on Discord account linking.
     requireDiscordLink: z.boolean().optional(),
+    // Discord sign-in OAuth app (ADR 0006). The id is public; the secret is
+    // write-only (encrypted at rest, never returned). Empty string clears it.
+    discordClientId: z.string().max(64).optional(),
+    discordClientSecret: z.string().max(256).optional(),
   })
   .strict();
 
