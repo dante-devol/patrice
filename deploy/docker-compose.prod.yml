@@ -1,0 +1,94 @@
+# Patrice — production stack.
+#
+# Runs pre-built images pulled from GHCR; nothing is built on the server. Copy
+# this file plus `.env.example` -> `.env` onto a Docker host and:
+#
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml logs api   # grab the bootstrap key
+#
+# Compose auto-reads `.env` from this directory for both ${VAR} interpolation
+# (image tag, ports, db creds) and the per-service `env_file` injection.
+#
+# TLS is intentionally NOT handled here: the `web` service serves plain HTTP on
+# ${WEB_PORT}. Terminate TLS at your own proxy (nginx / Cloudflare / cloud LB),
+# forward to that port, and set PUBLIC_BASE_URL + TRUST_PROXY + COOKIE_SECURE in
+# `.env`. See README.md for a copy-paste nginx vhost.
+
+x-api-image: &api-image
+  image: ghcr.io/dante-devol/patrice/api:${PATRICE_VERSION:-latest}
+  env_file: .env
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:18
+    env_file: .env
+    # PostgreSQL 18 stores data in a version-specific subdirectory, so the mount
+    # goes at /var/lib/postgresql (NOT /var/lib/postgresql/data).
+    volumes:
+      - patrice-db:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-patrice}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # Uncomment to reach Postgres from the host (backups, admin). Off by default
+    # so the database is never exposed beyond the compose network.
+    # ports:
+    #   - '5432:5432'
+
+  # One-shot migration writer. Applies pending migrations once and exits 0; api
+  # and worker wait on it (service_completed_successfully) and boot with
+  # SKIP_MIGRATIONS=true so only this service ever migrates.
+  migrate:
+    <<: *api-image
+    restart: 'no'
+    entrypoint: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # HTTP role: all inbound API requests. Stateless, freely restartable. No host
+  # port — the web service reverse-proxies /api to `api:3000` internally.
+  api:
+    <<: *api-image
+    environment:
+      PROCESS_ROLE: api
+      PORT: '3000'
+      SKIP_MIGRATIONS: 'true'
+    # Attachment blobs for STORAGE_DRIVER=local (api uploads + serves them).
+    # Shared with worker (GC reconciliation). Harmless when using s3.
+    volumes:
+      - patrice-storage:/app/var/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Worker role: pg-boss consumers, cron, GC, the Discord Gateway socket. Single
+  # instance (the Gateway socket is the strict single-instance guard); holds the
+  # integration cipher key. Never exposes HTTP.
+  worker:
+    <<: *api-image
+    environment:
+      PROCESS_ROLE: worker
+      SKIP_MIGRATIONS: 'true'
+    # Same blob volume as `api` (GC reconciliation). Harmless when using s3.
+    volumes:
+      - patrice-storage:/app/var/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    image: ghcr.io/dante-devol/patrice/web:${PATRICE_VERSION:-latest}
+    ports:
+      - '${WEB_PORT:-8080}:80'
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  patrice-db:
+  patrice-storage:
