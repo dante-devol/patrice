@@ -1,0 +1,36 @@
+# Build context for `docker compose build api` / `worker`. Keep it lean: the
+# image installs its own deps via `npm ci` and compiles TS inside the build
+# stage, so nothing generated, machine-local, or secret needs to be shipped to
+# the daemon. (Docker reads this file from the build context root — ./api — so
+# the repo-root .dockerignore does NOT apply to this build.)
+
+# Dependencies — reinstalled with `npm ci` (host arch differs from the image).
+node_modules/
+
+# Build output — recompiled in the build stage.
+dist/
+*.tsbuildinfo
+
+# Tests, tooling, and seed/smoke scripts — not part of the runtime image.
+test/
+scripts/
+coverage/
+
+# Local-fs object storage (STORAGE_DRIVER=local) — runtime data, not a build input.
+var/
+
+# Secrets — never bake these into the context.
+.env
+.env.*
+!.env.example
+
+# Logs / OS / editor cruft.
+*.log
+.DS_Store
+Thumbs.db
+
+# Docker / VCS metadata — irrelevant to the build itself.
+Dockerfile
+.dockerignore
+.git
+.gitignore
