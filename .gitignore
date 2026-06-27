@@ -1,5 +1,6 @@
 # Claude Code local config — personal, never pushed to the remote.
 .claude/
+CLAUDE.md
 
 # Dependencies / build output (also covered per-package, kept here as a backstop).
 node_modules/
