@@ -67,9 +67,34 @@ connect; durability never rides the stream).
 
 Three strictly-bound tiers, each replaceable without rewriting its neighbors:
 
-```
-Web (Angular)  ──HTTP / OpenAPI──▶  API (NestJS)  ──Prisma / SQL──▶  Postgres 18 + object store
-  signals-first                     Cedar engine · sessions · pg-boss queue · SSE · integrations
+```mermaid
+flowchart LR
+    user(["User · browser"])
+
+    subgraph web["Web tier · Angular (signals-first)"]
+        spa["SPA<br/>OpenAPI client · guards are UX-only"]
+    end
+
+    subgraph apit["API tier · NestJS — one image, two roles"]
+        api["api role · HTTP<br/>Cedar engine · sessions · invitations · SSE"]
+        worker["worker role · no HTTP<br/>pg-boss · cron · GC · integration Gateway"]
+    end
+
+    subgraph data["Data tier"]
+        pg[("Postgres 18<br/>+ pg-boss queue")]
+        blob[("Object store<br/>local-fs / S3")]
+    end
+
+    discord{{"Discord — OAuth · Gateway · REST"}}
+
+    user -->|HTTPS| spa
+    spa -->|"HTTP / OpenAPI · cookie auth"| api
+    api -->|"SSE · go-sync"| spa
+    api & worker -->|"Prisma / SQL"| pg
+    api -->|attachments| blob
+    worker -->|"blob GC"| blob
+    api -->|"OAuth sign-in"| discord
+    worker <-->|"role sync · gateway events"| discord
 ```
 
 - **API** is the only tier that talks to the database and the only one that enforces permissions.
