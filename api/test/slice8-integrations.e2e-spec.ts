@@ -390,7 +390,6 @@ describe('Slice 8 — Integrations', () => {
 
   describe('8.4 — GC extension', () => {
     it('user scrub deletes external_identity rows', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const conn = await prisma.integrationConnection.findFirst({
         where: { lifecycleState: 'active' },
       });

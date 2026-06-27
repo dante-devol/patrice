@@ -6,7 +6,6 @@ import { KmsEnvelopeAdapter } from './kms-envelope.adapter';
 import type { Env } from '../config/env';
 
 const KEY = 'b'.repeat(64);
-const env = { INTEGRATION_TOKEN_KEY: KEY } as unknown as Env;
 const noEnv = {} as unknown as Env;
 
 function makeComposite(aeadKey?: string) {
