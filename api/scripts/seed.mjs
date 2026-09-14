@@ -161,13 +161,13 @@ async function grant(roleId, action, scopeKind) {
   else log(c.warn(`  grant ${action}/${scopeKind} → ${r.status} (skipped)`));
 }
 
-async function setQuestionnaire(divisionId) {
+async function setRequestTemplate(divisionId) {
   // A single free-text question so claimants have something to submit against.
-  // Non-destructive: only set it when the division has no questionnaire yet, so
+  // Non-destructive: only set it when the division has no request template yet, so
   // re-runs (or seeding an instance with real config) never clobber existing forms.
-  const existing = await req('GET', `/divisions/${divisionId}/questionnaire`, { session: admin });
+  const existing = await req('GET', `/divisions/${divisionId}/request-template`, { session: admin });
   if (existing.status === 200 && (existing.data?.questions?.length ?? 0) > 0) return;
-  await req('PUT', `/divisions/${divisionId}/questionnaire`, {
+  await req('PUT', `/divisions/${divisionId}/request-template`, {
     session: admin,
     body: { questions: [{ type: 'text', prompt: 'Deliverable notes', required: false, constraints: {} }] },
   });
@@ -225,7 +225,7 @@ async function driveTask(spec, ctx) {
 
   const submits = ['review', 'revising', 'approved'].includes(spec.state);
   if (submits) {
-    const qn = must(await req('GET', `/tasks/${task.id}/questionnaire`, { session: admin }), 'get task questionnaire');
+    const qn = must(await req('GET', `/tasks/${task.id}/request-template`, { session: admin }), 'get task request template');
     const questionId = qn?.questions?.[0]?.id;
     for (const u of claimants) {
       const r = await req('POST', `/tasks/${task.id}/submissions`, {
@@ -275,7 +275,7 @@ const run = async () => {
   );
   for (const action of [
     'task:create', 'task:assign', 'task:submit', 'task:review', 'task:complete',
-    'task:manage_claims', 'task:change_requester', 'task:configure_questionnaire',
+    'task:manage_claims', 'task:change_requester', 'task:configure_request_template',
   ]) {
     await grant(adminRoleId, action, 'global');
   }
@@ -285,12 +285,12 @@ const run = async () => {
   await grant(memberRoleId, 'task:submit', 'own');
   log(c.ok('  grants in place (admin global · Member self-claim/submit)'));
 
-  step('Divisions + questionnaires');
+  step('Divisions + request templates');
   const divisionNames = ['Writing', 'Art', 'Scripting', 'Testing', 'Leadership'];
   const divisions = {};
   for (const name of divisionNames) {
     const d = await ensureDivision(name);
-    await setQuestionnaire(d.id);
+    await setRequestTemplate(d.id);
     divisions[name] = d;
     log(c.ok(`  ${name}`));
   }

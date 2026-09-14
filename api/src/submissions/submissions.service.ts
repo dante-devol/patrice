@@ -16,12 +16,12 @@ import {
   NotFoundError,
   UnprocessableError,
 } from '../common/errors';
-import { validateSubmission } from '../questionnaires/validate-submission';
+import { validateSubmission } from '../request-templates/validate-submission';
 import {
   Answer,
   AttachmentLookupPort,
-  QuestionnaireDef,
-} from '../questionnaires/questionnaire.types';
+  RequestTemplateDef,
+} from '../request-templates/request-template.types';
 import {
   ReviewDto,
   RetireSubmissionDto,
@@ -69,7 +69,7 @@ type SubmissionRow = Prisma.SubmissionGetPayload<{
  * state-machine guard + version-guarded UPDATE), and `task:retire_submission`. Cedar
  * has already gated *who* may act before any method here runs; the service enforces
  * the operational invariants (claimant holds a slot, valid state transition, the
- * questionnaire lock) and keeps `status_cache` consistent via the Min-Rule.
+ * request template lock) and keeps `status_cache` consistent via the Min-Rule.
  */
 @Injectable()
 export class SubmissionsService {
@@ -136,26 +136,26 @@ export class SubmissionsService {
       throw new ConflictError('NOT_CLAIMED', 'You do not hold a slot on this task');
     }
 
-    const questionnaire = await this.prisma.questionnaire.findUnique({
+    const requestTemplate = await this.prisma.requestTemplate.findUnique({
       where: { ownerTaskId: taskId },
       include: { questions: { orderBy: { ordinal: 'asc' } } },
     });
-    if (!questionnaire) {
-      throw new NotFoundError('QUESTIONNAIRE_NOT_FOUND', 'This task has no questionnaire');
+    if (!requestTemplate) {
+      throw new NotFoundError('REQUEST_TEMPLATE_NOT_FOUND', 'This task has no request template');
     }
 
-    const qnDef: QuestionnaireDef = {
-      id: questionnaire.id,
-      questions: questionnaire.questions.map((q) => ({
+    const rtDef: RequestTemplateDef = {
+      id: requestTemplate.id,
+      questions: requestTemplate.questions.map((q) => ({
         id: q.id,
         ordinal: q.ordinal,
-        type: q.type as QuestionnaireDef['questions'][number]['type'],
+        type: q.type as RequestTemplateDef['questions'][number]['type'],
         prompt: q.prompt,
         required: q.required,
         constraints: q.constraints as never,
       })),
     };
-    const typeById = new Map(questionnaire.questions.map((q) => [q.id, q.type]));
+    const typeById = new Map(requestTemplate.questions.map((q) => [q.id, q.type]));
     const answers: Answer[] = dto.answers.map((a) =>
       toValidatorAnswer(typeById.get(a.questionId), a),
     );
@@ -172,7 +172,7 @@ export class SubmissionsService {
       return att ? { contentType: att.contentType, kind: att.kind } : null;
     };
 
-    const result = await validateSubmission(qnDef, answers, lookup);
+    const result = await validateSubmission(rtDef, answers, lookup);
     if (!result.ok) {
       throw new UnprocessableError(
         'INVALID_SUBMISSION',

@@ -9,24 +9,24 @@ import {
 import { FormArray, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { errorMessage } from '../../core/errors';
-import { QuestionnaireFormService } from './questionnaire-form.service';
+import { RequestTemplateFormService } from './request-template-form.service';
 import { QuestionRendererComponent } from './question-renderer.component';
 
 /**
- * Questionnaire builder (authoring host, Slice 3). Loads a division's default
- * questionnaire, drives add/reorder/remove of questions through the
- * QuestionnaireFormService, and the QuestionRenderer (authoring mode) draws each
+ * Request template builder (authoring host, Slice 3). Loads a division's default
+ * request template, drives add/reorder/remove of questions through the
+ * RequestTemplateFormService, and the QuestionRenderer (authoring mode) draws each
  * question's controls. Saving PUTs the whole replace-in-place question set. An empty
  * set is valid (a coordination-only division).
  */
 @Component({
-  selector: 'questionnaire-builder',
+  selector: 'request-template-builder',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ReactiveFormsModule, QuestionRendererComponent],
   template: `
     <div class="qn-builder">
-      <h3>Default questionnaire</h3>
+      <h3>Default request template</h3>
       @if (error()) { <p class="error">{{ error() }}</p> }
       @if (saved()) { <p class="ok">Saved.</p> }
 
@@ -42,14 +42,14 @@ import { QuestionRendererComponent } from './question-renderer.component';
               <question-renderer class="grow" mode="authoring" [group]="asGroup(q)" />
             </div>
           } @empty {
-            <p class="muted">No questions — this saves as a coordination-only questionnaire.</p>
+            <p class="muted">No questions — this saves as a coordination-only request template.</p>
           }
         </div>
       </form>
 
       <div class="row">
         <button type="button" class="secondary" (click)="add()">Add question</button>
-        <button type="button" (click)="save()" [disabled]="busy() || form.invalid">Save questionnaire</button>
+        <button type="button" (click)="save()" [disabled]="busy() || form.invalid">Save request template</button>
       </div>
     </div>
   `,
@@ -61,9 +61,9 @@ import { QuestionRendererComponent } from './question-renderer.component';
      .ok { color: #0a5249; font-weight: 600; }`,
   ],
 })
-export class QuestionnaireBuilderComponent implements OnInit {
+export class RequestTemplateBuilderComponent implements OnInit {
   private readonly api = inject(ApiService);
-  private readonly forms = inject(QuestionnaireFormService);
+  private readonly forms = inject(RequestTemplateFormService);
 
   @Input({ required: true }) divisionId!: string;
 
@@ -81,9 +81,9 @@ export class QuestionnaireBuilderComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const qn = await this.api.getQuestionnaire(this.divisionId);
+      const rt = await this.api.getRequestTemplate(this.divisionId);
       this.form = new FormGroup({
-        questions: this.forms.authoringForm(qn?.questions ?? []) as FormArray<FormGroup>,
+        questions: this.forms.authoringForm(rt?.questions ?? []) as FormArray<FormGroup>,
       });
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -116,7 +116,7 @@ export class QuestionnaireBuilderComponent implements OnInit {
     this.saved.set(false);
     try {
       const payload = this.forms.serialize(this.questions);
-      await this.api.putQuestionnaire(this.divisionId, payload);
+      await this.api.putRequestTemplate(this.divisionId, payload);
       this.saved.set(true);
     } catch (e) {
       this.error.set(errorMessage(e));

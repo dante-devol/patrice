@@ -31,7 +31,7 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
 
     const writing = await auth(http().post('/api/divisions')).send({ name: 'Writing' });
     writingId = writing.body.id;
-    await auth(http().put(`/api/divisions/${writingId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
       questions: [{ type: 'text', prompt: 'Answer', required: true, constraints: {} }],
     });
 
@@ -66,7 +66,7 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
     const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
     const taskId = res.body.id;
     await as(claimer.session)(http().post(`/api/tasks/${taskId}/claim`));
-    const qn = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     const sub = await as(claimer.session)(http().post(`/api/tasks/${taskId}/submissions`)).send({
       answers: [{ questionId: qn.body.questions[0].id, value: 'my work' }],
     });

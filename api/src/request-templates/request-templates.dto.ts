@@ -1,11 +1,12 @@
 import { z } from 'zod';
 
 /**
- * PUT body for a division's default questionnaire (Slice 3). The question set is
+ * PUT body for a division's default request template (Slice 3). The question set is
  * replace-in-place: `ordinal` is derived from array order, so callers send an
  * ordered list. An empty array is valid — it authors a zero-question (coordination-
- * only) questionnaire. `constraints` is validated per type via a discriminated union
- * so a numeric range / option list / filetype set can't be attached to the wrong type.
+ * only) request template. `constraints` is validated per type via a discriminated
+ * union so a numeric range / option list / filetype set can't be attached to the
+ * wrong type.
  */
 
 const prompt = z.string().trim().min(1, 'Prompt is required').max(2000);
@@ -78,9 +79,9 @@ const questionSchema = z.discriminatedUnion('type', [
   questionOf('attachment', attachmentConstraints),
 ]);
 
-export const putQuestionnaireSchema = z
+export const putRequestTemplateSchema = z
   .object({ questions: z.array(questionSchema).max(200) })
   .strict();
 
-export type PutQuestionnaireDto = z.infer<typeof putQuestionnaireSchema>;
+export type PutRequestTemplateDto = z.infer<typeof putRequestTemplateSchema>;
 export type QuestionInput = z.infer<typeof questionSchema>;

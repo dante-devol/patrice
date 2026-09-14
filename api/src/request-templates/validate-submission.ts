@@ -5,15 +5,15 @@ import {
   ChoiceConstraints,
   NumericConstraints,
   QuestionDef,
-  QuestionnaireDef,
+  RequestTemplateDef,
   TextConstraints,
   ValidationErrorEntry,
   ValidationResult,
-} from './questionnaire.types';
+} from './request-template.types';
 
 /**
  * `validateSubmission` — the **pure** answer-validation function (Slice 3). It checks
- * a set of answers against a questionnaire's question constraints and returns a
+ * a set of answers against a request template's question constraints and returns a
  * structured error list (never throws on invalid data). Storage is reached only via
  * the injected `AttachmentLookupPort`, so it is unit-testable with a synthetic stub
  * and reused verbatim by Slice 5's `task:submit`.
@@ -23,7 +23,7 @@ import {
  * reference an allowed-type attachment. A non-required, unanswered question is fine.
  */
 export async function validateSubmission(
-  questionnaire: QuestionnaireDef,
+  requestTemplate: RequestTemplateDef,
   answers: readonly Answer[],
   attachmentLookup: AttachmentLookupPort,
 ): Promise<ValidationResult> {
@@ -31,20 +31,20 @@ export async function validateSubmission(
   const byQuestion = new Map<string, Answer>();
   for (const a of answers) byQuestion.set(a.questionId, a);
 
-  // Answers that name a question the questionnaire doesn't have are an integrity
+  // Answers that name a question the request template doesn't have are an integrity
   // error — flag rather than silently ignore.
-  const known = new Set(questionnaire.questions.map((q) => q.id));
+  const known = new Set(requestTemplate.questions.map((q) => q.id));
   for (const a of answers) {
     if (!known.has(a.questionId)) {
       errors.push({
         questionId: a.questionId,
         code: 'unknown_question',
-        message: 'Answer references a question not in this questionnaire',
+        message: 'Answer references a question not in this request template',
       });
     }
   }
 
-  for (const q of questionnaire.questions) {
+  for (const q of requestTemplate.questions) {
     const answer = byQuestion.get(q.id);
     const empty = isEmpty(q, answer);
 
@@ -65,7 +65,7 @@ export async function validateSubmission(
 
   // Attachment checks need the async port; run them in a second pass so the
   // synchronous validation above stays simple and order-independent.
-  for (const q of questionnaire.questions) {
+  for (const q of requestTemplate.questions) {
     if (q.type !== 'attachment') continue;
     const answer = byQuestion.get(q.id);
     if (isEmpty(q, answer)) continue;

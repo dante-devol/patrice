@@ -1,5 +1,5 @@
 /**
- * Shared questionnaire domain types (Slice 3). These mirror the `questionnaire`/
+ * Shared request template domain types (Slice 3). These mirror the `request_template`/
  * `question` schema and the per-type `constraints` jsonb shapes documented in
  * docs/slices/03-questionnaires.md. They are framework-free on purpose: the pure
  * `validateSubmission` (Slice 3, reused verbatim by Slice 5) and the API boundary
@@ -63,7 +63,7 @@ export interface QuestionDef {
   constraints: QuestionConstraints;
 }
 
-export interface QuestionnaireDef {
+export interface RequestTemplateDef {
   id: string;
   questions: QuestionDef[];
 }

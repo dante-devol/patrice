@@ -75,13 +75,13 @@ export const activityPayloadSchemas = {
   'config.updated': z
     .object({ changedKeys: z.array(z.string()) })
     .strict(),
-  // Slice 3 — questionnaire authoring. IDs + the (non-PII) question count only.
-  'questionnaire.updated': z
-    .object({ questionnaireId: uuid, divisionId: uuid, questionCount: z.number().int() })
+  // Slice 3 — request template authoring. IDs + the (non-PII) question count only.
+  'request_template.updated': z
+    .object({ requestTemplateId: uuid, divisionId: uuid, questionCount: z.number().int() })
     .strict(),
-  // Slice 4.1 — per-task questionnaire copy edited via task:configure_questionnaire.
-  'task_questionnaire.updated': z
-    .object({ questionnaireId: uuid, taskId: uuid, questionCount: z.number().int() })
+  // Slice 4.1 — per-task request template copy edited via task:configure_request_template.
+  'task_request_template.updated': z
+    .object({ requestTemplateId: uuid, taskId: uuid, questionCount: z.number().int() })
     .strict(),
   // Slice 4.1 — tasks. IDs only (no name/description PII; render by joining at read).
   'task.created': z
@@ -89,7 +89,7 @@ export const activityPayloadSchemas = {
       taskId: uuid,
       divisionId: uuid,
       teamId: uuid.nullable(),
-      questionnaireId: uuid,
+      requestTemplateId: uuid,
     })
     .strict(),
   'task.updated': z.object({ taskId: uuid }).strict(),

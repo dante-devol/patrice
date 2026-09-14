@@ -37,7 +37,7 @@ export const orgResource: ResourceResolver = async (_req, prisma) => {
 
 /**
  * The division named by `:id` is the resource — for `division:update` on a specific
- * division (e.g. its default questionnaire, Slice 3). Carries a `division` self-ref
+ * division (e.g. its default request template, Slice 3). Carries a `division` self-ref
  * so `specific_division`/`own_division` scopes match, and `retired` so the
  * Retired-as-Hard-Deny blocks edits to a retired division. 404 if it doesn't exist.
  */

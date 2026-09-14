@@ -8,7 +8,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
 import { ToastService } from '../../core/toast.service';
-import { AdminUser, Questionnaire, Submission, Task } from '../../core/api.types';
+import { AdminUser, RequestTemplate, Submission, Task } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { MessageThreadComponent } from './message-thread.component';
 import { SubmitDialogComponent } from './submit-dialog.component';
@@ -27,7 +27,7 @@ interface ClaimRow {
  * Task detail (Slice 4–5, ui-tailwind). Unified-History main column with inline-editable
  * title and description, sticky rail with restructured claim strip (Close Claims button,
  * per-slot Claim/Leave icon buttons), facts rail with searchable requester combobox, and
- * a Mark Complete split-button below the Questionnaire panel. Submit Work is a large
+ * a Mark Complete split-button below the Request Template panel. Submit Work is a large
  * button at the bottom of the main column. The ⋯ overflow menu lives in the title row.
  */
 @Component({
@@ -42,30 +42,30 @@ interface ClaimRow {
         @if (error()) { <p class="text-[13px] text-[#99492f] mb-3">{{ error() }}</p> }
 
         @if (task(); as t) {
-          <!-- HEAD: title + stamp + ⋯ overflow menu -->
-          <div class="flex items-start gap-3 mb-1">
-            @if (canEdit()) {
-              <input [(ngModel)]="editName" (blur)="saveName(t)"
-                     class="font-serif text-[27px] leading-[1.12] font-semibold flex-1
-                            bg-transparent border border-transparent rounded-[5px]
-                            px-1 -mx-1 py-0 outline-none
-                            hover:border-line focus:border-accent
-                            transition-colors duration-150" />
-            } @else {
-              <h1 class="font-serif text-[27px] leading-[1.12] font-semibold flex-1">{{ t.name }}</h1>
-            }
-            <span class="stamp stamp--lg shrink-0 mt-1" [class]="stampMod(t)">{{ stamp(t) }}</span>
-            <button class="shrink-0 rounded border border-line text-[14px] px-2 py-[7px] hover:border-ink/40 font-mono mt-1 leading-none"
-                    [cdkMenuTriggerFor]="manageMenu" aria-label="More options">⋯</button>
-          </div>
+          <!-- Header card: title + stamp + ⋯ menu, sub-heading — full width, above the sidebar -->
+          <div class="rounded-lg border border-line bg-paper shadow-card p-5 mb-5">
+            <div class="flex items-start gap-3 mb-1">
+              @if (canEdit()) {
+                <input [(ngModel)]="editName" (blur)="saveName(t)"
+                       class="font-serif text-[27px] leading-[1.12] font-semibold flex-1
+                              bg-transparent border border-transparent rounded-[5px]
+                              px-1 -mx-1 py-0 outline-none
+                              hover:border-line focus:border-accent
+                              transition-colors duration-150" />
+              } @else {
+                <h1 class="font-serif text-[27px] leading-[1.12] font-semibold flex-1">{{ t.name }}</h1>
+              }
+              <span class="stamp stamp--lg shrink-0 mt-1" [class]="stampMod(t)">{{ stamp(t) }}</span>
+              <button class="shrink-0 rounded border border-line text-[14px] px-2 py-[7px] hover:border-ink/40 font-mono mt-1 leading-none"
+                      [cdkMenuTriggerFor]="manageMenu" aria-label="More options">⋯</button>
+            </div>
 
-          <!-- Sub-heading: id, division, team, requester, time -->
-          <div class="flex items-center gap-3 flex-wrap mb-5">
-            <span class="font-mono text-[12.5px] text-ink-soft">#{{ shortId(t.id) }}</span>
-            <span class="text-ink-soft">·</span>
-            <span class="dtag" [style.--c]="divColor(t.divisionId)">{{ lookup.divisionName(t.divisionId) }}</span>
-            @if (t.teamId) { <span class="ttag" [style.--tc]="teamCol(t.teamId)">{{ lookup.teamName(t.teamId) }}</span> }
-            <span class="font-mono text-[12.5px] text-ink-soft">requested by {{ lookup.userName(t.requesterUserId) }} · {{ rel(t.createdAt) }}</span>
+            <!-- Sub-heading: id + time (division/team/requester/status live in the sidebar) -->
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="font-mono text-[12.5px] text-ink-soft">#{{ shortId(t.id) }}</span>
+              <span class="text-ink-soft">·</span>
+              <span class="font-mono text-[12.5px] text-ink-soft">opened {{ rel(t.createdAt) }}</span>
+            </div>
           </div>
 
           <div class="grid lg:grid-cols-[1fr_312px] gap-6 items-start">
@@ -91,23 +91,23 @@ interface ClaimRow {
                 }
               </div>
 
-              <!-- Unified history + comment thread -->
-              <message-thread #thread [taskId]="t.id" [task]="t"
-                [submissions]="submissions()" [questions]="questionnaire()?.questions ?? []"
-                (changed)="refresh()" class="block" />
-
-              <!-- Submit Work — large, prominent, below the history -->
-              <div class="mt-5">
+              <!-- Submit Work -->
+              <div class="mb-5">
                 <button class="w-full rounded-lg bg-accent text-paper font-medium text-[15px] py-3.5
                                hover:bg-accent-ink transition-colors disabled:opacity-50"
                         [disabled]="busy()" (click)="openSubmit(t)">Submit work</button>
               </div>
+
+              <!-- Unified history + comment thread — below the body -->
+              <message-thread #thread [taskId]="t.id" [task]="t"
+                [submissions]="submissions()" [questions]="requestTemplate()?.questions ?? []"
+                (changed)="refresh()" class="block" />
             </div>
 
             <!-- RAIL -->
             <aside class="flex flex-col gap-4 lg:sticky lg:top-[72px]">
 
-              <!-- Claim strip -->
+              <!-- Claim strip (Assignee/Claimant) -->
               <div class="rounded-lg border border-line bg-paper shadow-card p-4">
                 <div class="flex items-center justify-between mb-3">
                   <span class="font-mono text-[11px] tracking-[0.14em] uppercase text-ink-soft">
@@ -183,6 +183,7 @@ interface ClaimRow {
 
               <!-- Facts -->
               <div class="rounded-lg border border-line bg-paper shadow-card p-4">
+                <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-ink-soft mb-3">Details</div>
                 <dl class="text-[13px]">
                   <div class="flex items-center justify-between py-1.5">
                     <dt class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Division</dt>
@@ -243,12 +244,12 @@ interface ClaimRow {
                 </dl>
               </div>
 
-              <!-- Questionnaire summary -->
+              <!-- Request Template summary -->
               <div class="rounded-lg border border-line bg-paper shadow-card p-4">
-                <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-ink-soft mb-2.5">Questionnaire</div>
-                @if (questionnaire()?.questions?.length) {
+                <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-ink-soft mb-2.5">Request Template</div>
+                @if (requestTemplate()?.questions?.length) {
                   <ul class="flex flex-col gap-2">
-                    @for (qn of questionnaire()!.questions; track qn.id ?? $index) {
+                    @for (qn of requestTemplate()!.questions; track qn.id ?? $index) {
                       <li class="flex items-start gap-2">
                         <span class="font-mono text-[10px] uppercase tracking-wide text-ink-soft border border-line rounded px-1.5 py-[2px] mt-[1px]">{{ shortType(qn.type) }}</span>
                         <span class="text-[13px]">{{ qn.prompt }} @if (qn.required) { <span class="text-[#99492f]">*</span> }</span>
@@ -305,7 +306,7 @@ interface ClaimRow {
              (click)="$event.stopPropagation()">
           <h3 style="font-family:'IBM Plex Serif',serif;font-size:18px;font-weight:600;margin:0 0 10px">Retire this task?</h3>
           <p style="font-size:13.5px;color:#5b605c;line-height:1.6;margin:0 0 22px">
-            The task and its entire history become read-only. Claimants can no longer submit work. Questionnaire answers are preserved but locked. <strong style="color:#191b19;font-weight:500">This cannot be undone via the UI.</strong>
+            The task and its entire history become read-only. Claimants can no longer submit work. Request Template answers are preserved but locked. <strong style="color:#191b19;font-weight:500">This cannot be undone via the UI.</strong>
           </p>
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button style="padding:8px 16px;background:transparent;border:1px solid #d3d5cc;border-radius:6px;font:inherit;cursor:pointer;color:#191b19;font-size:13.5px"
@@ -331,7 +332,7 @@ export class TaskDetailComponent implements OnInit {
   private readonly thread = viewChild(MessageThreadComponent);
 
   readonly task = signal<Task | null>(null);
-  readonly questionnaire = signal<Questionnaire | null>(null);
+  readonly requestTemplate = signal<RequestTemplate | null>(null);
   readonly submissions = signal<Submission[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -415,7 +416,7 @@ export class TaskDetailComponent implements OnInit {
       this.editName = t.name;
       this.editDescription = t.description ?? '';
       this.requesterQuery.set(this.lookup.userName(t.requesterUserId));
-      this.questionnaire.set(await this.api.getTaskQuestionnaire(id));
+      this.requestTemplate.set(await this.api.getTaskRequestTemplate(id));
       await this.loadSubmissions(id);
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -490,7 +491,7 @@ export class TaskDetailComponent implements OnInit {
   /** Open the submit-work dialog; refresh task + History when a submission lands. */
   openSubmit(t: Task): void {
     const ref = this.dialog.open<'submitted' | undefined>(SubmitDialogComponent, {
-      data: { taskId: t.id, questions: this.questionnaire()?.questions ?? [] },
+      data: { taskId: t.id, questions: this.requestTemplate()?.questions ?? [] },
       autoFocus: 'dialog',
     });
     ref.closed.subscribe((result) => {

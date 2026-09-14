@@ -168,7 +168,7 @@ model Organization {
   activities             Activity[]
   divisions              Division[]
   teams                  Team[]
-  questionnaires         Questionnaire[]
+  requestTemplates       RequestTemplate[]
   tasks                  Task[]
   attachments            Attachment[]
   notifications          Notification[]
@@ -194,9 +194,9 @@ model Division {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   // The atomically-created inherent role (kind='division'); UNIQUE role.division_id.
   inherentRole Role?
-  // The division's default questionnaire (0..1); UNIQUE questionnaire.owner_division_id.
-  questionnaire Questionnaire?
-  tasks         Task[]
+  // The division's default request template (0..1); UNIQUE request_template.owner_division_id.
+  requestTemplate RequestTemplate?
+  tasks           Task[]
 
   @@index([organizationId])
   @@map("division")
@@ -424,12 +424,12 @@ model Activity {
   @@map("activity")
 }
 
-/// The always-present "ask" a task carries (Slice 3). A questionnaire is owned by
+/// The always-present "ask" a task carries (Slice 3). A request template is owned by
 /// **exactly one** of a division (the default) or a task (a per-task copy, Slice 4).
 /// Ownership exclusivity is schema-enforced (each owner column UNIQUE + a CHECK that
 /// exactly one is non-null — both hand-applied in the migration). `owner_task_id` is
 /// a bare column for now; its FK to `task` lands in Slice 4 with the task table.
-model Questionnaire {
+model RequestTemplate {
   id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   organizationId  String   @map("organization_id") @db.Uuid
   ownerDivisionId String?  @unique @map("owner_division_id") @db.Uuid
@@ -443,36 +443,36 @@ model Questionnaire {
   questions     Question[]
 
   @@index([organizationId])
-  @@map("questionnaire")
+  @@map("request_template")
 }
 
-/// One typed prompt in a questionnaire. `ordinal` orders the set (UNIQUE per
-/// questionnaire); `constraints` is the per-type quality bag (numeric range,
+/// One typed prompt in a request template. `ordinal` orders the set (UNIQUE per
+/// request template); `constraints` is the per-type quality bag (numeric range,
 /// options, allowed filetypes, char limits) — shape validated at the API boundary.
-/// Children of their questionnaire aggregate: ON DELETE CASCADE so a PUT can
+/// Children of their request template aggregate: ON DELETE CASCADE so a PUT can
 /// rewrite the question set in place.
 model Question {
-  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  questionnaireId String       @map("questionnaire_id") @db.Uuid
-  ordinal         Int
-  type            QuestionType
-  prompt          String
-  required        Boolean      @default(false)
-  constraints     Json         @default("{}")
-  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  requestTemplateId String       @map("request_template_id") @db.Uuid
+  ordinal           Int
+  type              QuestionType
+  prompt            String
+  required          Boolean      @default(false)
+  constraints       Json         @default("{}")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  questionnaire Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
-  answers       Answer[]
+  requestTemplate RequestTemplate @relation(fields: [requestTemplateId], references: [id], onDelete: Cascade)
+  answers         Answer[]
 
-  @@unique([questionnaireId, ordinal])
-  @@index([questionnaireId])
+  @@unique([requestTemplateId, ordinal])
+  @@index([requestTemplateId])
   @@map("question")
 }
 
 /// A unit of work (Slice 4). Created in a division (optionally a team), it deep-copies
-/// the division's default questionnaire into its own `questionnaire` row (reached via
-/// the inverse `questionnaire.owner_task_id` — there is no `task.questionnaire_id`).
+/// the division's default request template into its own `request_template` row (reached
+/// via the inverse `request_template.owner_task_id` — there is no `task.request_template_id`).
 /// `status_cache` is the rolled-up status (Slice 4: open|claimed). Metadata edits go
 /// through PATCH (name/description only); authority/structure changes via named actions.
 model Task {
@@ -496,11 +496,11 @@ model Task {
   division     Division       @relation(fields: [divisionId], references: [id], onDelete: Restrict)
   team         Team?          @relation(fields: [teamId], references: [id], onDelete: Restrict)
   requester    AppUser        @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
-  // The task's own questionnaire copy (0..1); UNIQUE questionnaire.owner_task_id.
-  questionnaire Questionnaire?
-  claimants     TaskClaimant[]
-  submissions   Submission[]
-  messages      Message[]
+  // The task's own request template copy (0..1); UNIQUE request_template.owner_task_id.
+  requestTemplate RequestTemplate?
+  claimants       TaskClaimant[]
+  submissions     Submission[]
+  messages        Message[]
 
   @@index([divisionId])
   @@index([teamId])
@@ -565,7 +565,7 @@ model Message {
   @@map("message")
 }
 
-/// A claimant's answers to the task's questionnaire (Slice 5), versioned across
+/// A claimant's answers to the task's request template (Slice 5), versioned across
 /// resubmissions by `submission_no` (part of identity — never changes after insert).
 /// `version` is the separate optimistic-lock counter: `task:review` writes are
 /// version-guarded and return 409 STALE_SUBMISSION on a lost update. `prev_submission_id`

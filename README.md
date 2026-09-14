@@ -22,7 +22,7 @@ software you fork:
 - The **permission matrix** is editable: every gated action is a `resource:verb` grant you assign
   to roles, scoped globally / to a group / to ownership. There's one access engine — no bespoke
   per-feature rules.
-- **Questionnaires** define what each kind of task asks for and collects (seven question types);
+- **Request Templates** define what each kind of task asks for and collects (seven question types);
   divisions supply defaults, and task authors can customize per task.
 - **Integrations** (which external groups map to which Patrice roles, in which direction) are
   configured per connection.
@@ -35,7 +35,7 @@ just rows.
 ## What you get
 
 **Work tracking.** Tasks carry a required division, optional team, a requester, markdown
-description, claimant **slots**, a per-division **questionnaire**, versioned **submissions**, a
+description, claimant **slots**, a per-division **request template**, versioned **submissions**, a
 derived **status** (rolled up from slots by a min-rule), and a one-level-threaded **message**
 stream with **attachments**. Requesters approve / return / reject submissions; views are paginated
 and faceted for teams running hundreds of items.
@@ -126,7 +126,7 @@ tests, and running the tiers without Docker) is in **[CONTRIBUTING.md](CONTRIBUT
 ## Project layout
 
 - `api/` — NestJS backend: the Prisma schema/migrations, the Cedar access engine, auth / sessions /
-  invitations, tasks / questionnaires / submissions, attachments + object storage, notifications
+  invitations, tasks / request templates / submissions, attachments + object storage, notifications
   (SSE), the GC sweep, the pg-boss queue, and the integrations adapter + Gateway listener. See
   [`api/CONTEXT.md`](api/CONTEXT.md).
 - `web/` — Angular frontend (standalone components, signals-first). See [`web/CONTEXT.md`](web/CONTEXT.md).

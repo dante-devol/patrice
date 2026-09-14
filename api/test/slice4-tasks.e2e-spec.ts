@@ -11,7 +11,7 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 4.1 — task schema + creation + questionnaire deep-copy + list + PATCH (#17). */
+/** Slice 4.1 — task schema + creation + request template deep-copy + list + PATCH (#17). */
 describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
   let booted: BootedApp;
   let app: INestApplication;
@@ -20,7 +20,7 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
 
   let writingId: string;
   let artId: string;
-  let emptyDivId: string; // a division with NO questionnaire
+  let emptyDivId: string; // a division with NO request template
   let adminRoleId: string;
 
   beforeAll(async () => {
@@ -35,14 +35,14 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     artId = (await auth(http().post('/api/divisions')).send({ name: 'Art' })).body.id;
     emptyDivId = (await auth(http().post('/api/divisions')).send({ name: 'Coordination' })).body.id;
 
-    // Give Writing + Art a questionnaire (Coordination intentionally has none).
-    await auth(http().put(`/api/divisions/${writingId}/questionnaire`)).send({
+    // Give Writing + Art a request template (Coordination intentionally has none).
+    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
       questions: [
         { type: 'text', prompt: 'Title', required: true, constraints: { maxChars: 120 } },
         { type: 'detail_text', prompt: 'Body', required: true, constraints: {} },
       ],
     });
-    await auth(http().put(`/api/divisions/${artId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${artId}/request-template`)).send({
       questions: [{ type: 'attachment', prompt: 'Asset', required: true, constraints: { allowedTypes: ['image/png'] } }],
     });
 
@@ -71,7 +71,7 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
   const auth = (r: request.Test) =>
     r.set('Cookie', admin.cookies).set('x-csrf-token', admin.csrf);
 
-  it('creates a task and deep-copies the division questionnaire', async () => {
+  it('creates a task and deep-copies the division request template', async () => {
     const res = await auth(http().post('/api/tasks')).send({
       name: 'First chapter',
       description: 'Write it',
@@ -83,16 +83,16 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     expect(res.body.openings).toBe(1);
     const taskId = res.body.id;
 
-    // The copy is a separate questionnaire row owned by the task (owner_task_id set,
-    // owner_division_id null) — schema has no task.questionnaire_id.
-    const qn = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    // The copy is a separate request template row owned by the task (owner_task_id set,
+    // owner_division_id null) — schema has no task.request_template_id.
+    const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     expect(qn.status).toBe(200);
     expect(qn.body.ownerTaskId).toBe(taskId);
     expect(qn.body.ownerDivisionId).toBeNull();
     expect(qn.body.questions.map((q: any) => q.prompt)).toEqual(['Title', 'Body']);
 
     // The copied questions are fresh rows (distinct ids from the division default).
-    const divQn = await auth(http().get(`/api/divisions/${writingId}/questionnaire`));
+    const divQn = await auth(http().get(`/api/divisions/${writingId}/request-template`));
     const divIds = new Set(divQn.body.questions.map((q: any) => q.id));
     for (const q of qn.body.questions) expect(divIds.has(q.id)).toBe(false);
   });
@@ -100,26 +100,26 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
   it('editing the division default afterward does NOT change an existing task copy', async () => {
     const created = await auth(http().post('/api/tasks')).send({ name: 'Snapshot', divisionId: artId });
     const taskId = created.body.id;
-    const before = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    const before = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     expect(before.body.questions).toHaveLength(1);
 
     // Rewrite Art's default to a totally different set.
-    await auth(http().put(`/api/divisions/${artId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${artId}/request-template`)).send({
       questions: [
         { type: 'text', prompt: 'New A', required: false, constraints: {} },
         { type: 'text', prompt: 'New B', required: false, constraints: {} },
       ],
     });
 
-    const after = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    const after = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     expect(after.body.questions).toHaveLength(1);
     expect(after.body.questions[0].prompt).toBe('Asset');
   });
 
-  it('422 NO_DEFAULT_QUESTIONNAIRE when the division has no questionnaire', async () => {
+  it('422 NO_DEFAULT_REQUEST_TEMPLATE when the division has no request template', async () => {
     const res = await auth(http().post('/api/tasks')).send({ name: 'Nope', divisionId: emptyDivId });
     expect(res.status).toBe(422);
-    expect(res.body.error.code).toBe('NO_DEFAULT_QUESTIONNAIRE');
+    expect(res.body.error.code).toBe('NO_DEFAULT_REQUEST_TEMPLATE');
   });
 
   it('writes a task.created activity row with an IDs-only payload', async () => {
@@ -131,7 +131,7 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     const payload = row!.payload as Record<string, unknown>;
     expect(payload.taskId).toBe(created.body.id);
     expect(payload.divisionId).toBe(writingId);
-    expect(typeof payload.questionnaireId).toBe('string');
+    expect(typeof payload.requestTemplateId).toBe('string');
     expect(JSON.stringify(payload)).not.toContain('Audited');
   });
 
@@ -164,7 +164,7 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     let pagingDivId: string;
     beforeAll(async () => {
       pagingDivId = (await auth(http().post('/api/divisions')).send({ name: 'Paging' })).body.id;
-      await auth(http().put(`/api/divisions/${pagingDivId}/questionnaire`)).send({ questions: [] });
+      await auth(http().put(`/api/divisions/${pagingDivId}/request-template`)).send({ questions: [] });
       for (let i = 0; i < 5; i++) {
         await auth(http().post('/api/tasks')).send({ name: `P${i}`, divisionId: pagingDivId });
       }
@@ -209,20 +209,20 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     });
   });
 
-  describe('PUT /tasks/:id/questionnaire — task:configure_questionnaire', () => {
+  describe('PUT /tasks/:id/request-template — task:configure_request_template', () => {
     let taskId: string;
     beforeAll(async () => {
       // Admin role also needs the configure action (not in the default seed).
       await auth(http().post('/api/grants')).send({
         roleId: adminRoleId,
-        action: 'task:configure_questionnaire',
+        action: 'task:configure_request_template',
         scopeKind: 'global',
       });
       taskId = (await auth(http().post('/api/tasks')).send({ name: 'Configurable', divisionId: writingId })).body.id;
     });
 
     it('rewrites the task copy in place without touching the division default', async () => {
-      const res = await auth(http().put(`/api/tasks/${taskId}/questionnaire`)).send({
+      const res = await auth(http().put(`/api/tasks/${taskId}/request-template`)).send({
         questions: [
           { type: 'text', prompt: 'Overridden A', required: false, constraints: {} },
           { type: 'numeric', prompt: 'Overridden B', required: true, constraints: { kind: 'integer', min: 0 } },
@@ -233,13 +233,13 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
       expect(res.body.questions.map((q: any) => q.prompt)).toEqual(['Overridden A', 'Overridden B']);
 
       // The Writing default is unchanged (still Title/Body).
-      const div = await auth(http().get(`/api/divisions/${writingId}/questionnaire`));
+      const div = await auth(http().get(`/api/divisions/${writingId}/request-template`));
       expect(div.body.questions.map((q: any) => q.prompt)).toEqual(['Title', 'Body']);
     });
 
-    it('writes a task_questionnaire.updated activity (IDs-only)', async () => {
+    it('writes a task_request_template.updated activity (IDs-only)', async () => {
       const row = await prisma.activity.findFirst({
-        where: { verb: 'task_questionnaire.updated' },
+        where: { verb: 'task_request_template.updated' },
         orderBy: { createdAt: 'desc' },
       });
       expect(row).not.toBeNull();

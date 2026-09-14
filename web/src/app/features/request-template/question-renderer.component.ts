@@ -3,13 +3,13 @@ import { AbstractControl, FormArray, FormGroup, ReactiveFormsModule } from '@ang
 import { Question, QuestionType } from '../../core/api.types';
 import {
   QUESTION_TYPES,
-  QuestionnaireFormService,
+  RequestTemplateFormService,
   isChoiceType,
   isTextType,
-} from './questionnaire-form.service';
+} from './request-template-form.service';
 
 /**
- * Questionnaire Renderer (web CONTEXT.md): the single component that walks the seven
+ * Request Template Renderer (web CONTEXT.md): the single component that walks the seven
  * question types to draw controls, in two modes. **Authoring** binds to a
  * question-definition `FormGroup` (the builder); **Answer** binds a value control to
  * a question definition (Slice 5 submissions). The type switch is identical in both —
@@ -117,7 +117,7 @@ import {
   ],
 })
 export class QuestionRendererComponent {
-  private readonly forms = inject(QuestionnaireFormService);
+  private readonly forms = inject(RequestTemplateFormService);
 
   @Input() mode: 'authoring' | 'answer' = 'authoring';
   /** Authoring: the question-definition group. */

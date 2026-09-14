@@ -21,7 +21,7 @@ import {
   MessageListResult,
   NotificationListResult,
   OrgSettings,
-  Questionnaire,
+  RequestTemplate,
   QuestionInput,
   ReviewDecision,
   Role,
@@ -212,13 +212,13 @@ export class ApiService {
     return firstValueFrom(this.http.post<void>(`/api/users/${userId}/revive`, {}));
   }
 
-  // ---- Slice 3: questionnaires -------------------------------------------
+  // ---- Slice 3: request templates -----------------------------------------
 
-  /** A division's default questionnaire, or null when it has none yet (404). */
-  async getQuestionnaire(divisionId: string): Promise<Questionnaire | null> {
+  /** A division's default request template, or null when it has none yet (404). */
+  async getRequestTemplate(divisionId: string): Promise<RequestTemplate | null> {
     try {
       return await firstValueFrom(
-        this.http.get<Questionnaire>(`/api/divisions/${divisionId}/questionnaire`),
+        this.http.get<RequestTemplate>(`/api/divisions/${divisionId}/request-template`),
       );
     } catch (e) {
       if (e instanceof HttpErrorResponse && e.status === 404) return null;
@@ -226,12 +226,12 @@ export class ApiService {
     }
   }
 
-  putQuestionnaire(
+  putRequestTemplate(
     divisionId: string,
     questions: QuestionInput[],
-  ): Promise<Questionnaire> {
+  ): Promise<RequestTemplate> {
     return firstValueFrom(
-      this.http.put<Questionnaire>(`/api/divisions/${divisionId}/questionnaire`, {
+      this.http.put<RequestTemplate>(`/api/divisions/${divisionId}/request-template`, {
         questions,
       }),
     );
@@ -304,11 +304,11 @@ export class ApiService {
     );
   }
 
-  /** A task's own questionnaire copy, or null when absent (404). */
-  async getTaskQuestionnaire(taskId: string): Promise<Questionnaire | null> {
+  /** A task's own request template copy, or null when absent (404). */
+  async getTaskRequestTemplate(taskId: string): Promise<RequestTemplate | null> {
     try {
       return await firstValueFrom(
-        this.http.get<Questionnaire>(`/api/tasks/${taskId}/questionnaire`),
+        this.http.get<RequestTemplate>(`/api/tasks/${taskId}/request-template`),
       );
     } catch (e) {
       if (e instanceof HttpErrorResponse && e.status === 404) return null;

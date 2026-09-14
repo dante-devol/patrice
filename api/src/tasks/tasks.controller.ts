@@ -22,11 +22,11 @@ import {
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { TasksService } from './tasks.service';
-import { QuestionnairesService } from '../questionnaires/questionnaires.service';
+import { RequestTemplatesService } from '../request-templates/request-templates.service';
 import {
-  putQuestionnaireSchema,
-  type PutQuestionnaireDto,
-} from '../questionnaires/questionnaires.dto';
+  putRequestTemplateSchema,
+  type PutRequestTemplateDto,
+} from '../request-templates/request-templates.dto';
 import {
   changeRequesterSchema,
   createTaskSchema,
@@ -53,7 +53,7 @@ interface AuthedRequest extends Request {
 export class TasksController {
   constructor(
     private readonly tasks: TasksService,
-    private readonly questionnaires: QuestionnairesService,
+    private readonly requestTemplates: RequestTemplatesService,
   ) {}
 
   @Get()
@@ -168,27 +168,27 @@ export class TasksController {
     return this.tasks.complete(id, req.user.id);
   }
 
-  @Get(':id/questionnaire')
-  async getQuestionnaire(@Param('id') id: string, @Req() req: AuthedRequest) {
+  @Get(':id/request-template')
+  async getRequestTemplate(@Param('id') id: string, @Req() req: AuthedRequest) {
     if (!req.user) throw new UnauthenticatedError();
-    const qn = await this.questionnaires.getForTask(id);
-    if (!qn) {
+    const rt = await this.requestTemplates.getForTask(id);
+    if (!rt) {
       throw new NotFoundError(
-        'QUESTIONNAIRE_NOT_FOUND',
-        'This task has no questionnaire',
+        'REQUEST_TEMPLATE_NOT_FOUND',
+        'This task has no request template',
       );
     }
-    return qn;
+    return rt;
   }
 
-  @Put(':id/questionnaire')
-  @Authorize(ACTIONS.taskConfigureQuestionnaire.action, taskResource)
-  async putQuestionnaire(
+  @Put(':id/request-template')
+  @Authorize(ACTIONS.taskConfigureRequestTemplate.action, taskResource)
+  async putRequestTemplate(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(putQuestionnaireSchema)) body: PutQuestionnaireDto,
+    @Body(new ZodValidationPipe(putRequestTemplateSchema)) body: PutRequestTemplateDto,
     @Req() req: AuthedRequest,
   ) {
     if (!req.user) throw new UnauthenticatedError();
-    return this.questionnaires.putForTask(id, req.user.id, body);
+    return this.requestTemplates.putForTask(id, req.user.id, body);
   }
 }

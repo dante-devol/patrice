@@ -43,7 +43,7 @@ export const ACTIONS = {
   taskReview: { action: 'task:review', resourceType: 'Task' },
   taskRetireSubmission: { action: 'task:retire_submission', resourceType: 'Task' },
   taskComplete: { action: 'task:complete', resourceType: 'Task' },
-  taskConfigureQuestionnaire: { action: 'task:configure_questionnaire', resourceType: 'Task' },
+  taskConfigureRequestTemplate: { action: 'task:configure_request_template', resourceType: 'Task' },
   taskManageClaims: { action: 'task:manage_claims', resourceType: 'Task' },
   taskChangeRequester: { action: 'task:change_requester', resourceType: 'Task' },
   // message:* / attachment:*
@@ -80,7 +80,7 @@ export const ACTIONS = {
   // the singleton org is the resource (admin holds global grants), mirroring the
   // role ops — keeps revive clear of the Retired-as-Hard-Deny that targets the
   // entity itself. `division:update` is (S)-scopable per §2.3 (it gates the default
-  // questionnaire, Slice 3): its resource is the Division, so a `specific_division`
+  // request template, Slice 3): its resource is the Division, so a `specific_division`
   // grant lets a division admin edit only their own division. Global grants still
   // match any Division resource, so the existing org-wide admin is unaffected.
   divisionCreate: { action: 'division:create', resourceType: 'Organization' },

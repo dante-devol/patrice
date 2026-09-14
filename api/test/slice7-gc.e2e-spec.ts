@@ -42,7 +42,7 @@ describe('Slice 7.3 — GC sweep', () => {
     }
 
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    await auth(http().put(`/api/divisions/${writingId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
       questions: [{ type: 'text', prompt: 'Title', required: true, constraints: {} }],
     });
     // A zero-length grace window makes anything retired immediately collectable.
@@ -88,7 +88,7 @@ describe('Slice 7.3 — GC sweep', () => {
     expect(await prisma.message.count({ where: { taskId } })).toBe(0);
     expect(await prisma.taskClaimant.count({ where: { taskId } })).toBe(0);
     expect(await prisma.attachment.count({ where: { messageId } })).toBe(0);
-    expect(await prisma.questionnaire.count({ where: { ownerTaskId: taskId } })).toBe(0);
+    expect(await prisma.requestTemplate.count({ where: { ownerTaskId: taskId } })).toBe(0);
 
     // The append-only activity log survives the aggregate it describes.
     expect(
@@ -101,7 +101,7 @@ describe('Slice 7.3 — GC sweep', () => {
 
   it('a division referenced by an active task survives; collects once dereferenced', async () => {
     const divId = (await auth(http().post('/api/divisions')).send({ name: 'Referenced' })).body.id;
-    await auth(http().put(`/api/divisions/${divId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${divId}/request-template`)).send({
       questions: [{ type: 'text', prompt: 'Q', required: false, constraints: {} }],
     });
     const taskId = (

@@ -3,22 +3,22 @@ import { FormArray, FormGroup } from '@angular/forms';
 import { Question, QuestionType } from '../../core/api.types';
 import {
   QUESTION_TYPES,
-  QuestionnaireFormService,
+  RequestTemplateFormService,
   isChoiceType,
   isTextType,
-} from './questionnaire-form.service';
+} from './request-template-form.service';
 
 /** A minimal Question of `type` with the given constraints. */
 function q(type: QuestionType, constraints: Question['constraints'] = {}): Question {
   return { id: type, type, prompt: `${type} prompt`, required: false, constraints };
 }
 
-describe('QuestionnaireFormService', () => {
-  let svc: QuestionnaireFormService;
+describe('RequestTemplateFormService', () => {
+  let svc: RequestTemplateFormService;
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
-    svc = TestBed.inject(QuestionnaireFormService);
+    svc = TestBed.inject(RequestTemplateFormService);
   });
 
   it('exposes all seven question types', () => {

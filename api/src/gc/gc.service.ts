@@ -441,7 +441,7 @@ export class GcService {
 
   /**
    * Delete a task and its whole aggregate as a unit (messages, submissions, answers,
-   * claimant slots, attachments, the task-owned questionnaire). Self-referential FKs
+   * claimant slots, attachments, the task-owned request template). Self-referential FKs
    * (reply→parent, resubmission→prior) are nulled first so a single `deleteMany` can't
    * trip RESTRICT mid-statement. Returns the deleted attachments' storage keys (for
    * post-commit blob removal), or `null` if a RESTRICT backstop blocked the delete.
@@ -470,7 +470,7 @@ export class GcService {
         await tx.message.deleteMany({ where: { taskId } });
         await tx.submission.deleteMany({ where: { taskId } }); // cascades answers
         await tx.taskClaimant.deleteMany({ where: { taskId } });
-        await tx.questionnaire.deleteMany({ where: { ownerTaskId: taskId } }); // cascades questions
+        await tx.requestTemplate.deleteMany({ where: { ownerTaskId: taskId } }); // cascades questions
         await tx.task.delete({ where: { id: taskId } });
 
         await this.logCollected(tx, orgId, 'task', taskId, 'gc.task_collected', {
@@ -492,9 +492,9 @@ export class GcService {
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        // Owned children first (questionnaire + inherent role), then the division —
+        // Owned children first (request template + inherent role), then the division —
         // each FK is RESTRICT, so order matters.
-        await tx.questionnaire.deleteMany({ where: { ownerDivisionId: divisionId } });
+        await tx.requestTemplate.deleteMany({ where: { ownerDivisionId: divisionId } });
         await tx.role.deleteMany({ where: { divisionId } });
         await tx.division.delete({ where: { id: divisionId } });
         await this.logCollected(tx, orgId, 'division', divisionId, 'gc.division_collected', {

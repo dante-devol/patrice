@@ -44,7 +44,7 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
   'task:update': 'requester',
   'task:retire': 'requester',
   'task:revive': 'requester',
-  'task:configure_questionnaire': 'requester',
+  'task:configure_request_template': 'requester',
   // Slice 4.2 — the requester manages claims / reassigns the requester.
   'task:manage_claims': 'requester',
   'task:change_requester': 'requester',

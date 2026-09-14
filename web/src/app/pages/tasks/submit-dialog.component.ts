@@ -5,7 +5,7 @@ import { ApiService } from '../../core/api.service';
 import { ToastService } from '../../core/toast.service';
 import { Question, SubmitAnswer } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
-import { isChoiceType, isTextType } from '../../features/questionnaire/questionnaire-form.service';
+import { isChoiceType, isTextType } from '../../features/request-template/request-template-form.service';
 
 export interface SubmitDialogData {
   taskId: string;
@@ -14,7 +14,7 @@ export interface SubmitDialogData {
 
 /**
  * Submit-your-work dialog (Slice 5). Replaces the always-open answer form: a claimant
- * fills the questionnaire and submits/resubmits here. The API re-authorizes `task:submit`
+ * fills the request template and submits/resubmits here. The API re-authorizes `task:submit`
  * (a non-claimant gets a 403 → error toast). Returns 'submitted' so the opener refreshes.
  */
 @Component({

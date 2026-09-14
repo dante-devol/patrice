@@ -12,7 +12,7 @@ import {
 } from './helpers';
 
 /** Slice 5.1 — task:submit + answers + validateSubmission + first-submission lock + M1 (#21). */
-describe('Slice 5.1 — Submit, validation, questionnaire lock', () => {
+describe('Slice 5.1 — Submit, validation, request template lock', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;
@@ -32,7 +32,7 @@ describe('Slice 5.1 — Submit, validation, questionnaire lock', () => {
     const writing = await auth(http().post('/api/divisions')).send({ name: 'Writing' });
     writingId = writing.body.id;
     // A required Detail-Text + an optional Numeric (range 1..10) to exercise validation.
-    await auth(http().put(`/api/divisions/${writingId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
       questions: [
         { type: 'detail_text', prompt: 'Body', required: true, constraints: { minChars: 3 } },
         { type: 'numeric', prompt: 'Rating', required: false, constraints: { kind: 'integer', min: 1, max: 10 } },
@@ -44,7 +44,7 @@ describe('Slice 5.1 — Submit, validation, questionnaire lock', () => {
       include: { userRoles: true },
     });
     const adminRoleId = adminUser.userRoles[0].roleId;
-    for (const action of ['task:create', 'task:assign', 'task:submit', 'task:configure_questionnaire']) {
+    for (const action of ['task:create', 'task:assign', 'task:submit', 'task:configure_request_template']) {
       const g = await auth(http().post('/api/grants')).send({ roleId: adminRoleId, action, scopeKind: 'global' });
       expect(g.status).toBe(201);
     }
@@ -70,14 +70,14 @@ describe('Slice 5.1 — Submit, validation, questionnaire lock', () => {
     const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
     const taskId = res.body.id;
     await as(claimer.session)(http().post(`/api/tasks/${taskId}/claim`));
-    const qn = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     return { taskId, questionIds: qn.body.questions.map((q: any) => q.id) };
   }
 
   it('a non-claimant cannot submit (Cedar 403 — own_as_claimant)', async () => {
     const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
     const taskId = res.body.id;
-    const qn = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     // claimer holds no slot here → own_as_claimant doesn't match.
     const denied = await as(claimer.session)(http().post(`/api/tasks/${taskId}/submissions`)).send({
       answers: [{ questionId: qn.body.questions[0].id, value: 'hello there' }],
@@ -130,25 +130,25 @@ describe('Slice 5.1 — Submit, validation, questionnaire lock', () => {
     expect((act.payload as any).claimantUserId).toBe(claimer.userId);
   });
 
-  it('locks the questionnaire once a submission exists (configure → 409)', async () => {
+  it('locks the request template once a submission exists (configure → 409)', async () => {
     const { taskId, questionIds } = await makeClaimedTask();
     // Before any submission, configuring is fine.
-    const before = await auth(http().put(`/api/tasks/${taskId}/questionnaire`)).send({
+    const before = await auth(http().put(`/api/tasks/${taskId}/request-template`)).send({
       questions: [{ type: 'text', prompt: 'X', required: false, constraints: {} }],
     });
     expect(before.status).toBe(200);
 
-    // Re-read the (now single-question) questionnaire and submit against it.
-    const qn = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    // Re-read the (now single-question) request template and submit against it.
+    const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     const sub = await as(claimer.session)(http().post(`/api/tasks/${taskId}/submissions`)).send({
       answers: [{ questionId: qn.body.questions[0].id, value: 'anything' }],
     });
     expect(sub.status).toBe(201);
 
-    const locked = await auth(http().put(`/api/tasks/${taskId}/questionnaire`)).send({
+    const locked = await auth(http().put(`/api/tasks/${taskId}/request-template`)).send({
       questions: [{ type: 'text', prompt: 'Y', required: false, constraints: {} }],
     });
     expect(locked.status).toBe(409);
-    expect(locked.body.error.code).toBe('QUESTIONNAIRE_LOCKED');
+    expect(locked.body.error.code).toBe('REQUEST_TEMPLATE_LOCKED');
   });
 });

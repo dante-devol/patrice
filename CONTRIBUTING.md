@@ -37,7 +37,7 @@ docker compose logs api | grep "BOOTSTRAP KEY"
 ```
 
 Open **http://localhost:8080/setup**, paste the key, and register the first admin. From there
-everything (roles, divisions, teams, the permission matrix, questionnaires, integrations) is
+everything (roles, divisions, teams, the permission matrix, request templates, integrations) is
 configured in the admin UI.
 
 ### Day-to-day

@@ -274,7 +274,7 @@
     .setting-number-input:focus { border-color:#0F7A6B; box-shadow:0 0 0 2px rgba(15,122,107,0.10); }
     .setting-unit { font-family:'IBM Plex Mono',monospace; font-size:11px; color:#5B605C; white-space:nowrap; }
 
-    /* questionnaire expand */
+    /* request template expand */
     .q-expand {
       padding:18px 22px; background:rgba(231,232,225,0.5);
       border-top:1px solid #E7E8E1;
@@ -456,7 +456,7 @@
         <div class="admin-card-header">
           <div>
             <div class="font-mono text-[10px] tracking-[0.16em] uppercase text-ink-soft mb-1">Divisions</div>
-            <p class="text-[13.5px] text-ink-soft">Each division has a claim configuration and an optional intake questionnaire for task requesters.</p>
+            <p class="text-[13.5px] text-ink-soft">Each division has a claim configuration and an optional intake request template for task requesters.</p>
           </div>
         </div>
 
@@ -479,7 +479,7 @@
           </thead>
           <tbody>
 
-            <!-- Writing — with questionnaire expanded -->
+            <!-- Writing — with request template expanded -->
             <tr>
               <td><input type="text" value="Writing" style="width:140px" /></td>
               <td><input type="number" value="2" /></td>
@@ -488,7 +488,7 @@
               <td><span class="stamp stamp--active">Active</span></td>
               <td>
                 <div class="btn-actions">
-                  <button class="btn-ghost" onclick="toggleQ(this,'q-writing')">Questionnaire</button>
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-writing')">Request Template</button>
                   <button class="btn-ghost btn-ghost--danger">Retire</button>
                 </div>
               </td>
@@ -496,10 +496,10 @@
             <tr id="q-writing" style="display:none">
               <td colspan="6" style="padding:0">
                 <div class="q-expand">
-                  <span class="q-expand-label">Questionnaire — Writing</span>
+                  <span class="q-expand-label">Request Template — Writing</span>
                   <div class="q-placeholder">
-                    Questionnaire builder renders here — fields, ordering, field types.<br />
-                    <span style="font-size:12px;margin-top:4px;display:block;color:#A7ABA3">questionnaire-builder component</span>
+                    Request template builder renders here — fields, ordering, field types.<br />
+                    <span style="font-size:12px;margin-top:4px;display:block;color:#A7ABA3">request-template-builder component</span>
                   </div>
                 </div>
               </td>
@@ -513,7 +513,7 @@
               <td><span class="stamp stamp--active">Active</span></td>
               <td>
                 <div class="btn-actions">
-                  <button class="btn-ghost" onclick="toggleQ(this,'q-art')">Questionnaire</button>
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-art')">Request Template</button>
                   <button class="btn-ghost btn-ghost--danger">Retire</button>
                 </div>
               </td>
@@ -521,8 +521,8 @@
             <tr id="q-art" style="display:none">
               <td colspan="6" style="padding:0">
                 <div class="q-expand">
-                  <span class="q-expand-label">Questionnaire — Art</span>
-                  <div class="q-placeholder">Questionnaire builder renders here.</div>
+                  <span class="q-expand-label">Request Template — Art</span>
+                  <div class="q-placeholder">Request template builder renders here.</div>
                 </div>
               </td>
             </tr>
@@ -535,7 +535,7 @@
               <td><span class="stamp stamp--active">Active</span></td>
               <td>
                 <div class="btn-actions">
-                  <button class="btn-ghost" onclick="toggleQ(this,'q-scripting')">Questionnaire</button>
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-scripting')">Request Template</button>
                   <button class="btn-ghost btn-ghost--danger">Retire</button>
                 </div>
               </td>
@@ -543,8 +543,8 @@
             <tr id="q-scripting" style="display:none">
               <td colspan="6" style="padding:0">
                 <div class="q-expand">
-                  <span class="q-expand-label">Questionnaire — Scripting</span>
-                  <div class="q-placeholder">Questionnaire builder renders here.</div>
+                  <span class="q-expand-label">Request Template — Scripting</span>
+                  <div class="q-placeholder">Request template builder renders here.</div>
                 </div>
               </td>
             </tr>
@@ -557,7 +557,7 @@
               <td><span class="stamp stamp--active">Active</span></td>
               <td>
                 <div class="btn-actions">
-                  <button class="btn-ghost" onclick="toggleQ(this,'q-testing')">Questionnaire</button>
+                  <button class="btn-ghost" onclick="toggleQ(this,'q-testing')">Request Template</button>
                   <button class="btn-ghost btn-ghost--danger">Retire</button>
                 </div>
               </td>
@@ -565,8 +565,8 @@
             <tr id="q-testing" style="display:none">
               <td colspan="6" style="padding:0">
                 <div class="q-expand">
-                  <span class="q-expand-label">Questionnaire — Testing</span>
-                  <div class="q-placeholder">Questionnaire builder renders here.</div>
+                  <span class="q-expand-label">Request Template — Testing</span>
+                  <div class="q-placeholder">Request template builder renders here.</div>
                 </div>
               </td>
             </tr>
@@ -1232,12 +1232,12 @@
       });
     });
 
-    // Division questionnaire expand/collapse
+    // Division request template expand/collapse
     function toggleQ(btn, rowId) {
       const row = document.getElementById(rowId);
       const open = row.style.display !== 'none';
       row.style.display = open ? 'none' : 'table-row';
-      btn.textContent = open ? 'Questionnaire' : 'Hide questionnaire';
+      btn.textContent = open ? 'Request Template' : 'Hide request template';
     }
 
     // Settings save feedback (demo only)

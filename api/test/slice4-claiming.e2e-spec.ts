@@ -40,7 +40,7 @@ describe('Slice 4.2 — Claiming, openings, requester', () => {
     secretRoleId = secret.body.inherentRoleId;
 
     for (const d of [writingId, secretId]) {
-      await auth(http().put(`/api/divisions/${d}/questionnaire`)).send({
+      await auth(http().put(`/api/divisions/${d}/request-template`)).send({
         questions: [{ type: 'text', prompt: 'T', required: false, constraints: {} }],
       });
     }

@@ -32,16 +32,16 @@ export function isChoiceType(t: QuestionType): boolean {
 }
 
 /**
- * QuestionnaireFormService (application layer, §3.4). The home of the
+ * RequestTemplateFormService (application layer, §3.4). The home of the
  * `question[] ↔ Angular Reactive Form` mapping — the form *engine*, kept separate
  * from the presentational renderer. **Authoring** builds a `FormArray` of
  * question-definition groups (one flat group per question, all constraint controls
  * present; `serialize` emits only the keys relevant to a question's type).
- * **Answer** mode (Slice 5) maps a questionnaire's questions to value controls with
+ * **Answer** mode (Slice 5) maps a request template's questions to value controls with
  * the per-type validators. Holds no component state, so it is unit-testable headless.
  */
 @Injectable({ providedIn: 'root' })
-export class QuestionnaireFormService {
+export class RequestTemplateFormService {
   private readonly fb = inject(FormBuilder);
 
   // ---- Authoring -----------------------------------------------------------

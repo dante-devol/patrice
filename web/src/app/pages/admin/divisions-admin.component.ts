@@ -3,14 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { Division } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
-import { QuestionnaireBuilderComponent } from '../../features/questionnaire/questionnaire-builder.component';
+import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
 import { divisionColor as computeDivColor } from '../tasks/task-presentation';
 
 /** Divisions editor (Slice 2.2): name, default openings, openings-locked, restrict-claims. */
 @Component({
   selector: 'divisions-admin',
   standalone: true,
-  imports: [FormsModule, QuestionnaireBuilderComponent],
+  imports: [FormsModule, RequestTemplateBuilderComponent],
   template: `
     <div class="panel">
       <h2>Divisions</h2>
@@ -46,8 +46,8 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
                          (change)="save(d, { restrictClaims: d.restrictClaims })" /></td>
               <td><span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span></td>
               <td>
-                <button class="secondary" (click)="toggleQuestionnaire(d.id)">
-                  {{ openQuestionnaire() === d.id ? 'Hide questionnaire' : 'Questionnaire' }}
+                <button class="secondary" (click)="toggleRequestTemplate(d.id)">
+                  {{ openRequestTemplate() === d.id ? 'Hide request template' : 'Request Template' }}
                 </button>
                 @if (d.lifecycleState === 'active') {
                   <button class="secondary" (click)="retire(d)">Retire</button>
@@ -56,8 +56,8 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
                 }
               </td>
             </tr>
-            @if (openQuestionnaire() === d.id) {
-              <tr><td colspan="7"><questionnaire-builder [divisionId]="d.id" /></td></tr>
+            @if (openRequestTemplate() === d.id) {
+              <tr><td colspan="7"><request-template-builder [divisionId]="d.id" /></td></tr>
             }
           } @empty { <tr><td colspan="7" class="muted">No divisions.</td></tr> }
         </tbody>
@@ -70,8 +70,8 @@ export class DivisionsAdminComponent {
   readonly divisions = signal<Division[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
-  /** Id of the division whose questionnaire builder is expanded (one at a time). */
-  readonly openQuestionnaire = signal<string | null>(null);
+  /** Id of the division whose request template builder is expanded (one at a time). */
+  readonly openRequestTemplate = signal<string | null>(null);
   newName = '';
 
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
@@ -86,8 +86,8 @@ export class DivisionsAdminComponent {
     await this.save(d, { color: null });
   }
 
-  toggleQuestionnaire(id: string): void {
-    this.openQuestionnaire.update((cur) => (cur === id ? null : id));
+  toggleRequestTemplate(id: string): void {
+    this.openRequestTemplate.update((cur) => (cur === id ? null : id));
   }
 
   constructor() {

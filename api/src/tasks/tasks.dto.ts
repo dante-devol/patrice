@@ -5,7 +5,7 @@ import { z } from 'zod';
  * optional team). PATCH is **pure metadata** — only `name`/`description`; `.strict()`
  * turns any other field (e.g. `divisionId`, `openings`, `requesterUserId`) into a 422
  * rather than a silent ignore (overview PATCH convention). Authority/structure changes
- * go through the named action endpoints (/claims, /requester, /questionnaire, /retire).
+ * go through the named action endpoints (/claims, /requester, /request-template, /retire).
  */
 const name = z.string().trim().min(1, 'Task name is required').max(200);
 const description = z.string().max(20_000);

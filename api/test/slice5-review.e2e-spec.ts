@@ -34,7 +34,7 @@ describe('Slice 5.2 — Review lifecycle', () => {
 
     const writing = await auth(http().post('/api/divisions')).send({ name: 'Writing', defaultOpenings: 1 });
     writingId = writing.body.id;
-    await auth(http().put(`/api/divisions/${writingId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
       questions: [{ type: 'text', prompt: 'Answer', required: true, constraints: {} }],
     });
 
@@ -72,7 +72,7 @@ describe('Slice 5.2 — Review lifecycle', () => {
     if (openings > 1) {
       await auth(http().post(`/api/tasks/${taskId}/claims`)).send({ openingsDelta: openings - 1 });
     }
-    const qn = await auth(http().get(`/api/tasks/${taskId}/questionnaire`));
+    const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     return { taskId, qId: qn.body.questions[0].id };
   }
 

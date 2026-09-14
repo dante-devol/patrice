@@ -173,7 +173,7 @@ export class MessageThreadComponent implements OnInit {
   @Input({ required: true }) task!: Task;
   /** Submissions, to resolve a "submitted vN" event to its Submission for the dialog. */
   @Input() submissions: Submission[] = [];
-  /** The task's questionnaire questions, for the review dialog's answer prompts. */
+  /** The task's request template questions, for the review dialog's answer prompts. */
   @Input() questions: Question[] = [];
   /** Fires after a review decision lands so the parent refreshes the task + claim strip. */
   @Output() changed = new EventEmitter<void>();

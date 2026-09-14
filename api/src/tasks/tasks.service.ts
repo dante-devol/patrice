@@ -41,8 +41,8 @@ export interface TaskListResult {
 }
 
 /**
- * Tasks (Slice 4.1). Creation **deep-copies** the division's default questionnaire
- * into a fresh `questionnaire` row owned by the new task (own copy → editing the
+ * Tasks (Slice 4.1). Creation **deep-copies** the division's default request template
+ * into a fresh `request_template` row owned by the new task (own copy → editing the
  * division default later never mutates this task). Listing is keyset/cursor paginated
  * (newest-first by the UUIDv7 PK) with index-backed faceted filters. PATCH is pure
  * metadata; lifecycle/authority/structure moves go through named action endpoints.
@@ -102,10 +102,10 @@ export class TasksService {
   }
 
   /**
-   * Create a task and deep-copy the division's questionnaire into a task-owned row.
-   * Requires the division to have a questionnaire (else `422 NO_DEFAULT_QUESTIONNAIRE`
+   * Create a task and deep-copy the division's request template into a task-owned row.
+   * Requires the division to have a request template (else `422 NO_DEFAULT_REQUEST_TEMPLATE`
    * — the empty `question[]` coordination-only case still counts as "has one").
-   * Insertion order is task → questionnaire(owner_task_id) → questions, all in one tx.
+   * Insertion order is task → request_template(owner_task_id) → questions, all in one tx.
    */
   async create(
     organizationId: string,
@@ -134,15 +134,15 @@ export class TasksService {
       }
     }
 
-    // The division MUST have a questionnaire to copy (Slice 4 contract).
-    const source = await this.prisma.questionnaire.findUnique({
+    // The division MUST have a request template to copy (Slice 4 contract).
+    const source = await this.prisma.requestTemplate.findUnique({
       where: { ownerDivisionId: dto.divisionId },
       include: { questions: { orderBy: { ordinal: 'asc' } } },
     });
     if (!source) {
       throw new UnprocessableError(
-        'NO_DEFAULT_QUESTIONNAIRE',
-        'This division has no questionnaire to copy',
+        'NO_DEFAULT_REQUEST_TEMPLATE',
+        'This division has no request template to copy',
       );
     }
 
@@ -167,16 +167,16 @@ export class TasksService {
         },
       });
 
-      // Deep-copy: a fresh questionnaire row owned by the task, then fresh question
+      // Deep-copy: a fresh request template row owned by the task, then fresh question
       // rows (new ids) carrying the source's ordinal/type/prompt/required/constraints.
-      const questionnaire = await tx.questionnaire.create({
+      const requestTemplate = await tx.requestTemplate.create({
         data: { organizationId, ownerTaskId: task.id },
         select: { id: true },
       });
       if (source.questions.length > 0) {
         await tx.question.createMany({
           data: source.questions.map((q) => ({
-            questionnaireId: questionnaire.id,
+            requestTemplateId: requestTemplate.id,
             ordinal: q.ordinal,
             type: q.type as QuestionType,
             prompt: q.prompt,
@@ -197,7 +197,7 @@ export class TasksService {
           taskId: task.id,
           divisionId: dto.divisionId,
           teamId: dto.teamId ?? null,
-          questionnaireId: questionnaire.id,
+          requestTemplateId: requestTemplate.id,
         },
       });
 

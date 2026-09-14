@@ -18,7 +18,7 @@ import { DivisionsModule } from './divisions/divisions.module';
 import { TeamsModule } from './teams/teams.module';
 import { GrantsModule } from './grants/grants.module';
 import { UsersModule } from './users/users.module';
-import { QuestionnairesModule } from './questionnaires/questionnaires.module';
+import { RequestTemplatesModule } from './request-templates/request-templates.module';
 import { TasksModule } from './tasks/tasks.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { MessagesModule } from './messages/messages.module';
@@ -55,7 +55,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     TeamsModule,
     GrantsModule,
     UsersModule,
-    QuestionnairesModule,
+    RequestTemplatesModule,
     StorageModule,
     MessagesModule,
     NotificationsModule,

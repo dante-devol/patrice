@@ -67,7 +67,7 @@ const STATUS_COLORS: Record<string, string> = {
 
         <div class="flex items-center gap-2">
           <!-- Status segmented control -->
-          <div class="inline-flex rounded-md border border-line bg-paper overflow-hidden font-mono text-[11px] uppercase tracking-[0.08em]">
+          <div class="inline-flex rounded-md border border-line bg-paper overflow-hidden font-mono text-[11px] uppercase tracking-[0.08em] gap-[4px]">
             <button class="px-3 py-1.5"
                     [class]="!statusFilter() ? 'bg-ink text-paper' : 'text-ink-soft hover:text-ink'"
                     (click)="statusFilter.set(null)">All</button>

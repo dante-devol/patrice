@@ -164,7 +164,7 @@ export interface ApiError {
   error: { code: string; message: string; details?: unknown };
 }
 
-// ---- Slice 3: questionnaires --------------------------------------------
+// ---- Slice 3: request templates ------------------------------------------
 
 export type QuestionType =
   | 'detail_text'
@@ -213,7 +213,7 @@ export interface QuestionInput {
   constraints: QuestionConstraints;
 }
 
-export interface Questionnaire {
+export interface RequestTemplate {
   id: string;
   ownerDivisionId: string | null;
   ownerTaskId: string | null;

@@ -60,7 +60,7 @@ const tasks = [
   task({ id: 't-barks', name: 'Write merchant barks — 20 lines', divisionId: 'd-writing', requesterUserId: 'u-maya', openings: 2, statusCache: 'open', createdAt: ago(1 * D), description: 'Short, repeatable merchant lines for the market district. Two writers welcome.' }),
 ];
 
-const questionnaire = {
+const requestTemplate = {
   id: 'q1', ownerDivisionId: 'd-writing', ownerTaskId: 't-localize',
   questions: [
     { id: 'q-lines', ordinal: 0, type: 'detail_text', prompt: 'Translated lines', required: true, constraints: {} },
@@ -124,7 +124,7 @@ async function mock(page) {
     if (p === '/actions') return json(route, { actions: ['task:create', 'task:claim', 'task:review'] });
     if (p === '/config') return json(route, { requireVerifiedEmailToLogIn: false, selfReviewAllowed: false, anonymizeLabel: false, sessionAbsoluteDays: 30, sessionIdleDays: 7, gracePeriodHours: 48 });
     if (p === '/tasks') return json(route, { items: tasks, nextCursor: null });
-    if (p.endsWith('/questionnaire')) return json(route, questionnaire);
+    if (p.endsWith('/request-template')) return json(route, requestTemplate);
     if (p.endsWith('/submissions')) return json(route, submissions);
     if (p.endsWith('/messages')) return json(route, { items: messages, nextCursor: null });
     const t = p.match(/^\/tasks\/([^/]+)$/);

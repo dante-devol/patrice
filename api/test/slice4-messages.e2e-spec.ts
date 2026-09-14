@@ -38,7 +38,7 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
     prisma = new PrismaClient();
 
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    await auth(http().put(`/api/divisions/${writingId}/questionnaire`)).send({
+    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
       questions: [{ type: 'text', prompt: 'T', required: false, constraints: {} }],
     });
 
