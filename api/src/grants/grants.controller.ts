@@ -16,8 +16,10 @@ import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { GrantsService } from './grants.service';
 import {
+  batchGrantsSchema,
   createGrantSchema,
   updateGrantSchema,
+  type BatchGrantsDto,
   type CreateGrantDto,
   type UpdateGrantDto,
 } from './grants.dto';
@@ -31,11 +33,11 @@ interface AuthedRequest extends Request {
 export class GrantsController {
   constructor(private readonly grants: GrantsService) {}
 
-  /** The closed action vocabulary — feeds the matrix's column axis. */
+  /** The closed action vocabulary, plus each action's assignable scopes for the editor. */
   @Get('actions')
   @Authorize(ACTIONS.grantCreate.action, orgResource)
   listActions() {
-    return { actions: this.grants.listActions() };
+    return { actions: this.grants.listActions(), catalog: this.grants.actionCatalog() };
   }
 
   @Get('grants')
@@ -54,6 +56,18 @@ export class GrantsController {
   ) {
     if (!req.user) throw new UnauthenticatedError();
     return this.grants.create(req.user.organizationId, req.user.id, body);
+  }
+
+  /** The editor's staged changes, all-or-nothing. Creates/retires re-check their own action. */
+  @Post('grants/batch')
+  @HttpCode(200)
+  @Authorize(ACTIONS.grantUpdate.action, orgResource)
+  async batch(
+    @Body(new ZodValidationPipe(batchGrantsSchema)) body: BatchGrantsDto,
+    @Req() req: AuthedRequest,
+  ) {
+    if (!req.user) throw new UnauthenticatedError();
+    return this.grants.applyBatch(req.user.organizationId, req.user.id, body);
   }
 
   @Patch('grants/:id')

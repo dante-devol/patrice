@@ -155,3 +155,12 @@ A task row, left to right:
   is graphite and bold with a 2px underline, the same treatment as tabs.
 - **Admin name cells** carry the division or team colour as a 3px left edge, the same
   spine as task rows.
+- **Permissions**: never a role × action grid. A searchable role list (standalone,
+  divisions, teams; teams collapsed) beside one role's grants, grouped by resource, with
+  each action named in words and its code name in `soft`. "By action" flips it: pick an
+  action, see every role holding it. Both views edit one working copy; nothing saves until
+  **Save changes**, in a save bar that floats (float shadow) at the bottom of the sheet.
+  An unsaved row gets a 3px **rust** left edge and its old scope struck through beneath
+  it; roles and actions with unsaved edits carry a small rust dot. "Not granted" and a
+  target still to pick use the dashed outline. Every scope picker has a tooltip (`.hint`)
+  saying exactly what the scope lets the person do.

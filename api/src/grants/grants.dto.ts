@@ -44,3 +44,37 @@ export const updateGrantSchema = z
 
 export type CreateGrantDto = z.infer<typeof createGrantSchema>;
 export type UpdateGrantDto = z.infer<typeof updateGrantSchema>;
+
+const scopeIdFields = {
+  scopeDivisionId: z.string().uuid().nullish(),
+  scopeTeamId: z.string().uuid().nullish(),
+  scopeRoleId: z.string().uuid().nullish(),
+};
+
+/**
+ * `POST /grants/batch` — the matrix editor's staged changes, applied all-or-nothing.
+ * `update`/`retire` carry the `version` the editor last saw, so a grant someone else
+ * changed in the meantime refuses the whole batch (409) instead of being overwritten.
+ * An update re-scopes a grant; its action and role are fixed (retire + create to move).
+ */
+export const batchGrantChangeSchema = z.discriminatedUnion('op', [
+  createGrantSchema.extend({ op: z.literal('create') }),
+  z
+    .object({
+      op: z.literal('update'),
+      id: z.string().uuid(),
+      version: z.number().int(),
+      effect: z.enum(['permit', 'forbid']).optional(),
+      scopeKind: scopeKindSchema,
+      ...scopeIdFields,
+    })
+    .strict(),
+  z.object({ op: z.literal('retire'), id: z.string().uuid(), version: z.number().int() }).strict(),
+]);
+
+export const batchGrantsSchema = z
+  .object({ changes: z.array(batchGrantChangeSchema).min(1).max(500) })
+  .strict();
+
+export type BatchGrantChange = z.infer<typeof batchGrantChangeSchema>;
+export type BatchGrantsDto = z.infer<typeof batchGrantsSchema>;

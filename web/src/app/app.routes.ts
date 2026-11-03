@@ -1,6 +1,8 @@
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { adminGuard } from './core/admin.guard';
+import { UnsavedChangesService } from './core/unsaved-changes.service';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'home' },
@@ -42,6 +44,7 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [authGuard, adminGuard],
+    canDeactivate: [() => inject(UnsavedChangesService).confirmLeave()],
     loadComponent: () =>
       import('./pages/admin/admin.component').then((m) => m.AdminComponent),
   },

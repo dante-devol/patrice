@@ -1,4 +1,5 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { RolesAdminComponent } from './roles-admin.component';
 import { DivisionsAdminComponent } from './divisions-admin.component';
 import { TeamsAdminComponent } from './teams-admin.component';
@@ -37,7 +38,7 @@ type Tab =
   template: `
     <nav class="admin-tabs">
       @for (t of tabs; track t) {
-        <button class="admin-tab" [class.is-active]="tab() === t" (click)="tab.set(t)">{{ t }}</button>
+        <button class="admin-tab" [class.is-active]="tab() === t" (click)="select(t)">{{ t }}</button>
       }
     </nav>
     @switch (tab()) {
@@ -66,4 +67,10 @@ export class AdminComponent {
     'integrations',
   ];
   readonly tab = signal<Tab>('roles');
+  private readonly unsaved = inject(UnsavedChangesService);
+
+  /** Switching tabs unmounts the editor, so staged permission edits need a yes first. */
+  select(t: Tab): void {
+    if (t !== this.tab() && this.unsaved.confirmLeave()) this.tab.set(t);
+  }
 }

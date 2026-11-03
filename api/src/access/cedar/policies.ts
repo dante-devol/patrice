@@ -64,6 +64,16 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The owner relation an `own` grant on `action` checks, or null when the action has
+ * none (so `own` cannot project). `task:assign` is the claim-eligibility clause, not an
+ * ownership check. Read by the matrix's action catalogue to explain each `own` scope.
+ */
+export function ownRelation(action: string): string | null {
+  if (action === 'task:assign') return 'claim_eligibility';
+  return OWN_ATTR_BY_ACTION[action] ?? null;
+}
+
+/**
  * Claim Eligibility AND-Composition (api/CONTEXT.md): the `own_as_claimant` clause
  * the `task:assign` permit carries. A principal may claim iff — for each of division
  * and team — that group does NOT restrict claims, OR the principal is a member of it

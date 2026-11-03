@@ -99,9 +99,63 @@ const messages = [
   ] }),
 ];
 
+const role = (id, name, kind, extra = {}) => ({ id, name, kind, divisionId: null, teamId: null, lifecycleState: 'active', retiredAt: null, version: 1, color: null, ...extra });
+// Enough roles to show the permissions editor at the scale it's built for (25+).
 const roles = [
-  { id: 'r-admin', name: 'Org Admin', kind: 'standalone', divisionId: null, teamId: null, lifecycleState: 'active', retiredAt: null, version: 1 },
-  { id: 'r-lead', name: 'Division Lead', kind: 'division', divisionId: 'd-writing', teamId: null, lifecycleState: 'active', retiredAt: null, version: 1 },
+  role('r-admin', 'Org Admin', 'standalone'),
+  role('r-lead', 'Writing lead', 'standalone'),
+  role('r-reviewer', 'Reviewer', 'standalone'),
+  role('r-mod', 'Moderator', 'standalone'),
+  role('r-producer', 'Producer', 'standalone'),
+  role('r-guest', 'Guest contributor', 'standalone'),
+  ...divisions.map((d) => role(`r-${d.id}`, d.name, 'division', { divisionId: d.id })),
+  ...['USA', 'EU', 'Japan', 'Korea', 'Brazil', 'Voice cast', 'Combat', 'Narrative', 'UI', 'Audio', 'QA nights', 'Localization', 'Lore', 'Tools', 'Events', 'Community', 'Docs']
+    .map((n, i) => role(`r-team-${i}`, n, 'team', { teamId: `t-${i}` })),
+];
+
+// The action catalogue (`GET /actions`), shaped like the API's: scopes per resource type.
+const GROUP = ['global', 'own_division', 'own_team', 'specific_division', 'specific_team'];
+const OWN = {
+  'task:update': 'requester', 'task:retire': 'requester', 'task:revive': 'requester', 'task:assign': 'claim_eligibility',
+  'task:submit': 'claimant', 'task:review': 'requester', 'task:retire_submission': 'requester', 'task:complete': 'requester',
+  'task:configure_request_template': 'requester', 'task:manage_claims': 'requester', 'task:change_requester': 'requester',
+  'message:create': 'sender', 'message:update': 'sender', 'message:retire': 'sender',
+  'attachment:create': 'uploader', 'attachment:retire': 'uploader', 'attachment:revive': 'uploader',
+};
+const catalog = [
+  ...['create', 'update', 'retire', 'revive', 'assign', 'submit', 'review', 'retire_submission', 'complete', 'configure_request_template', 'manage_claims', 'change_requester'].map((v) => ['task:' + v, 'Task']),
+  ...['create', 'update', 'retire', 'revive'].map((v) => ['message:' + v, 'Message']),
+  ...['create', 'retire', 'revive'].map((v) => ['attachment:' + v, 'Attachment']),
+  ...['update', 'retire', 'revive', 'deactivate', 'reactivate', 'grant_role', 'revoke_role'].map((v) => ['user:' + v, 'User']),
+  ['session:revoke', 'Session'], ['invite:create', 'Organization'], ['invite:retire', 'Invitation'],
+  ...['create', 'update', 'retire', 'revive'].flatMap((v) => [['grant:' + v, 'Organization'], ['role:' + v, 'Organization']]),
+  ['config:update', 'Organization'],
+].map(([action, resourceType]) => {
+  const scopes = ['Task', 'Message', 'Attachment', 'Division'].includes(resourceType) ? [...GROUP] : ['global'];
+  if (resourceType === 'User') scopes.push('role');
+  if (OWN[action]) scopes.push('own');
+  return { action, resourceType, scopes, own: OWN[action] ?? null };
+});
+
+let gid = 0;
+const grant = (roleId, action, scopeKind, extra = {}) => ({
+  id: `g-${++gid}`, roleId, action, effect: 'permit', scopeKind, scopeDivisionId: null, scopeTeamId: null, scopeRoleId: null,
+  lifecycleState: 'active', retiredAt: null, version: 1, ...extra,
+});
+const grants = [
+  ...catalog.map((a) => grant('r-admin', a.action, 'global')),
+  grant('r-lead', 'task:create', 'own_division'),
+  grant('r-lead', 'task:update', 'own_division'),
+  grant('r-lead', 'task:retire', 'own_team'),
+  grant('r-lead', 'task:review', 'own_division'),
+  grant('r-lead', 'task:review', 'specific_division', { scopeDivisionId: 'd-art' }),
+  grant('r-lead', 'task:complete', 'own'),
+  grant('r-lead', 'task:manage_claims', 'own'),
+  grant('r-lead', 'message:create', 'global'),
+  grant('r-lead', 'message:retire', 'own_division'),
+  grant('r-lead', 'user:grant_role', 'role', { scopeRoleId: 'r-reviewer' }),
+  grant('r-reviewer', 'task:review', 'own'),
+  ...divisions.flatMap((d) => [grant(`r-${d.id}`, 'task:assign', 'own'), grant(`r-${d.id}`, 'task:submit', 'own'), grant(`r-${d.id}`, 'message:create', 'global')]),
 ];
 
 function json(route, body) {
@@ -122,8 +176,8 @@ async function mock(page) {
     if (p === '/integrations') return json(route, []);
     if (p === '/invitations') return json(route, []);
     if (p === '/roles') return json(route, roles);
-    if (p === '/grants') return json(route, []);
-    if (p === '/actions') return json(route, { actions: ['task:create', 'task:claim', 'task:review'] });
+    if (p === '/grants') return json(route, grants);
+    if (p === '/actions') return json(route, { actions: catalog.map((a) => a.action), catalog });
     if (p === '/config') return json(route, { requireVerifiedEmailToLogIn: false, selfReviewAllowed: false, anonymizeLabel: false, sessionAbsoluteDays: 30, sessionIdleDays: 7, gracePeriodHours: 48 });
     if (p === '/tasks') return json(route, { items: tasks, nextCursor: null });
     if (p.endsWith('/request-template')) return json(route, requestTemplate);
@@ -176,6 +230,21 @@ await page.getByRole('button', { name: 'divisions' }).click().catch(() => {});
 await page.getByText('Tavern', { exact: false }).waitFor().catch(() => {});
 await page.waitForTimeout(300);
 await page.screenshot({ path: join(OUT, 'admin-divisions.png'), fullPage: true });
+
+// Permissions editor: pick a role, stage two edits so the changed rows and save bar show.
+await page.getByRole('button', { name: 'permissions' }).click();
+await page.getByRole('button', { name: /Writing lead/ }).click();
+await page.getByText('Standalone role, 10 grants').waitFor();
+await page.getByRole('combobox', { name: 'Retire tasks scope' }).selectOption('own_division');
+await page.getByRole('combobox', { name: 'Change the requester scope' }).selectOption('specific_division');
+await page.getByRole('combobox', { name: 'Review submissions scope' }).first().hover();
+await page.waitForTimeout(500); // the tooltip shows after a short hover delay
+await page.screenshot({ path: join(OUT, 'admin-permissions.png'), fullPage: true });
+
+await page.getByRole('button', { name: 'By action' }).click();
+await page.getByRole('button', { name: /^Review submissions/ }).click();
+await page.getByText(/task:review, held by/).waitFor();
+await page.screenshot({ path: join(OUT, 'admin-permissions-by-action.png'), fullPage: true });
 
 // Login renders only when unauthenticated → drop the /me mock for this one.
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });

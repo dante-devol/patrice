@@ -71,6 +71,29 @@ export interface Grant {
   version: number;
 }
 
+/** One action as the permission editor sees it (`GET /actions` catalogue). */
+export interface ActionInfo {
+  action: string;
+  resourceType: string;
+  /** The scopes this action can be granted at; `global` is always first. */
+  scopes: ScopeKind[];
+  /** What an `own` grant checks: `requester`, `claimant`, `sender`, `uploader`, `claim_eligibility`. */
+  own: string | null;
+}
+
+interface GrantScopeFields {
+  scopeKind: ScopeKind;
+  scopeDivisionId?: string | null;
+  scopeTeamId?: string | null;
+  scopeRoleId?: string | null;
+}
+
+/** One staged change in a `POST /grants/batch` save. */
+export type GrantChange =
+  | ({ op: 'create'; roleId: string; action: string; effect?: 'permit' | 'forbid' } & GrantScopeFields)
+  | ({ op: 'update'; id: string; version: number } & GrantScopeFields)
+  | { op: 'retire'; id: string; version: number };
+
 export interface AdminUser {
   id: string;
   email: string | null;
