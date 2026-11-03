@@ -66,10 +66,16 @@ const ROLE_KINDS: { kind: Role['kind']; name: string; label: string }[] = [
                 font: inherit; font-weight: 400; text-align: left; cursor: pointer; }
     .row-item:hover { background: var(--paper-hover); }
     .row-item.is-current { background: var(--paper-hover); font-weight: 700; box-shadow: inset 3px 0 0 var(--ink); }
-    .group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px;
-                  background: var(--paper-alt); border: 0; border-radius: 0; margin: 0;
-                  color: var(--ink-soft); font: inherit; font-weight: 400; text-align: left; cursor: pointer; }
-    .group-head:hover { background: var(--paper-hover); }
+    /* Category headers: a board-tinted band under a darker rule, a full step below the
+       alternating rows, so a category never reads as one more line entry. */
+    .group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 10px 8px;
+                  background: color-mix(in srgb, var(--board) 60%, var(--paper));
+                  border: 0; border-top: 1px solid var(--faint); border-radius: 0; margin: 0;
+                  color: var(--ink); font: inherit; font-weight: 400; text-align: left; cursor: pointer; }
+    .group-head:first-child { border-top: 0; }
+    .group-head:hover { background: color-mix(in srgb, var(--board) 85%, var(--paper)); }
+    .group-name { font-family: var(--font-display); font-weight: 700; font-size: 14px; }
+    .group-count { color: var(--ink-soft); }
     .perm-row { display: flex; align-items: flex-start; gap: 12px; padding: 8px 12px; }
     .perm-row--changed { box-shadow: inset 3px 0 0 var(--rust); }
     .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rust); flex: none; }
@@ -100,7 +106,8 @@ const ROLE_KINDS: { kind: Role['kind']; name: string; label: string }[] = [
           <div class="sheet">
             @for (g of roleGroups(); track g.kind) {
               <button class="group-head" (click)="toggle('roles:' + g.kind)" [attr.aria-expanded]="!isCollapsed('roles:' + g.kind)">
-                {{ g.name }}<span class="flex-1"></span>{{ g.roles.length }}
+                <span class="group-name">{{ g.name }}</span><span class="group-count">{{ g.roles.length }}</span>
+                <span class="flex-1"></span><span aria-hidden="true">{{ isCollapsed('roles:' + g.kind) ? '+' : '−' }}</span>
               </button>
               @if (!isCollapsed('roles:' + g.kind)) {
                 @for (r of g.roles; track r.id) {
@@ -121,7 +128,8 @@ const ROLE_KINDS: { kind: Role['kind']; name: string; label: string }[] = [
           <div class="sheet">
             @for (g of actionPickGroups(); track g.name) {
               <button class="group-head" (click)="toggle('actions:' + g.name)" [attr.aria-expanded]="!isCollapsed('actions:' + g.name)">
-                {{ g.name }}<span class="flex-1"></span>{{ g.actions.length }}
+                <span class="group-name">{{ g.name }}</span><span class="group-count">{{ g.actions.length }}</span>
+                <span class="flex-1"></span><span aria-hidden="true">{{ isCollapsed('actions:' + g.name) ? '+' : '−' }}</span>
               </button>
               @if (!isCollapsed('actions:' + g.name)) {
                 @for (a of g.actions; track a.action) {
@@ -156,9 +164,9 @@ const ROLE_KINDS: { kind: Role['kind']; name: string; label: string }[] = [
                 </div>
               </div>
               @for (g of roleActionGroups(); track g.name) {
-                <button class="group-head !text-ink" (click)="toggle('grants:' + g.name)" [attr.aria-expanded]="!isCollapsed('grants:' + g.name)">
-                  <span class="font-display font-bold text-[14px]">{{ g.name }}</span>
-                  <span class="text-ink-soft">{{ g.granted }} of {{ g.total }}</span>
+                <button class="group-head" (click)="toggle('grants:' + g.name)" [attr.aria-expanded]="!isCollapsed('grants:' + g.name)">
+                  <span class="group-name">{{ g.name }}</span>
+                  <span class="group-count">{{ g.granted }} of {{ g.total }}</span>
                   <span class="flex-1"></span>
                   <span aria-hidden="true">{{ isCollapsed('grants:' + g.name) ? '+' : '−' }}</span>
                 </button>
