@@ -19,16 +19,12 @@ export const NOTIFICATION_TYPES = [
   'task.requester_changed',
   'task.claim_joined',
   'task.claim_left',
+  'task.claim_evicted',
   'task.claims_closed',
-  'task.openings_added',
   'task.retired',
-  'task.revived',
   'message.posted',
   'message.replied',
   'message.submission_thread_replied',
-  'invitation.redeemed',
-  'retired_block',
-  'last_admin_refused',
   // Admin alert: an outbound Discord role push was refused (e.g. bot permissions).
   'integration.push_failed',
 ] as const;
@@ -43,25 +39,6 @@ export const REVIEW_DECISION_TYPE: Readonly<
   return: 'task.reviewed_returned',
   reject: 'task.reviewed_rejected',
 };
-
-/**
- * A single domain event to fan out into per-recipient notification rows. The sender
- * is suppressed from `recipientUserIds`; `eventSeq` is optional — when omitted the
- * service computes the next monotonic value per `(subjectType, subjectId, type)`.
- * `payload` is IDs + small enums only (no PII).
- */
-export interface NotificationEvent {
-  type: NotificationType;
-  /** The entity the idempotency key groups on (e.g. 'task', 'submission', 'message'). */
-  subjectType: string;
-  subjectId: string;
-  /** The actor — universally suppressed from their own recipient set. */
-  senderUserId?: string | null;
-  recipientUserIds: string[];
-  payload: Record<string, unknown>;
-  /** Explicit idempotency seq; when omitted, computed as MAX(event_seq)+1 in-tx. */
-  eventSeq?: bigint;
-}
 
 /**
  * The recipient set actually written: de-duplicated, the sender removed, falsy ids

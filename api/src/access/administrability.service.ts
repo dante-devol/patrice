@@ -50,7 +50,7 @@ export class AdministrabilityService {
             role: {
               lifecycleState: 'active',
               grants: {
-                some: { lifecycleState: 'active', effect: 'permit', action: { in: [...EFFECTIVE_ADMIN_ACTIONS] } },
+                some: { effect: 'permit', action: { in: [...EFFECTIVE_ADMIN_ACTIONS] } },
               },
             },
           },

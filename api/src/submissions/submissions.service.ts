@@ -7,7 +7,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
-import { MessagesService } from '../messages/messages.service';
+import { EventStore } from '../events/event-store.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { REVIEW_DECISION_TYPE } from '../notifications/notification.types';
 import { TaskStatusService } from '../tasks/task-status.service';
@@ -76,7 +76,7 @@ export class SubmissionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
-    private readonly messages: MessagesService,
+    private readonly events: EventStore,
     private readonly notifications: NotificationsService,
     private readonly status: TaskStatusService,
   ) {}
@@ -162,10 +162,7 @@ export class SubmissionsService {
 
     const lookup: AttachmentLookupPort = async (attId) => {
       const att = await this.prisma.attachment.findFirst({
-        where: {
-          id: attId,
-          lifecycleState: LifecycleState.active,
-        },
+        where: { id: attId },
         select: { contentType: true, kind: true },
       });
       return att ? { contentType: att.contentType, kind: att.kind } : null;
@@ -180,7 +177,6 @@ export class SubmissionsService {
       );
     }
 
-    let notified: string[] = [];
     const created = await this.prisma.$transaction(async (tx) => {
       // Serialize concurrent submits by this claimant so submission_no is race-safe.
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
@@ -246,14 +242,6 @@ export class SubmissionsService {
         data: { hasSubmitted: true },
       });
 
-      // System message M1 — the top-level host of this submission's review thread.
-      await this.messages.createSystemMessage(
-        tx,
-        taskId,
-        `User ${actorUserId} submitted version ${submissionNo}.`,
-        { submissionId: submission.id },
-      );
-
       await this.status.recompute(tx, taskId);
 
       await this.activity.logActivity({
@@ -270,14 +258,13 @@ export class SubmissionsService {
         },
       });
 
-      // Notify the task requester (sender — the claimant — is suppressed).
-      notified = await this.notifications.emit(tx, {
-        type: 'task.submitted',
-        subjectType: 'submission',
-        subjectId: submission.id,
-        senderUserId: actorUserId,
-        recipientUserIds: [await this.notifications.requesterId(tx, taskId)],
-        payload: { taskId, submissionId: submission.id, actorUserId },
+      // On the timeline; the requester is notified.
+      await this.events.record(tx, {
+        type: 'submission.submitted',
+        taskId,
+        actorUserId,
+        payload: { submissionId: submission.id, submissionNo },
+        notify: { type: 'task.submitted', recipients: [await this.notifications.requesterId(tx, taskId)] },
       });
 
       return tx.submission.findUniqueOrThrow({
@@ -286,7 +273,7 @@ export class SubmissionsService {
       });
     });
 
-    this.notifications.publish(notified);
+    await this.events.deliver();
     return this.toView(created);
   }
 
@@ -350,7 +337,6 @@ export class SubmissionsService {
     }
     const outcome = DECISION_OUTCOME[dto.decision];
 
-    let notified: string[] = [];
     await this.prisma.$transaction(async (tx) => {
       // Version-guarded UPDATE — 0 rows means another writer moved it first.
       const updated = await tx.submission.updateMany({
@@ -369,33 +355,10 @@ export class SubmissionsService {
         );
       }
 
-      // The decision is a system reply under the submission's M1 top-level message.
-      const m1 = await tx.message.findFirst({
-        where: {
-          taskId: submission.taskId,
-          submissionId,
-          parentMessageId: null,
-          kind: 'system',
-        },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      });
-      await this.messages.createSystemMessage(
-        tx,
-        submission.taskId,
-        `Reviewer ${actorUserId} ${outcome.verb} version ${submission.submissionNo}.`,
-        { submissionId, parentMessageId: m1?.id ?? null },
-      );
+      // A review comment is a comment about the submission.
       if (dto.comment) {
         await tx.message.create({
-          data: {
-            taskId: submission.taskId,
-            kind: 'comment',
-            senderUserId: actorUserId,
-            parentMessageId: m1?.id ?? null,
-            submissionId,
-            body: dto.comment,
-          },
+          data: { taskId: submission.taskId, senderUserId: actorUserId, submissionId, body: dto.comment },
         });
       }
 
@@ -414,19 +377,17 @@ export class SubmissionsService {
         },
       });
 
-      // Notify the submission's claimant of the decision (reviewer is suppressed —
-      // self-review is forbidden by Cedar anyway, this is the backstop).
-      notified = await this.notifications.emit(tx, {
-        type: REVIEW_DECISION_TYPE[dto.decision],
-        subjectType: 'submission',
-        subjectId: submissionId,
-        senderUserId: actorUserId,
-        recipientUserIds: [submission.claimantUserId],
-        payload: { taskId: submission.taskId, submissionId, decision: dto.decision },
+      // On the timeline; the submission's author is notified of the decision.
+      await this.events.record(tx, {
+        type: 'submission.reviewed',
+        taskId: submission.taskId,
+        actorUserId,
+        payload: { submissionId, submissionNo: submission.submissionNo, decision: dto.decision },
+        notify: { type: REVIEW_DECISION_TYPE[dto.decision], recipients: [submission.claimantUserId] },
       });
     });
 
-    this.notifications.publish(notified);
+    await this.events.deliver();
     return this.get(submissionId);
   }
 
@@ -463,22 +424,16 @@ export class SubmissionsService {
 
     const now = new Date();
     await this.prisma.$transaction(async (tx) => {
-      // 1. Task-level audit message — submission_id NULL so the cascade (step 3) and
-      //    submission GC both leave it standing.
-      await tx.message.create({
-        data: {
-          taskId: submission.taskId,
-          kind: 'system',
-          senderUserId: null,
-          submissionId: null,
-          parentMessageId: null,
-          body: JSON.stringify({
-            verb: 'submission_retired',
-            submissionNo: submission.submissionNo,
-            claimantUserId: submission.claimantUserId,
-            retiredBy: actorUserId,
-            reason: dto.reason,
-          }),
+      // 1. The timeline entry: the only place the moderator's reason is kept.
+      const eventId = await this.events.record(tx, {
+        type: 'submission.retired',
+        taskId: submission.taskId,
+        actorUserId,
+        payload: {
+          submissionId,
+          submissionNo: submission.submissionNo,
+          claimantUserId: submission.claimantUserId,
+          reason: dto.reason,
         },
       });
 
@@ -492,12 +447,6 @@ export class SubmissionsService {
         },
       });
 
-      // 3. Cascade — soft-retire M1 + every reply bound to this submission's thread.
-      await tx.message.updateMany({
-        where: { submissionId, lifecycleState: LifecycleState.active },
-        data: { lifecycleState: LifecycleState.retired, retiredAt: now },
-      });
-
       // 4. Revert the claimant slot — the spot is claimable again.
       await tx.taskClaimant.updateMany({
         where: { taskId: submission.taskId, userId: submission.claimantUserId },
@@ -507,7 +456,8 @@ export class SubmissionsService {
       // 5. Recompute status.
       await this.status.recompute(tx, submission.taskId);
 
-      // 6. Org-level audit (distinct from the task-thread audit message in step 1).
+      // 6. Org-level audit. It references the timeline entry rather than copying the
+      //    reason, so free text never enters the append-only log.
       await this.activity.logActivity({
         tx,
         actorUserId,
@@ -518,7 +468,7 @@ export class SubmissionsService {
           taskId: submission.taskId,
           submissionId,
           claimantUserId: submission.claimantUserId,
-          reason: dto.reason,
+          eventId,
         },
       });
     });

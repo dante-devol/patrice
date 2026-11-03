@@ -11,7 +11,7 @@
 //  - Discord avatars (Slice 8) aren't wired, so avatars fall back to initials on a
 //    deterministic colour.
 
-import { Message, Task, TaskStatus } from '../../core/api.types';
+import { Message, Task, TaskStatus, TimelineEntry } from '../../core/api.types';
 
 // ---- Status → rubber stamp ------------------------------------------------
 
@@ -123,12 +123,6 @@ export function userOrderColor(ordinal: number, variant: 'full' | 'soft' | 'bg' 
   return `hsl(${h.toFixed(1)},50%,92%)`;
 }
 
-/** Extract the primary actor user-ID from a raw system message body. */
-export function parseActorId(body: string): string | null {
-  const m = body.match(/^(?:User|Reviewer) (\S+)/i);
-  return m ? m[1].replace(/[.,]$/, '') : null;
-}
-
 /** Up-to-two-letter initials for an avatar fallback. */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -149,70 +143,21 @@ export type HistoryNodeKind =
   | 'comment'
   | 'neutral';
 
-/** Classify a system message body into a timeline node kind (drives node colour). */
-export function systemNodeKind(body: string): HistoryNodeKind {
-  const b = body.toLowerCase();
-  if (b.includes('claimed')) return 'claim';
-  if (b.includes('left this task')) return 'leave';
-  if (b.includes('submitted')) return 'submit';
-  if (b.includes('returned')) return 'return';
-  if (b.includes('approved') || b.includes('marked this task complete')) return 'approve';
-  if (b.includes('rejected')) return 'return';
-  if (b.includes('requester changed')) return 'neutral';
-  return 'neutral';
-}
-
-/**
- * Humanise a senderless system body for the History stream. The server stores raw ids
- * ("User <id> claimed this task.") for audit-PII discipline; here we resolve them to
- * display names and use the domain phrasing ("claimed an opening", "submitted v2").
- */
-export function humanizeSystemBody(
-  body: string,
-  resolveName: (id: string) => string,
-): string {
-  let m: RegExpMatchArray | null;
-
-  if ((m = body.match(/^User (\S+) claimed this task\.?$/))) {
-    return `${resolveName(m[1])} claimed an opening`;
-  }
-  if ((m = body.match(/^User (\S+) left this task\.?$/))) {
-    return `${resolveName(m[1])} left`;
-  }
-  if ((m = body.match(/^User (\S+) marked this task complete\.?$/))) {
-    return `${resolveName(m[1])} marked the task complete`;
-  }
-  if ((m = body.match(/^Requester changed to user (\S+?)\.?$/))) {
-    return `requester changed to ${resolveName(m[1])}`;
-  }
-  if ((m = body.match(/^User (\S+) submitted version (\d+)\.?$/))) {
-    return `${resolveName(m[1])} submitted v${m[2]} for review`;
-  }
-  if ((m = body.match(/^Reviewer (\S+) (approved|returned|rejected) version (\d+)\.?$/))) {
-    return `${resolveName(m[1])} ${m[2]} v${m[3]}`;
-  }
-  // Unknown shape: best-effort id→name substitution so we never leak a raw uuid.
-  return body.replace(/\b[Uu]ser (\S+?)([.,]?)(\s|$)/g, (_all, id, punct, tail) =>
-    `${resolveName(id)}${punct}${tail}`,
-  );
-}
-
-/** The actor + version a "submitted version N" system body refers to, for linking
- *  a submit event to its Submission (the web Message view carries no submissionId). */
-export function parseSubmitEvent(body: string): { actorId: string; version: number } | null {
-  const m = body.match(/^User (\S+) submitted version (\d+)\.?$/);
-  return m ? { actorId: m[1], version: Number(m[2]) } : null;
+/** A reference from a timeline event to the submission it's about. */
+export interface SubmissionRef {
+  submissionId: string;
+  actorId: string;
+  version: number;
 }
 
 export interface HistoryReply {
   id: string;
   kind: 'comment' | 'system';
   node: HistoryNodeKind;
-  /** Resolved line for system replies; raw body for comments. */
+  /** The rendered line for system replies; the body for comments. */
   text: string;
-  message: Message;
+  message: Message | null;
   createdAt: string;
-  /** The user who caused this event (parsed from body for system, senderUserId for comments). */
   actorId: string | null;
 }
 
@@ -220,66 +165,146 @@ export interface HistoryEvent {
   id: string;
   kind: 'comment' | 'system';
   node: HistoryNodeKind;
-  /** Resolved, human-readable line for system events; raw body for comments. */
+  /** The rendered line for system events; the body for comments. */
   text: string;
   message: Message | null;
   createdAt: string;
-  /** Set on "submitted vN" events so the UI can open the matching submission. */
-  submission: { actorId: string; version: number } | null;
-  /** One-level replies (review decisions + comments) threaded under this event. */
+  /** Set on "submitted vN" events so the UI can open (and comment on) the submission. */
+  submission: SubmissionRef | null;
+  /** One-level replies threaded under this event (review decisions + comments). */
   replies: HistoryReply[];
-  /** The user who caused this event (parsed from body for system, senderUserId for comments). */
   actorId: string | null;
 }
 
-function reply(m: Message, resolveName: (id: string | null) => string): HistoryReply {
-  const actorId = m.kind === 'system' ? parseActorId(m.body) : m.senderUserId;
-  return m.kind === 'system'
-    ? { id: m.id, kind: 'system', node: systemNodeKind(m.body), text: humanizeSystemBody(m.body, resolveName), message: m, createdAt: m.createdAt, actorId }
-    : { id: m.id, kind: 'comment', node: 'comment', text: m.body, message: m, createdAt: m.createdAt, actorId };
+const DECISION_WORD = { approve: 'approved', return: 'returned', reject: 'rejected' } as const;
+
+/** How one timeline entry reads, and its node colour. */
+function describe(
+  e: TimelineEntry,
+  name: (id: string | null) => string,
+): { node: HistoryNodeKind; text: string } {
+  const actor = name(e.actorUserId);
+  const p = e.payload as Record<string, unknown>;
+  switch (e.type) {
+    case 'task.created':
+      return { node: 'request', text: `${actor} requested this task` };
+    case 'task.claimed':
+      return { node: 'claim', text: `${name(p['userId'] as string)} claimed an opening` };
+    case 'task.left':
+      return { node: 'leave', text: `${name(p['userId'] as string)} left` };
+    case 'task.claimant_evicted':
+      return { node: 'leave', text: `${actor} removed ${name(p['userId'] as string)}` };
+    case 'task.requester_changed':
+      return { node: 'neutral', text: `requester changed to ${name(p['toUserId'] as string)}` };
+    case 'task.claims_changed':
+      return {
+        node: 'neutral',
+        text:
+          p['claimsClosed'] === true
+            ? `${actor} closed claims`
+            : p['claimsClosed'] === false
+              ? `${actor} reopened claims`
+              : `${actor} set openings to ${p['openings']}`,
+      };
+    case 'task.completed':
+      return { node: 'approve', text: `${actor} marked the task complete` };
+    case 'task.retired':
+      return { node: 'neutral', text: `${actor} retired the task` };
+    case 'task.revived':
+      return { node: 'neutral', text: `${actor} revived the task` };
+    case 'submission.submitted':
+      return { node: 'submit', text: `${actor} submitted v${p['submissionNo']} for review` };
+    case 'submission.reviewed': {
+      const decision = p['decision'] as keyof typeof DECISION_WORD;
+      return {
+        node: decision === 'approve' ? 'approve' : 'return',
+        text: `${actor} ${DECISION_WORD[decision]} v${p['submissionNo']}`,
+      };
+    }
+    case 'submission.retired':
+      return { node: 'neutral', text: `${actor} removed v${p['submissionNo']}: ${p['reason']}` };
+    default:
+      // Unreachable while the switch covers the catalog; a newer server's event reads raw.
+      return { node: 'neutral', text: (e as { type: string }).type };
+  }
+}
+
+function commentReply(m: Message): HistoryReply {
+  return {
+    id: m.id,
+    kind: 'comment',
+    node: 'comment',
+    text: m.deletedAt ? '(deleted)' : m.body,
+    message: m,
+    createdAt: m.createdAt,
+    actorId: m.senderUserId,
+  };
 }
 
 /**
- * Build the unified History as a threaded stream: a synthetic "requested" event (the
- * task has no system message of its own) plus each top-level message, with its one-level
- * replies nested beneath it. So a "submitted vN" event carries the return decision and
- * any discussion as its own thread (the design's "comments on the submission"), and
- * top-level comments carry their replies. System bodies are humanised + classified.
+ * Build the History as one threaded stream from the task's timeline (typed events)
+ * and its thread (comments). A "submitted vN" event carries that submission's review
+ * decisions and the comments about it as replies; top-level comments carry theirs.
  */
 export function buildHistory(
-  task: Pick<Task, 'requesterUserId' | 'createdAt'>,
+  timeline: TimelineEntry[],
   messages: Message[],
   resolveName: (id: string | null) => string,
 ): HistoryEvent[] {
-  const requested: HistoryEvent = {
-    id: 'requested',
-    kind: 'system',
-    node: 'request',
-    text: `${resolveName(task.requesterUserId)} requested this task`,
-    message: null,
-    createdAt: task.createdAt,
-    submission: null,
-    replies: [],
-    actorId: task.requesterUserId,
-  };
+  const events: HistoryEvent[] = [];
+  // The latest "submitted" event per submission hosts its decisions and comments.
+  const hostFor = new Map<string, HistoryEvent>();
+  const pending: { submissionId: string; reply: HistoryReply }[] = [];
 
-  const events: HistoryEvent[] = messages.map((m) => {
-    const base = reply(m, resolveName);
-    return {
-      ...base,
-      message: m,
-      submission: m.kind === 'system' ? parseSubmitEvent(m.body) : null,
-      replies: (m.replies ?? []).map((r) => reply(r, resolveName)),
+  for (const e of timeline) {
+    const { node, text } = describe(e, resolveName);
+    const p = e.payload as Record<string, unknown>;
+    if (e.type === 'submission.reviewed') {
+      pending.push({
+        submissionId: p['submissionId'] as string,
+        reply: { id: e.id, kind: 'system', node, text, message: null, createdAt: e.occurredAt, actorId: e.actorUserId },
+      });
+      continue;
+    }
+    const ev: HistoryEvent = {
+      id: e.id,
+      kind: 'system',
+      node,
+      text,
+      message: null,
+      createdAt: e.occurredAt,
+      submission:
+        e.type === 'submission.submitted'
+          ? { submissionId: p['submissionId'] as string, actorId: e.actorUserId ?? '', version: p['submissionNo'] as number }
+          : null,
+      replies: [],
+      actorId: e.actorUserId,
     };
-  });
-  events.unshift(requested);
+    if (ev.submission) hostFor.set(ev.submission.submissionId, ev);
+    events.push(ev);
+  }
 
-  // Stable chronological order of top-level events; replies keep their own order.
+  for (const m of messages) {
+    if (m.submissionId && hostFor.has(m.submissionId)) {
+      pending.push({ submissionId: m.submissionId, reply: commentReply(m) });
+      for (const r of m.replies ?? []) pending.push({ submissionId: m.submissionId, reply: commentReply(r) });
+      continue;
+    }
+    events.push({
+      ...commentReply(m),
+      submission: null,
+      replies: (m.replies ?? []).map(commentReply),
+    });
+  }
+  for (const { submissionId, reply } of pending) hostFor.get(submissionId)?.replies.push(reply);
+  for (const host of hostFor.values()) host.replies.sort(byTime);
+
   return events
     .map((e, i) => ({ e, i }))
-    .sort((a, b) => {
-      const t = new Date(a.e.createdAt).getTime() - new Date(b.e.createdAt).getTime();
-      return t !== 0 ? t : a.i - b.i;
-    })
+    .sort((a, b) => byTime(a.e, b.e) || a.i - b.i)
     .map(({ e }) => e);
+}
+
+function byTime(a: { createdAt: string }, b: { createdAt: string }): number {
+  return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
 }

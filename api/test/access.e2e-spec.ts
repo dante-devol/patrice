@@ -68,8 +68,8 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
   describe('a fresh install can do work', () => {
     it('new invitations pre-assign Member by default', async () => {
       const inv = await auth(http().post('/api/invitations')).send({});
-      const row = await prisma.invitation.findUniqueOrThrow({ where: { id: inv.body.id } });
-      expect(row.intendedRoleIds).toEqual([memberRoleId]);
+      const roles = await prisma.invitationRole.findMany({ where: { invitationId: inv.body.id } });
+      expect(roles.map((r) => r.roleId)).toEqual([memberRoleId]);
     });
 
     it('Admin creates a task with no extra grants; a Member claims and submits it', async () => {

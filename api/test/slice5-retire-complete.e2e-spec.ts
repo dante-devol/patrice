@@ -80,7 +80,7 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
     expect((await auth(http().post(`/api/submissions/${submissionId}/retire`)).send({ reason: 'no' })).status).toBe(422);
   });
 
-  it('retire cascades the thread, reverts the slot, and keeps a task-level audit message', async () => {
+  it('retire records a timeline entry with the reason and reverts the slot', async () => {
     const { taskId, submissionId } = await claimedSubmission();
 
     const res = await auth(http().post(`/api/submissions/${submissionId}/retire`)).send({
@@ -89,27 +89,20 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
     expect(res.status).toBe(200);
     expect(res.body.lifecycleState).toBe('retired');
 
-    // M1 + replies (submission_id = sub) are retired.
-    const threadActive = await prisma.message.count({
-      where: { submissionId, lifecycleState: 'active' },
-    });
-    expect(threadActive).toBe(0);
-
-    // The task-level audit message (submission_id NULL) survives and carries the reason.
-    const audit = await prisma.message.findFirstOrThrow({
-      where: { taskId, submissionId: null, kind: 'system', body: { contains: 'submission_retired' } },
-    });
-    expect(audit.lifecycleState).toBe('active');
-    expect(JSON.parse(audit.body).reason).toBe('spam / junk submission');
+    // The timeline entry carries the reason; it's the only place the reason is kept.
+    const timeline = (await auth(http().get(`/api/tasks/${taskId}/timeline`))).body;
+    const retired = timeline.find((e: { type: string }) => e.type === 'submission.retired');
+    expect(retired.payload).toMatchObject({ submissionId, reason: 'spam / junk submission' });
 
     // Slot reverted → claimable again; status floors to claimed (Empty Contributing Set).
     const slot = await prisma.taskClaimant.findFirstOrThrow({ where: { taskId, userId: claimer.userId } });
     expect(slot.hasSubmitted).toBe(false);
     expect((await auth(http().get(`/api/tasks/${taskId}`))).body.statusCache).toBe('claimed');
 
-    // Org-level activity row written with the reason.
+    // The audit row points at the timeline entry; the free-text reason stays out of it.
     const act = await prisma.activity.findFirstOrThrow({ where: { verb: 'submission.retired', subjectId: submissionId } });
-    expect((act.payload as any).reason).toBe('spam / junk submission');
+    expect((act.payload as any).reason).toBeUndefined();
+    expect((act.payload as any).eventId).toBe(retired.id);
   });
 
   it('Empty Contributing Set Floor: a lone rejected submission ⇒ claimed (never approved)', async () => {

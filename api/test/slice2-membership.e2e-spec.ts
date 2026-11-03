@@ -186,14 +186,14 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
       expect(res.body.error.code).toBe('LAST_ADMIN');
     });
 
-    it("retiring any of the last admin's governance grants is refused with 409 LAST_ADMIN", async () => {
+    it("deleting any of the last admin's governance grants is refused with 409 LAST_ADMIN", async () => {
       // An effective admin is someone Cedar permits all six governance actions, so
       // losing any one of them is losing admin. Exercised against the service directly
       // to isolate the admin floor from the AuthorizeGuard.
       const govActions = [
         'grant:create',
         'grant:update',
-        'grant:retire',
+        'grant:delete',
         'role:create',
         'role:update',
         'role:retire',
@@ -202,7 +202,6 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
         where: {
           action: { in: govActions },
           scopeKind: 'global',
-          lifecycleState: 'active',
         },
         select: { id: true },
       });
@@ -210,12 +209,12 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
 
       const svc = app.get(GrantsService);
       for (const row of rows) {
-        await expect(svc.retire(row.id, adminUserId)).rejects.toMatchObject({
+        await expect(svc.delete(row.id, adminUserId)).rejects.toMatchObject({
           response: { error: { code: 'LAST_ADMIN' } },
         });
       }
       expect(
-        await prisma.grant.count({ where: { id: { in: rows.map((r) => r.id) }, lifecycleState: 'active' } }),
+        await prisma.grant.count({ where: { id: { in: rows.map((r) => r.id) } } }),
       ).toBe(6);
 
       const refusal = await prisma.activity.findFirst({

@@ -18,6 +18,7 @@ import {
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { TasksService } from './tasks.service';
+import { EventStore } from '../events/event-store.service';
 import { RequestTemplatesService } from '../request-templates/request-templates.service';
 import {
   putRequestTemplateSchema,
@@ -49,6 +50,7 @@ export class TasksController {
   constructor(
     private readonly tasks: TasksService,
     private readonly requestTemplates: RequestTemplatesService,
+    private readonly events: EventStore,
   ) {}
 
   @Contract(ROUTES.listTasks)
@@ -176,6 +178,14 @@ export class TasksController {
       );
     }
     return rt;
+  }
+
+  /** What happened on the task, oldest first, as typed events (readable while retired). */
+  @Contract(ROUTES.getTaskTimeline)
+  @Get(':id/timeline')
+  @Authorize(ACTIONS.taskRead.action, taskResource)
+  async timeline(@Param('id') id: string) {
+    return this.events.timeline(id);
   }
 
   @Contract(ROUTES.putTaskTemplate)

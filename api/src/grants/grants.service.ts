@@ -32,8 +32,6 @@ export interface GrantView {
   scopeDivisionId: string | null;
   scopeTeamId: string | null;
   scopeRoleId: string | null;
-  lifecycleState: LifecycleState;
-  retiredAt: Date | null;
   version: number;
 }
 
@@ -59,7 +57,6 @@ export class GrantsService {
     private readonly admin: AdministrabilityService,
     private readonly cedar: CedarEngine,
     private readonly activity: ActivityService,
-    private readonly grace: GraceService,
     private readonly settings: SettingsService,
   ) {}
 
@@ -68,9 +65,8 @@ export class GrantsService {
     return ALL_ACTION_STRINGS;
   }
 
-  async list(includeRetired = false): Promise<GrantView[]> {
+  async list(): Promise<GrantView[]> {
     return this.prisma.grant.findMany({
-      where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
       select: this.viewSelect(),
     });
@@ -86,8 +82,6 @@ export class GrantsService {
       scopeDivisionId: true,
       scopeTeamId: true,
       scopeRoleId: true,
-      lifecycleState: true,
-      retiredAt: true,
       version: true,
     } satisfies Prisma.GrantSelect;
   }
@@ -159,7 +153,6 @@ export class GrantsService {
 
     const active = await this.prisma.grant.findMany({
       where: {
-        lifecycleState: 'active',
         role: { lifecycleState: 'active' },
         ...(excludeGrantId ? { id: { not: excludeGrantId } } : {}),
       },
@@ -345,7 +338,7 @@ export class GrantsService {
           subjectType: 'grant',
           subjectId: g.id,
           verb: 'grant.updated',
-          payload: { grantId: g.id, roleId: g.roleId },
+          payload: { grantId: g.id, roleId: g.roleId, before: grantShape(existing), after: grantShape(g) },
         });
         await this.access.bumpConfigVersion(tx);
         return g;
@@ -354,69 +347,45 @@ export class GrantsService {
     return grant;
   }
 
-  async retire(id: string, actorUserId: string): Promise<GrantView> {
+  /**
+   * Delete a grant permanently (`grant:delete`). Removing authority can strip the
+   * last admin, so it runs under the admin floor. The audit row keeps the grant's
+   * shape, so what was removed stays answerable.
+   */
+  async delete(id: string, actorUserId: string): Promise<void> {
     const existing = await this.load(id);
-    if (existing.lifecycleState === LifecycleState.retired) {
-      throw new ConflictError('ALREADY_RETIRED', 'Grant is already retired');
-    }
-    const grant = await this.admin.withAdminFloor(
+    await this.admin.withAdminFloor(
       actorUserId,
-      { type: 'grant', id: existing.id, path: 'grant.retire' },
+      { type: 'grant', id: existing.id, path: 'grant.delete' },
       async (tx) => {
-        const g = await tx.grant.update({
-          where: { id: existing.id },
-          data: {
-            lifecycleState: LifecycleState.retired,
-            retiredAt: new Date(),
-            version: { increment: 1 },
-          },
-          select: this.viewSelect(),
-        });
+        await tx.grant.delete({ where: { id: existing.id } });
         await this.activity.logActivity({
           tx,
           actorUserId,
           subjectType: 'grant',
-          subjectId: g.id,
-          verb: 'grant.retired',
-          payload: { grantId: g.id, roleId: g.roleId },
+          subjectId: existing.id,
+          verb: 'grant.deleted',
+          payload: { grantId: existing.id, roleId: existing.roleId, ...grantShape(existing) },
         });
         await this.access.bumpConfigVersion(tx);
-        return g;
       },
     );
-    return grant;
   }
+}
 
-  async revive(id: string, actorUserId: string): Promise<GrantView> {
-    const existing = await this.load(id);
-    const graceMs = await this.grace.windowMs();
-    if (!isRevivable(existing, graceMs)) {
-      throw new ConflictError(
-        'NOT_REVIVABLE',
-        'Grant is not retired or its grace period has elapsed',
-      );
-    }
-    const grant = await this.prisma.$transaction(async (tx) => {
-      const g = await tx.grant.update({
-        where: { id: existing.id },
-        data: {
-          lifecycleState: LifecycleState.active,
-          retiredAt: null,
-          version: { increment: 1 },
-        },
-        select: this.viewSelect(),
-      });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'grant',
-        subjectId: g.id,
-        verb: 'grant.revived',
-        payload: { grantId: g.id, roleId: g.roleId },
-      });
-      await this.access.bumpConfigVersion(tx);
-      return g;
-    });
-    return grant;
-  }
+/** A grant's configuration, as audited (action, effect, scope). */
+function grantShape(g: {
+  action: string;
+  effect: GrantEffect;
+  scopeKind: ScopeKind | string;
+  scopeDivisionId?: string | null;
+  scopeTeamId?: string | null;
+  scopeRoleId?: string | null;
+}) {
+  return {
+    action: g.action,
+    effect: g.effect,
+    scopeKind: g.scopeKind,
+    scopeId: g.scopeDivisionId ?? g.scopeTeamId ?? g.scopeRoleId ?? null,
+  };
 }

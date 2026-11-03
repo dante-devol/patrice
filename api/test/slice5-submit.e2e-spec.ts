@@ -117,11 +117,9 @@ describe('Slice 5.1 — Submit, validation, request template lock', () => {
     const slot = await prisma.taskClaimant.findFirstOrThrow({ where: { taskId, userId: claimer.userId } });
     expect(slot.hasSubmitted).toBe(true);
 
-    // M1: a top-level system message bound to this submission's thread.
-    const m1 = await prisma.message.findFirstOrThrow({
-      where: { taskId, submissionId: res.body.id, parentMessageId: null, kind: 'system' },
-    });
-    expect(m1).not.toBeNull();
+    // A typed timeline entry, tied to the submission.
+    const event = await prisma.domainEvent.findFirstOrThrow({ where: { taskId, type: 'submission.submitted' } });
+    expect(event.payload).toEqual({ submissionId: res.body.id, submissionNo: 1 });
 
     // Activity row, IDs only.
     const act = await prisma.activity.findFirstOrThrow({

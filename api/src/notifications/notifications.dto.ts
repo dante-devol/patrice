@@ -1,12 +1,12 @@
 import { z } from 'zod';
 
 /**
- * Notification read-list query (Slice 6). Keyset-paginated by `after` (the last seen
- * notification id); `limit` caps the page. Unread-first ordering is applied service-side.
+ * Notification read-list query. Keyset-paginated by `after`, the opaque `nextCursor`
+ * of the previous page; `limit` caps the page. Unread come first, then newest.
  */
 export const listNotificationsQuerySchema = z
   .object({
-    after: z.string().uuid().optional(),
+    after: z.string().regex(/^(unread|read):[0-9a-f-]{36}$/).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })
   .strip();

@@ -18,7 +18,6 @@ export type AuthMethod = Schemas['AuthMethod'];
 export type QuestionType = Schemas['QuestionType'];
 export type TaskStatus = Schemas['TaskStatus'];
 export type SubmissionState = Schemas['SubmissionState'];
-export type MessageKind = Schemas['MessageKind'];
 export type ActivitySource = Schemas['ActivitySource'];
 export type IntegrationProvider = Schemas['IntegrationProvider'];
 export type IntegrationStatus = Schemas['IntegrationStatus'];
@@ -56,6 +55,7 @@ export type Attachment = Schemas['Attachment'];
 export type AttachmentMeta = Schemas['AttachmentMeta'];
 export type Message = Schemas['Message'];
 export type MessageListResult = Schemas['MessageListResult'];
+export type TimelineEntry = Schemas['TimelineEntry'];
 
 export type AnswerView = Schemas['Answer'];
 export type Submission = Schemas['Submission'];

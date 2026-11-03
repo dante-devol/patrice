@@ -145,12 +145,12 @@ export class InvitationsService {
       data: {
         tokenHash: hashToken(this.env.TOKEN_PEPPER, token),
         email: args.email ?? null,
-        intendedRoleIds,
+        roles: { create: intendedRoleIds.map((roleId) => ({ roleId })) },
         maxUses: 1,
         createdBy: args.creatorUserId,
         expiresAt: args.expiresAt ?? new Date(Date.now() + DEFAULT_EXPIRY_MS),
       },
-      select: { id: true, intendedRoleIds: true },
+      select: { id: true },
     });
     await this.activity.logActivity({
       actorUserId: args.creatorUserId,
@@ -159,7 +159,7 @@ export class InvitationsService {
       verb: 'invite.created',
       payload: {
         invitationId: invitation.id,
-        intendedRoleIds: invitation.intendedRoleIds,
+        intendedRoleIds,
         isBootstrap: false,
       },
     });
@@ -181,13 +181,13 @@ export class InvitationsService {
   /** List invitations for the org with derived status (admin, invite:create gated). */
   async list(): Promise<InviteListItem[]> {
     const rows = await this.prisma.invitation.findMany({
-      where: {},
       orderBy: { createdAt: 'desc' },
+      include: { roles: { select: { roleId: true } } },
     });
     return rows.map((r) => ({
       id: r.id,
       email: r.email,
-      intendedRoleIds: r.intendedRoleIds,
+      intendedRoleIds: r.roles.map((x) => x.roleId),
       maxUses: r.maxUses,
       useCount: r.useCount,
       status: deriveInvitationStatus(r),
@@ -221,8 +221,13 @@ export class InvitationsService {
     return this.findByTokenHash(hashToken(this.env.TOKEN_PEPPER, token));
   }
 
+  /** The invitation with its pre-assigned role ids flattened onto it. */
   private async findByTokenHash(tokenHash: string) {
-    return this.prisma.invitation.findUnique({ where: { tokenHash } });
+    const inv = await this.prisma.invitation.findUnique({
+      where: { tokenHash },
+      include: { roles: { select: { roleId: true } } },
+    });
+    return inv ? { ...inv, intendedRoleIds: inv.roles.map((r) => r.roleId) } : null;
   }
 
   /**

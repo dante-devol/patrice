@@ -138,11 +138,10 @@ export const ROUTES = {
   retireRole: r({ method: 'post', path: '/roles/:id/retire', tag: 'access', summary: 'Retire a role', action: 'role:retire', status: 201, kind: 'json', response: S.Role }),
   reviveRole: r({ method: 'post', path: '/roles/:id/revive', tag: 'access', summary: 'Revive a retired role', action: 'role:revive', status: 201, kind: 'json', response: S.Role }),
   listActions: r({ method: 'get', path: '/actions', tag: 'access', summary: 'The closed action vocabulary', action: 'grant:create', status: 200, kind: 'json', response: S.ActionList }),
-  listGrants: r({ method: 'get', path: '/grants', tag: 'access', summary: 'List grants', action: 'grant:create', query: includeRetired, status: 200, kind: 'json', response: z.array(S.Grant) }),
+  listGrants: r({ method: 'get', path: '/grants', tag: 'access', summary: 'List grants', action: 'grant:create', status: 200, kind: 'json', response: z.array(S.Grant) }),
   createGrant: r({ method: 'post', path: '/grants', tag: 'access', summary: 'Create a grant', action: 'grant:create', body: createGrantSchema, status: 201, kind: 'json', response: S.Grant }),
   updateGrant: r({ method: 'patch', path: '/grants/:id', tag: 'access', summary: 'Edit a grant', action: 'grant:update', body: updateGrantSchema, status: 200, kind: 'json', response: S.Grant }),
-  retireGrant: r({ method: 'post', path: '/grants/:id/retire', tag: 'access', summary: 'Retire a grant', action: 'grant:retire', status: 201, kind: 'json', response: S.Grant }),
-  reviveGrant: r({ method: 'post', path: '/grants/:id/revive', tag: 'access', summary: 'Revive a retired grant', action: 'grant:revive', status: 201, kind: 'json', response: S.Grant }),
+  deleteGrant: r({ method: 'delete', path: '/grants/:id', tag: 'access', summary: 'Delete a grant (permanent, audited)', action: 'grant:delete', status: 204, kind: 'empty' }),
 
   // ---- Divisions, teams ----
   listDivisions: r({ method: 'get', path: '/divisions', tag: 'org', summary: 'List divisions', query: includeRetired, authorizedInService: 'division:read', status: 200, kind: 'json', response: z.array(S.Division) }),
@@ -178,6 +177,7 @@ export const ROUTES = {
   changeRequester: r({ method: 'post', path: '/tasks/:id/requester', tag: 'tasks', summary: "Hand a task to another requester", action: 'task:change_requester', body: changeRequesterSchema, status: 200, kind: 'json', response: S.Task }),
   completeTask: r({ method: 'post', path: '/tasks/:id/complete', tag: 'tasks', summary: 'Mark a task complete', action: 'task:complete', status: 200, kind: 'json', response: S.Task }),
   getTaskTemplate: r({ method: 'get', path: '/tasks/:id/request-template', tag: 'tasks', summary: "A task's request template", action: 'task:read', status: 200, kind: 'json', response: S.RequestTemplate }),
+  getTaskTimeline: r({ method: 'get', path: '/tasks/:id/timeline', tag: 'tasks', summary: "What happened on a task, as typed events", action: 'task:read', status: 200, kind: 'json', response: z.array(S.TimelineEntry) }),
   putTaskTemplate: r({ method: 'put', path: '/tasks/:id/request-template', tag: 'tasks', summary: "Replace a task's request template", action: 'task:configure_request_template', body: putRequestTemplateSchema, status: 200, kind: 'json', response: S.RequestTemplate }),
 
   // ---- Submissions ----
@@ -191,11 +191,9 @@ export const ROUTES = {
   listMessages: r({ method: 'get', path: '/tasks/:id/messages', tag: 'messages', summary: "A task's thread", query: listMessagesQuerySchema, action: 'message:read', status: 200, kind: 'json', response: S.MessageListResult }),
   createMessage: r({ method: 'post', path: '/tasks/:id/messages', tag: 'messages', summary: 'Post a message', action: 'message:create', body: createMessageSchema, status: 201, kind: 'json', response: S.Message }),
   updateMessage: r({ method: 'patch', path: '/messages/:id', tag: 'messages', summary: 'Edit a message', action: 'message:update', body: updateMessageSchema, status: 200, kind: 'json', response: S.Message }),
-  retireMessage: r({ method: 'post', path: '/messages/:id/retire', tag: 'messages', summary: 'Retire a message', action: 'message:retire', status: 200, kind: 'json', response: S.Message }),
-  reviveMessage: r({ method: 'post', path: '/messages/:id/revive', tag: 'messages', summary: 'Revive a retired message', action: 'message:revive', status: 200, kind: 'json', response: S.Message }),
+  deleteMessage: r({ method: 'delete', path: '/messages/:id', tag: 'messages', summary: 'Delete a message (permanent; kept as a marker if it has replies)', action: 'message:delete', status: 204, kind: 'empty' }),
   uploadAttachment: r({ method: 'post', path: '/messages/:id/attachments', tag: 'messages', summary: 'Attach a file to a message', action: 'attachment:create', upload: true, status: 201, kind: 'json', response: S.AttachmentMeta }),
-  retireAttachment: r({ method: 'post', path: '/attachments/:id/retire', tag: 'messages', summary: 'Retire an attachment', action: 'attachment:retire', status: 200, kind: 'json', response: S.AttachmentMeta }),
-  reviveAttachment: r({ method: 'post', path: '/attachments/:id/revive', tag: 'messages', summary: 'Revive a retired attachment', action: 'attachment:revive', status: 200, kind: 'json', response: S.AttachmentMeta }),
+  deleteAttachment: r({ method: 'delete', path: '/attachments/:id', tag: 'messages', summary: 'Delete an attachment (permanent, audited)', action: 'attachment:delete', status: 204, kind: 'empty' }),
   downloadAttachment: r({ method: 'get', path: '/attachments/:id', tag: 'messages', summary: 'Download an attachment', action: 'attachment:read', status: 200, kind: 'binary' }),
 
   // ---- Notifications, activity ----

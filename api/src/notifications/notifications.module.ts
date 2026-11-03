@@ -3,6 +3,7 @@ import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { PUBSUB_PORT } from './pubsub.port';
 import { InProcessPubSub } from './in-process-pubsub.adapter';
+import { EventStore } from '../events/event-store.service';
 
 /**
  * Notifications (Slice 6). Binds the v1 in-process {@link PubSubPort} adapter, exposes
@@ -13,8 +14,9 @@ import { InProcessPubSub } from './in-process-pubsub.adapter';
   controllers: [NotificationsController],
   providers: [
     NotificationsService,
+    EventStore,
     { provide: PUBSUB_PORT, useClass: InProcessPubSub },
   ],
-  exports: [NotificationsService, PUBSUB_PORT],
+  exports: [NotificationsService, EventStore, PUBSUB_PORT],
 })
 export class NotificationsModule {}

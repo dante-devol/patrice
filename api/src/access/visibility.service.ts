@@ -20,7 +20,6 @@ export class VisibilityService {
         where: {
           action,
           effect: 'permit',
-          lifecycleState: 'active',
           role: { lifecycleState: 'active', userRoles: { some: { userId } } },
         },
         select: { scopeKind: true, scopeDivisionId: true, scopeTeamId: true },

@@ -744,7 +744,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a grant (permanent, audited)
+         * @description Gated by the `grant:delete` action.
+         */
+        delete: operations["deleteGrant"];
         options?: never;
         head?: never;
         /**
@@ -752,46 +756,6 @@ export interface paths {
          * @description Gated by the `grant:update` action.
          */
         patch: operations["updateGrant"];
-        trace?: never;
-    };
-    "/grants/{id}/retire": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retire a grant
-         * @description Gated by the `grant:retire` action.
-         */
-        post: operations["retireGrant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/grants/{id}/revive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Revive a retired grant
-         * @description Gated by the `grant:revive` action.
-         */
-        post: operations["reviveGrant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/divisions": {
@@ -1291,6 +1255,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What happened on a task, as typed events
+         * @description Gated by the `task:read` action.
+         */
+        get: operations["getTaskTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}/submissions": {
         parameters: {
             query?: never;
@@ -1409,7 +1393,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a message (permanent; kept as a marker if it has replies)
+         * @description Gated by the `message:delete` action.
+         */
+        delete: operations["deleteMessage"];
         options?: never;
         head?: never;
         /**
@@ -1417,46 +1405,6 @@ export interface paths {
          * @description Gated by the `message:update` action.
          */
         patch: operations["updateMessage"];
-        trace?: never;
-    };
-    "/messages/{id}/retire": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retire a message
-         * @description Gated by the `message:retire` action.
-         */
-        post: operations["retireMessage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/messages/{id}/revive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Revive a retired message
-         * @description Gated by the `message:revive` action.
-         */
-        post: operations["reviveMessage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/messages/{id}/attachments": {
@@ -1479,46 +1427,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/attachments/{id}/retire": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retire an attachment
-         * @description Gated by the `attachment:retire` action.
-         */
-        post: operations["retireAttachment"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/attachments/{id}/revive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Revive a retired attachment
-         * @description Gated by the `attachment:revive` action.
-         */
-        post: operations["reviveAttachment"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/attachments/{id}": {
         parameters: {
             query?: never;
@@ -1533,7 +1441,11 @@ export interface paths {
         get: operations["downloadAttachment"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete an attachment (permanent, audited)
+         * @description Gated by the `attachment:delete` action.
+         */
+        delete: operations["deleteAttachment"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1996,9 +1908,6 @@ export interface components {
             scopeTeamId: string | null;
             /** Format: uuid */
             scopeRoleId: string | null;
-            lifecycleState: components["schemas"]["Lifecycle"];
-            /** Format: date-time */
-            retiredAt: string | null;
             version: number;
         };
         Division: {
@@ -2102,6 +2011,161 @@ export interface components {
             items: components["schemas"]["Task"][];
             nextCursor: string | null;
         };
+        TimelineEntry: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.created";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: Record<string, never>;
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.claimed";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                /** Format: uuid */
+                userId: string;
+            };
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.left";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                /** Format: uuid */
+                userId: string;
+            };
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.claimant_evicted";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                /** Format: uuid */
+                userId: string;
+            };
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.requester_changed";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                /** Format: uuid */
+                fromUserId?: string;
+                /** Format: uuid */
+                toUserId: string;
+            };
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.claims_changed";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                openings?: number;
+                claimsClosed?: boolean;
+            };
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.completed";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: Record<string, never>;
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.retired";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: Record<string, never>;
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "task.revived";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: Record<string, never>;
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "submission.submitted";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                /** Format: uuid */
+                submissionId: string;
+                submissionNo: number;
+            };
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "submission.reviewed";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                /** Format: uuid */
+                submissionId: string;
+                submissionNo: number;
+                /** @enum {string} */
+                decision: "approve" | "return" | "reject";
+            };
+        } | {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            type: "submission.retired";
+            /** Format: uuid */
+            actorUserId: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            payload: {
+                /** Format: uuid */
+                submissionId?: string;
+                submissionNo: number;
+                /** Format: uuid */
+                claimantUserId: string;
+                reason: string;
+            };
+        };
         /** @enum {string} */
         SubmissionState: "review" | "revising" | "approved" | "rejected";
         Answer: {
@@ -2133,8 +2197,6 @@ export interface components {
             version: number;
             answers: components["schemas"]["Answer"][];
         };
-        /** @enum {string} */
-        MessageKind: "comment" | "system";
         Attachment: {
             /** Format: uuid */
             id: string;
@@ -2152,15 +2214,15 @@ export interface components {
             id: string;
             /** Format: uuid */
             taskId: string;
-            kind: components["schemas"]["MessageKind"];
             /** Format: uuid */
             senderUserId: string | null;
             /** Format: uuid */
             parentMessageId: string | null;
+            /** Format: uuid */
+            submissionId: string | null;
             body: string;
-            lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
-            retiredAt: string | null;
+            deletedAt: string | null;
             /** Format: date-time */
             editedAt: string | null;
             version: number;
@@ -2173,15 +2235,15 @@ export interface components {
             id: string;
             /** Format: uuid */
             taskId: string;
-            kind: components["schemas"]["MessageKind"];
             /** Format: uuid */
             senderUserId: string | null;
             /** Format: uuid */
             parentMessageId: string | null;
+            /** Format: uuid */
+            submissionId: string | null;
             body: string;
-            lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
-            retiredAt: string | null;
+            deletedAt: string | null;
             /** Format: date-time */
             editedAt: string | null;
             version: number;
@@ -2206,9 +2268,6 @@ export interface components {
             checksum: string | null;
             /** Format: uuid */
             uploaderUserId: string;
-            lifecycleState: components["schemas"]["Lifecycle"];
-            /** Format: date-time */
-            retiredAt: string | null;
             /** Format: date-time */
             createdAt: string;
         };
@@ -3673,9 +3732,7 @@ export interface operations {
     };
     listGrants: {
         parameters: {
-            query?: {
-                include?: "retired";
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -3752,6 +3809,35 @@ export interface operations {
             };
         };
     };
+    deleteGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     updateGrant: {
         parameters: {
             query?: never;
@@ -3781,68 +3867,6 @@ export interface operations {
         responses: {
             /** @description Edit a grant */
             200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Grant"];
-                };
-            };
-            /** @description An error; `error.code` is one of `ErrorCode` */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    retireGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Retire a grant */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Grant"];
-                };
-            };
-            /** @description An error; `error.code` is one of `ErrorCode` */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    reviveGrant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revive a retired grant */
-            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5112,6 +5136,37 @@ export interface operations {
             };
         };
     };
+    getTaskTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What happened on a task, as typed events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEntry"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listSubmissions: {
         parameters: {
             query?: never;
@@ -5341,6 +5396,8 @@ export interface operations {
                     body: string;
                     /** Format: uuid */
                     parentMessageId?: string;
+                    /** Format: uuid */
+                    submissionId?: string;
                 };
             };
         };
@@ -5353,6 +5410,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Message"];
                 };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description An error; `error.code` is one of `ErrorCode` */
             default: {
@@ -5383,68 +5469,6 @@ export interface operations {
         };
         responses: {
             /** @description Edit a message */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Message"];
-                };
-            };
-            /** @description An error; `error.code` is one of `ErrorCode` */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    retireMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Retire a message */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Message"];
-                };
-            };
-            /** @description An error; `error.code` is one of `ErrorCode` */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    reviveMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revive a retired message */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5502,68 +5526,6 @@ export interface operations {
             };
         };
     };
-    retireAttachment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Retire an attachment */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AttachmentMeta"];
-                };
-            };
-            /** @description An error; `error.code` is one of `ErrorCode` */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    reviveAttachment: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Revive a retired attachment */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AttachmentMeta"];
-                };
-            };
-            /** @description An error; `error.code` is one of `ErrorCode` */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
     downloadAttachment: {
         parameters: {
             query?: never;
@@ -5583,6 +5545,35 @@ export interface operations {
                 content: {
                     "application/octet-stream": string;
                 };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    deleteAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description An error; `error.code` is one of `ErrorCode` */
             default: {

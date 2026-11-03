@@ -152,7 +152,7 @@ export class BootstrapService implements OnApplicationBootstrap {
       await this.prisma.invitation.create({
         data: {
           tokenHash: hashToken(this.env.TOKEN_PEPPER, token),
-          intendedRoleIds: [adminRole.id],
+          roles: { create: [{ roleId: adminRole.id }] },
           passcodeHash,
           maxUses: 1,
           createdBy: null,

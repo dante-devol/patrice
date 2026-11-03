@@ -376,7 +376,6 @@ export class IntegrationsService {
         roleId,
         effect: 'permit',
         scopeKind: 'global',
-        lifecycleState: LifecycleState.active,
         action: { in: [...EFFECTIVE_ADMIN_ACTIONS] },
       },
       select: { id: true },

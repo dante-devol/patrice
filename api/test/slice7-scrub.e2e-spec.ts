@@ -65,7 +65,7 @@ describe('Slice 7.4 — User scrub-in-place', () => {
 
     // Give the user authored history (a message) so they scrub rather than delete.
     await prisma.message.create({
-      data: { taskId, kind: 'comment', senderUserId: userId, body: 'authored' },
+      data: { taskId, senderUserId: userId, body: 'authored' },
     });
     // A pending invitation this user issued — must be auto-revoked on scrub.
     const issued = await prisma.invitation.create({

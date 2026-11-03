@@ -9,6 +9,7 @@ import { ConflictError, NotFoundError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateTeamDto, UpdateTeamDto } from './teams.dto';
+import { diffFields } from '../activity/changes';
 
 export interface TeamView {
   id: string;
@@ -107,7 +108,7 @@ export class TeamsService {
         subjectType: 'team',
         subjectId: team.id,
         verb: 'team.updated',
-        payload: { teamId: team.id },
+        payload: { teamId: team.id, changes: diffFields(team, updated, ['name', 'restrictClaims']) },
       });
       return updated;
     });

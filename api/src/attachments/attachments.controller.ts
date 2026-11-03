@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -52,20 +53,12 @@ export class AttachmentsController {
     return this.attachments.upload(messageId, user.id, file);
   }
 
-  @Contract(ROUTES.retireAttachment)
-  @Post('attachments/:id/retire')
-  @HttpCode(200)
-  @Authorize(ACTIONS.attachmentRetire.action, attachmentResource)
-  async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
-    return this.attachments.retire(id, user.id);
-  }
-
-  @Contract(ROUTES.reviveAttachment)
-  @Post('attachments/:id/revive')
-  @HttpCode(200)
-  @Authorize(ACTIONS.attachmentRevive.action, attachmentResource)
-  async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
-    return this.attachments.revive(id, user.id);
+  @Contract(ROUTES.deleteAttachment)
+  @Delete('attachments/:id')
+  @HttpCode(204)
+  @Authorize(ACTIONS.attachmentDelete.action, attachmentResource)
+  async delete(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.attachments.delete(id, user.id);
   }
 
   @Contract(ROUTES.downloadAttachment)

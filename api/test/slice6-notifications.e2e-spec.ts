@@ -10,7 +10,7 @@ import {
   inviteAndAccept,
   resetDatabase,
 } from './helpers';
-import { NotificationsService } from '../src/notifications/notifications.service';
+import { EventStore } from '../src/events/event-store.service';
 import { PUBSUB_PORT, PubSubPort } from '../src/notifications/pubsub.port';
 
 /**
@@ -118,14 +118,14 @@ describe('Slice 6 — Notifications', () => {
     const submissionId = sub.body.id;
 
     // task.submitted → requester only; claimant (sender) suppressed.
-    expect((await notifs(adminUserId, 'task.submitted')).some((n) => n.subjectId === submissionId)).toBe(true);
+    expect((await notifs(adminUserId, 'task.submitted')).some((n) => (n.payload as any).submissionId === submissionId)).toBe(true);
     expect((await notifs(claimer.userId, 'task.submitted'))).toHaveLength(0);
 
     // review(approve) → the submission's claimant.
     const rev = await auth(http().post(`/api/submissions/${submissionId}/review`)).send({ decision: 'approve' });
     expect(rev.status).toBe(200);
     const approved = (await notifs(claimer.userId, 'task.reviewed_approved')).filter(
-      (n) => n.subjectId === submissionId,
+      (n) => (n.payload as any).submissionId === submissionId,
     );
     expect(approved).toHaveLength(1);
     expect((approved[0].payload as any).decision).toBe('approve');
@@ -152,26 +152,38 @@ describe('Slice 6 — Notifications', () => {
     expect(toSelf).toHaveLength(0);
   });
 
-  it('insertion is idempotent: re-emitting the same event_seq is a no-op', async () => {
-    const svc = app.get(NotificationsService);
-    const subjectId = (await prisma.task.findFirstOrThrow({ select: { id: true } })).id;
-    const event = {
-      type: 'task.completed' as const,
-      subjectType: 'idem-test',
-      subjectId,
-      senderUserId: adminUserId,
-      recipientUserIds: [claimer.userId],
-      payload: { taskId: subjectId },
-      eventSeq: 7n,
-    };
-    const first = await prisma.$transaction((tx) => svc.emit(tx, event));
-    const second = await prisma.$transaction((tx) => svc.emit(tx, event));
-    expect(first).toEqual([claimer.userId]);
-    expect(second).toEqual([claimer.userId]); // returns the cohort, but…
-    const rows = await prisma.notification.findMany({
-      where: { subjectType: 'idem-test', subjectId },
-    });
-    expect(rows).toHaveLength(1); // …only one row exists.
+  it('delivery is idempotent: redelivering an event writes nothing new (D11)', async () => {
+    const { taskId } = await makeClaimedTask();
+    const event = await prisma.domainEvent.findFirstOrThrow({ where: { taskId, type: 'task.claimed' } });
+    const before = await prisma.notification.count({ where: { eventId: event.id } });
+    expect(before).toBe(1);
+    // Simulate an interrupted delivery: mark the event undelivered and run it again.
+    await prisma.domainEvent.update({ where: { id: event.id }, data: { notifiedAt: null } });
+    await app.get(EventStore).deliver();
+    expect(await prisma.notification.count({ where: { eventId: event.id } })).toBe(1);
+    expect((await prisma.domainEvent.findUniqueOrThrow({ where: { id: event.id } })).notifiedAt).not.toBeNull();
+  });
+
+  it('paging never skips read notifications newer than the last unread one (D19)', async () => {
+    // A few fresh notifications for the claimer: comments on a task they hold.
+    const { taskId } = await makeClaimedTask();
+    for (const body of ['one', 'two', 'three']) {
+      await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body });
+    }
+    const all = await as(claimer.session)(http().get('/api/notifications?limit=100'));
+    const ids: string[] = all.body.items.map((n: { id: string }) => n.id);
+    expect(ids.length).toBeGreaterThan(2);
+    // Mark the newest one read: it now sorts after every unread one.
+    await as(claimer.session)(http().post(`/api/notifications/${ids[0]}/read`));
+    const seen: string[] = [];
+    let after: string | null = null;
+    do {
+      const q: string = after ? `&after=${encodeURIComponent(after)}` : '';
+      const page = await as(claimer.session)(http().get(`/api/notifications?limit=1${q}`));
+      seen.push(...page.body.items.map((n: { id: string }) => n.id));
+      after = page.body.nextCursor;
+    } while (after);
+    expect(seen.sort()).toEqual([...ids].sort());
   });
 
   it('emitting pushes a sync ping through the PubSubPort to the recipient', async () => {
@@ -192,9 +204,10 @@ describe('Slice 6 — Notifications', () => {
     const list = await as(claimer.session)(http().get('/api/notifications?limit=100'));
     expect(list.status).toBe(200);
     expect(list.body.unreadCount).toBeGreaterThan(0);
-    expect(list.body.items.length).toBe(list.body.unreadCount); // all unread so far
-    // Unread-first: the first item has no read_at.
-    expect(list.body.items[0].readAt).toBeNull();
+    // Unread first: exactly the first `unreadCount` items have no read_at.
+    const unread = list.body.items.filter((n: { readAt: string | null }) => n.readAt === null);
+    expect(unread).toHaveLength(list.body.unreadCount);
+    expect(list.body.items.slice(0, list.body.unreadCount)).toEqual(unread);
   });
 
   it('mark-read decrements the badge; read-all zeroes it', async () => {

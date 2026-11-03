@@ -5,6 +5,7 @@ import { ActivityService } from '../activity/activity.service';
 import { SettingsService, SYSTEM_SUBJECT_ID } from '../settings/settings.service';
 import { SecretStore } from '../settings/secret-store.service';
 import { UpdateConfigDto } from './users.dto';
+import { diffFields } from '../activity/changes';
 
 /** The public view: the client *id* is shown, the secret is replaced by a boolean. */
 export type OrgSettings = {
@@ -55,6 +56,7 @@ export class ConfigService {
     // The secret is handled separately (encrypt / clear); everything else is a column.
     const { discordClientSecret, ...rest } = dto;
     const changedKeys = Object.keys(dto);
+    const before = await this.settings.get();
 
     await this.prisma.$transaction(async (tx) => {
       await this.settings.update(
@@ -73,7 +75,11 @@ export class ConfigService {
         subjectType: 'system',
         subjectId: SYSTEM_SUBJECT_ID,
         verb: 'config.updated',
-        payload: { changedKeys },
+        // Values for settings; the secret is never recorded, only that it changed.
+        payload: {
+          changedKeys,
+          changes: diffFields(before, await this.settings.get(tx), Object.keys(rest) as (keyof typeof rest & string)[]),
+        },
       });
       // Re-project: a selfReviewAllowed flip changes the static policy set.
       await this.access.bumpConfigVersion(tx);

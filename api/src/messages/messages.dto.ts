@@ -10,9 +10,13 @@ import { z } from 'zod';
 const body = z.string().trim().min(1, 'Message body is required').max(50_000);
 const uuid = z.string().uuid();
 
+/** A comment: top-level, a reply (`parentMessageId`), or about a submission. */
 export const createMessageSchema = z
-  .object({ body, parentMessageId: uuid.optional() })
-  .strict();
+  .object({ body, parentMessageId: uuid.optional(), submissionId: uuid.optional() })
+  .strict()
+  .refine((m) => !(m.parentMessageId && m.submissionId), {
+    message: 'A reply takes its submission from its parent; send one or the other',
+  });
 
 export const updateMessageSchema = z.object({ body }).strict();
 

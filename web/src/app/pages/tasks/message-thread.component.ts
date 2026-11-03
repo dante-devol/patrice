@@ -6,7 +6,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
 import { ToastService } from '../../core/toast.service';
-import { Message, Question, Submission, Task } from '../../core/api.types';
+import { Message, Question, Submission, Task, TimelineEntry } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from './user-avatar.component';
 import { ReviewDialogComponent } from './review-dialog.component';
@@ -140,11 +140,11 @@ import { HistoryEvent, HistoryReply, buildHistory, relativeTime, userOrderColor 
           <span class="font-medium" [class.text-[13px]]="!small" [class.text-[12.5px]]="small">{{ lookup.userName(m.senderUserId) }}</span>
           <span class="font-mono text-[11.5px] text-ink-soft">{{ roleLabel(m.senderUserId) }}· {{ rel(m.createdAt) }}</span>
           @if (m.editedAt) { <span class="font-mono text-[11px] text-ink-soft">(edited)</span> }
-          @if (m.lifecycleState === 'retired') { <span class="vchip">retired</span> }
+          @if (m.deletedAt) { <span class="vchip">deleted</span> }
           <span class="flex-1"></span>
-          @if (m.senderUserId === myId() && m.lifecycleState !== 'retired') {
+          @if (m.senderUserId === myId() && !m.deletedAt) {
             <button class="font-mono text-[11px] text-ink-soft hover:text-ink" (click)="startEdit(m)">edit</button>
-            <button class="font-mono text-[11px] text-ink-soft hover:text-ink" (click)="retire(m)">retire</button>
+            <button class="font-mono text-[11px] text-ink-soft hover:text-ink" (click)="remove(m)">delete</button>
           }
         </div>
         @if (editingId() === m.id) {
@@ -185,6 +185,7 @@ export class MessageThreadComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly messages = signal<Message[]>([]);
+  readonly timeline = signal<TimelineEntry[]>([]);
   readonly nextCursor = signal<string | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -193,7 +194,7 @@ export class MessageThreadComponent implements OnInit {
   readonly pendingName = signal<string | null>(null);
 
   readonly events = computed(() =>
-    buildHistory(this.task, this.messages(), (id) => this.lookup.userName(id)),
+    buildHistory(this.timeline(), this.messages(), (id) => this.lookup.userName(id)),
   );
 
   /** Maps userId → 1-based ordinal of first appearance in this task's history. */
@@ -232,7 +233,7 @@ export class MessageThreadComponent implements OnInit {
   }
   /** Threads root only at top-level comments and submission events. */
   canReply(ev: HistoryEvent): boolean {
-    return !!ev.message && (ev.kind === 'comment' || !!ev.submission);
+    return !!ev.submission || (ev.kind === 'comment' && !!ev.message && !ev.message.deletedAt);
   }
 
   ngOnInit(): void {
@@ -242,9 +243,7 @@ export class MessageThreadComponent implements OnInit {
   // ---- submission dialog ----
   private submissionFor(ev: HistoryEvent): Submission | undefined {
     if (!ev.submission) return undefined;
-    return this.submissions.find(
-      (s) => s.claimantUserId === ev.submission!.actorId && s.submissionNo === ev.submission!.version,
-    );
+    return this.submissions.find((s) => s.id === ev.submission!.submissionId);
   }
 
   openSubmission(ev: HistoryEvent): void {
@@ -273,10 +272,14 @@ export class MessageThreadComponent implements OnInit {
 
   async postReply(ev: HistoryEvent): Promise<void> {
     const body = this.replyDraft.trim();
-    if (!body || !ev.message) return;
+    if (!body || (!ev.message && !ev.submission)) return;
     this.busy.set(true);
     try {
-      await this.api.createMessage(this.taskId, { body, parentMessageId: ev.message.id });
+      // A comment on a submission names it; any other reply names its parent comment.
+      await this.api.createMessage(
+        this.taskId,
+        ev.submission ? { body, submissionId: ev.submission.submissionId } : { body, parentMessageId: ev.message!.id },
+      );
       this.replyDraft = '';
       this.openReply.set(null);
       await this.reload();
@@ -291,8 +294,12 @@ export class MessageThreadComponent implements OnInit {
   async reload(): Promise<void> {
     this.busy.set(true);
     try {
-      const res = await this.api.listMessages(this.taskId, { limit: 50 });
+      const [res, timeline] = await Promise.all([
+        this.api.listMessages(this.taskId, { limit: 50 }),
+        this.api.getTimeline(this.taskId),
+      ]);
       this.messages.set(res.items);
+      this.timeline.set(timeline);
       this.nextCursor.set(res.nextCursor);
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -351,9 +358,9 @@ export class MessageThreadComponent implements OnInit {
     }
   }
 
-  async retire(m: Message): Promise<void> {
+  async remove(m: Message): Promise<void> {
     try {
-      await this.api.retireMessage(m.id);
+      await this.api.deleteMessage(m.id);
       await this.reload();
     } catch (e) {
       this.toast.error(errorMessage(e));

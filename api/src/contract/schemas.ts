@@ -1,6 +1,7 @@
 import { extendZodWithOpenApi } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { ERROR_CODES, ErrorCode } from '../common/error-codes';
+import { TIMELINE_EVENT_TYPES, domainEventPayloadSchemas } from '../events/event.types';
 
 // Adds `.openapi()` to every Zod schema. Must run before any schema below is built.
 extendZodWithOpenApi(z);
@@ -24,7 +25,6 @@ export const QuestionType = z
   .openapi('QuestionType');
 export const TaskStatus = z.enum(['open', 'claimed', 'review', 'revising', 'approved']).openapi('TaskStatus');
 export const SubmissionState = z.enum(['review', 'revising', 'approved', 'rejected']).openapi('SubmissionState');
-export const MessageKind = z.enum(['comment', 'system']).openapi('MessageKind');
 export const AuthMethod = z.enum(['password', 'google', 'discord']).openapi('AuthMethod');
 export const InvitationStatus = z.enum(['pending', 'revoked', 'exhausted', 'expired']).openapi('InvitationStatus');
 export const ActivitySource = z.enum(['patrice', 'integration', 'system']).openapi('ActivitySource');
@@ -196,8 +196,6 @@ export const Grant = z
     scopeDivisionId: id.nullable(),
     scopeTeamId: id.nullable(),
     scopeRoleId: id.nullable(),
-    lifecycleState: Lifecycle,
-    retiredAt: nullableTimestamp,
     version: z.number().int(),
   })
   .strict()
@@ -303,8 +301,6 @@ export const AttachmentMeta = z
     kind: z.string(),
     checksum: z.string().nullable(),
     uploaderUserId: id,
-    lifecycleState: Lifecycle,
-    retiredAt: nullableTimestamp,
     createdAt: timestamp,
   })
   .strict()
@@ -313,12 +309,13 @@ export const AttachmentMeta = z
 const messageShape = {
   id,
   taskId: id,
-  kind: MessageKind,
   senderUserId: id.nullable(),
   parentMessageId: id.nullable(),
+  // The submission this comment is about, if any.
+  submissionId: id.nullable(),
   body: z.string(),
-  lifecycleState: Lifecycle,
-  retiredAt: nullableTimestamp,
+  // Set on a deleted message kept as a marker because it has replies.
+  deletedAt: nullableTimestamp,
   editedAt: nullableTimestamp,
   version: z.number().int(),
   createdAt: timestamp,
@@ -358,6 +355,27 @@ export const Submission = z
   })
   .strict()
   .openapi('Submission');
+
+/**
+ * One entry on a task's timeline: a typed event the client renders directly. The
+ * union is built from the server's event catalog, so the two can't drift.
+ */
+export const TimelineEntry = z
+  .discriminatedUnion(
+    'type',
+    TIMELINE_EVENT_TYPES.map((type) =>
+      z
+        .object({
+          id,
+          type: z.literal(type),
+          actorUserId: id.nullable(),
+          occurredAt: timestamp,
+          payload: domainEventPayloadSchemas[type],
+        })
+        .strict(),
+    ) as unknown as [z.AnyZodObject, z.AnyZodObject, ...z.AnyZodObject[]],
+  )
+  .openapi('TimelineEntry');
 
 // ---- Awareness ---------------------------------------------------------------
 

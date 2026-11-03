@@ -94,10 +94,13 @@ describe('Slice 2.1 — Roles CRUD + Revive', () => {
           'role.revived',
         ]),
       );
-      // Payload Discipline: IDs only — no name/email/displayName keys.
+      // IDs, plus before → after values for configuration (the role's name); never
+      // personal data.
       for (const r of rows) {
-        expect(Object.keys(r.payload as object)).toEqual(['roleId']);
+        expect(Object.keys(r.payload as object).every((k) => ['roleId', 'changes'].includes(k))).toBe(true);
       }
+      const updated = rows.find((r) => r.verb === 'role.updated')!;
+      expect((updated.payload as any).changes).toEqual({ name: { from: 'WritingLead', to: 'WritingLeadRenamed' } });
     } finally {
       await prisma.$disconnect();
     }

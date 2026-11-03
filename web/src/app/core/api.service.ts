@@ -32,6 +32,7 @@ import {
   TaskFilters,
   TaskListResult,
   Team,
+  TimelineEntry,
 } from './api.types';
 
 /** `?include=retired` opt-in for admin/history list views (Slice 7.2). */
@@ -188,8 +189,9 @@ export class ApiService {
   }): Promise<Grant> {
     return firstValueFrom(this.http.post<Grant>('/api/grants', body));
   }
-  retireGrant(id: string): Promise<Grant> {
-    return firstValueFrom(this.http.post<Grant>(`/api/grants/${id}/retire`, {}));
+  /** Grants are deleted outright (audited); there is no revive. */
+  deleteGrant(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/grants/${id}`));
   }
 
   listUsers(includeRetired = false): Promise<AdminUser[]> {
@@ -339,9 +341,14 @@ export class ApiService {
     );
   }
 
+  /** What happened on a task, oldest first, as typed events. */
+  getTimeline(taskId: string): Promise<TimelineEntry[]> {
+    return firstValueFrom(this.http.get<TimelineEntry[]>(`/api/tasks/${taskId}/timeline`));
+  }
+
   createMessage(
     taskId: string,
-    body: { body: string; parentMessageId?: string },
+    body: { body: string; parentMessageId?: string; submissionId?: string },
   ): Promise<Message> {
     return firstValueFrom(
       this.http.post<Message>(`/api/tasks/${taskId}/messages`, body),
@@ -350,8 +357,9 @@ export class ApiService {
   updateMessage(id: string, body: string): Promise<Message> {
     return firstValueFrom(this.http.patch<Message>(`/api/messages/${id}`, { body }));
   }
-  retireMessage(id: string): Promise<Message> {
-    return firstValueFrom(this.http.post<Message>(`/api/messages/${id}/retire`, {}));
+  /** Deleted outright; a message with replies stays as an empty marker. */
+  deleteMessage(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`/api/messages/${id}`));
   }
 
   /** Upload a file against an existing message (multipart). */

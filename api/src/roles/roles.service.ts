@@ -6,6 +6,7 @@ import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { ACTIONS } from '../access/actions';
+import { diffFields } from '../activity/changes';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateRoleDto, UpdateRoleDto } from './roles.dto';
@@ -100,7 +101,7 @@ export class RolesService {
       subjectType: 'role',
       subjectId: role.id,
       verb: 'role.updated',
-      payload: { roleId: role.id },
+      payload: { roleId: role.id, changes: diffFields(role, updated, ['name']) },
     });
     return this.toView(updated);
   }

@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { LifecycleState, MessageKind, Prisma } from '@prisma/client';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { LifecycleState, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EventStore } from '../events/event-store.service';
+import { NotificationType } from '../notifications/notification.types';
+import { STORAGE_PORT, StoragePort } from '../storage/storage.port';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
-import { GraceService } from '../common/grace.service';
-import { isRevivable } from '../common/lifecycle';
 import { CreateMessageDto, ListMessagesQuery, UpdateMessageDto } from './messages.dto';
 
 export interface AttachmentView {
@@ -21,12 +22,13 @@ export interface AttachmentView {
 export interface MessageView {
   id: string;
   taskId: string;
-  kind: MessageKind;
   senderUserId: string | null;
   parentMessageId: string | null;
+  /** The submission this comment is about, if any. */
+  submissionId: string | null;
   body: string;
-  lifecycleState: LifecycleState;
-  retiredAt: Date | null;
+  /** Set on a deleted message kept as a marker because it has replies. */
+  deletedAt: Date | null;
   editedAt: Date | null;
   version: number;
   createdAt: Date;
@@ -42,18 +44,23 @@ export interface MessageListResult {
 type MessageRow = Prisma.MessageGetPayload<{ include: { attachments: true } }>;
 
 /**
- * Task message threads (Slice 4.3). `comment` messages are user-authored; senderless
- * `system` messages record claim/leave/requester-change events (emitted via
- * {@link createSystemMessage} from the task flows). Threads are one level deep — a
- * reply's parent must be top-level (guarded here; a DB trigger is the backstop).
+ * A task's thread: comments, one level of replies, optionally about a submission.
+ * What *happened* on the task (claims, submissions, reviews) is its timeline, a
+ * separate stream of typed events (EventStore); the thread is only what people wrote.
+ *
+ * Deleting is permanent (with an audit row). A deleted comment that has replies stays
+ * as an empty marker so the replies keep their place.
  */
 @Injectable()
 export class MessagesService {
+  private readonly logger = new Logger(MessagesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly notifications: NotificationsService,
-    private readonly grace: GraceService,
+    private readonly events: EventStore,
+    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
   private attView(a: MessageRow['attachments'][number]): AttachmentView {
@@ -72,19 +79,16 @@ export class MessagesService {
     return {
       id: m.id,
       taskId: m.taskId,
-      kind: m.kind,
       senderUserId: m.senderUserId,
       parentMessageId: m.parentMessageId,
+      submissionId: m.submissionId,
       body: m.body,
-      lifecycleState: m.lifecycleState,
-      retiredAt: m.retiredAt,
+      deletedAt: m.deletedAt,
       editedAt: m.editedAt,
       version: m.version,
       createdAt: m.createdAt,
       attachments: m.attachments.map((a) => this.attView(a)),
-      ...(m.replies
-        ? { replies: m.replies.map((r) => this.toView(r)) }
-        : {}),
+      ...(m.replies ? { replies: m.replies.map((r) => this.toView(r)) } : {}),
     };
   }
 
@@ -100,40 +104,43 @@ export class MessagesService {
     return task;
   }
 
-  async create(
-    taskId: string,
-    actorUserId: string,
-    dto: CreateMessageDto,
-  ): Promise<MessageView> {
+  async create(taskId: string, actorUserId: string, dto: CreateMessageDto): Promise<MessageView> {
     await this.loadActiveTask(taskId);
 
     let parent: { id: string; submissionId: string | null } | null = null;
     if (dto.parentMessageId) {
       const found = await this.prisma.message.findUnique({
         where: { id: dto.parentMessageId },
-        select: { id: true, taskId: true, parentMessageId: true, submissionId: true },
+        select: { id: true, taskId: true, parentMessageId: true, submissionId: true, deletedAt: true },
       });
       if (!found || found.taskId !== taskId) {
         throw new NotFoundError('PARENT_NOT_FOUND', 'Parent message not found on this task');
       }
       // One level deep: a reply may only attach to a TOP-LEVEL message.
       if (found.parentMessageId !== null) {
-        throw new UnprocessableError(
-          'REPLY_TO_REPLY',
-          'Replies are one level deep; cannot reply to a reply',
-        );
+        throw new UnprocessableError('REPLY_TO_REPLY', 'Replies are one level deep; cannot reply to a reply');
       }
       parent = { id: found.id, submissionId: found.submissionId };
     }
+    // A reply is about whatever its parent is about.
+    const submissionId = parent ? parent.submissionId : (dto.submissionId ?? null);
+    if (submissionId && !parent) {
+      const submission = await this.prisma.submission.findUnique({
+        where: { id: submissionId },
+        select: { taskId: true },
+      });
+      if (!submission || submission.taskId !== taskId) {
+        throw new NotFoundError('SUBMISSION_NOT_FOUND', 'Submission not found on this task');
+      }
+    }
 
-    let notified: string[] = [];
     const created = await this.prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
         data: {
           taskId,
-          kind: MessageKind.comment,
           senderUserId: actorUserId,
-          parentMessageId: dto.parentMessageId ?? null,
+          parentMessageId: parent?.id ?? null,
+          submissionId,
           body: dto.body,
         },
         include: { attachments: true },
@@ -144,118 +151,75 @@ export class MessagesService {
         subjectType: 'message',
         subjectId: message.id,
         verb: 'message.created',
-        payload: {
-          messageId: message.id,
-          taskId,
-          parentMessageId: dto.parentMessageId ?? null,
-        },
+        payload: { messageId: message.id, taskId, parentMessageId: parent?.id ?? null },
       });
-      notified = await this.notifyMessage(tx, {
-        taskId,
-        messageId: message.id,
-        actorUserId,
-        parent,
-      });
+      await this.recordForNotification(tx, { taskId, messageId: message.id, actorUserId, parent, submissionId });
       return message;
     });
-    this.notifications.publish(notified);
+    await this.events.deliver();
     return this.toView(created);
   }
 
   /**
-   * Fan a new comment out per the message recipient matrix (Slice 6). The subject is
-   * the message id (unique per event ⇒ `event_seq` is always 1, no collision), the
-   * sender is suppressed, and the cohort branches on thread shape:
-   *
-   *  - top-level (`message.posted`) → requester + active claimants
-   *  - reply in a submission thread (`message.submission_thread_replied`) → that
-   *    submission's claimant + the task requester
-   *  - reply in a plain thread (`message.replied`) → the thread's prior participants
+   * Who a new comment notifies:
+   *  - about a submission (`message.submission_thread_replied`) → its author + the requester
+   *  - a reply (`message.replied`) → the thread's earlier participants
+   *  - otherwise (`message.posted`) → the requester + active claimants
    */
-  private async notifyMessage(
+  private async recordForNotification(
     tx: Prisma.TransactionClient,
     ctx: {
       taskId: string;
       messageId: string;
       actorUserId: string;
-      parent: { id: string; submissionId: string | null } | null;
+      parent: { id: string } | null;
+      submissionId: string | null;
     },
-  ): Promise<string[]> {
-    const base = {
-      subjectType: 'message',
-      subjectId: ctx.messageId,
-      senderUserId: ctx.actorUserId,
-      payload: { taskId: ctx.taskId, messageId: ctx.messageId, actorUserId: ctx.actorUserId },
-    } as const;
-
-    if (!ctx.parent) {
-      const requester = await this.notifications.requesterId(tx, ctx.taskId);
-      const claimants = await this.notifications.activeClaimantIds(tx, ctx.taskId);
-      return this.notifications.emit(tx, {
-        ...base,
-        type: 'message.posted',
-        recipientUserIds: [requester, ...claimants],
-      });
-    }
-
-    if (ctx.parent.submissionId) {
+  ): Promise<void> {
+    const requester = await this.notifications.requesterId(tx, ctx.taskId);
+    let notifyType: NotificationType;
+    let recipients: string[];
+    if (ctx.submissionId) {
       const submission = await tx.submission.findUnique({
-        where: { id: ctx.parent.submissionId },
+        where: { id: ctx.submissionId },
         select: { claimantUserId: true },
       });
-      const requester = await this.notifications.requesterId(tx, ctx.taskId);
-      return this.notifications.emit(tx, {
-        ...base,
-        type: 'message.submission_thread_replied',
-        recipientUserIds: [submission?.claimantUserId, requester].filter(
-          (x): x is string => !!x,
-        ),
+      notifyType = 'message.submission_thread_replied';
+      recipients = [submission?.claimantUserId, requester].filter((x): x is string => !!x);
+    } else if (ctx.parent) {
+      notifyType = 'message.replied';
+      recipients = await this.notifications.threadParticipantIds(tx, ctx.parent.id);
+    } else {
+      notifyType = 'message.posted';
+      recipients = [requester, ...(await this.notifications.activeClaimantIds(tx, ctx.taskId))];
+    }
+    const notify = { type: notifyType, recipients };
+    if (ctx.parent) {
+      await this.events.record(tx, {
+        type: 'message.replied',
+        taskId: ctx.taskId,
+        actorUserId: ctx.actorUserId,
+        payload: { messageId: ctx.messageId, parentMessageId: ctx.parent.id },
+        notify,
+      });
+    } else {
+      await this.events.record(tx, {
+        type: 'message.posted',
+        taskId: ctx.taskId,
+        actorUserId: ctx.actorUserId,
+        payload: { messageId: ctx.messageId, ...(ctx.submissionId ? { submissionId: ctx.submissionId } : {}) },
+        notify,
       });
     }
-
-    return this.notifications.emit(tx, {
-      ...base,
-      type: 'message.replied',
-      recipientUserIds: await this.notifications.threadParticipantIds(tx, ctx.parent.id),
-    });
   }
 
   /**
-   * Emit a senderless system message on a task's thread (claim/leave/requester change,
-   * and the Slice 5 submission/review events). Runs inside the caller's transaction so
-   * it's atomic with the triggering event. Body references the actor by id only — no
-   * PII (consistent with audit discipline).
-   *
-   * `submissionId` hosts the message in a submission's thread (M1 "X submitted v{n}");
-   * `parentMessageId` threads a review reply under that top-level message. Returns the
-   * created message's id so a caller can thread replies beneath it.
+   * Top-level messages (oldest-first) with their one-level replies and attachments.
+   * A retired task's thread stays readable through its grace period.
    */
-  async createSystemMessage(
-    tx: Prisma.TransactionClient,
-    taskId: string,
-    body: string,
-    opts: { submissionId?: string | null; parentMessageId?: string | null } = {},
-  ): Promise<string> {
-    const message = await tx.message.create({
-      data: {
-        taskId,
-        kind: MessageKind.system,
-        senderUserId: null,
-        body,
-        submissionId: opts.submissionId ?? null,
-        parentMessageId: opts.parentMessageId ?? null,
-      },
-      select: { id: true },
-    });
-    return message.id;
-  }
-
-  /** Top-level messages (oldest-first) with their one-level replies + attachments. */
-  async listForTask(
-    taskId: string,
-    query: ListMessagesQuery,
-  ): Promise<MessageListResult> {
-    await this.loadActiveTask(taskId);
+  async listForTask(taskId: string, query: ListMessagesQuery): Promise<MessageListResult> {
+    const task = await this.prisma.task.findUnique({ where: { id: taskId }, select: { id: true } });
+    if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
     const where: Prisma.MessageWhereInput = { taskId, parentMessageId: null };
     if (query.after) where.id = { gt: query.after };
 
@@ -276,20 +240,18 @@ export class MessagesService {
     };
   }
 
-  async update(
-    id: string,
-    actorUserId: string,
-    dto: UpdateMessageDto,
-  ): Promise<MessageView> {
+  private async loadLive(id: string) {
     const message = await this.prisma.message.findUnique({
       where: { id },
-      select: { id: true, taskId: true, lifecycleState: true, task: { select: { id: true } } },
+      select: { id: true, taskId: true, deletedAt: true },
     });
-    if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-    if (message.lifecycleState === LifecycleState.retired) {
-      throw new ConflictError('MESSAGE_RETIRED', 'Message is retired');
-    }
+    if (!message || message.deletedAt) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
+    await this.loadActiveTask(message.taskId);
+    return message;
+  }
 
+  async update(id: string, actorUserId: string, dto: UpdateMessageDto): Promise<MessageView> {
+    const message = await this.loadLive(id);
     const updated = await this.prisma.$transaction(async (tx) => {
       const row = await tx.message.update({
         where: { id },
@@ -309,83 +271,39 @@ export class MessagesService {
     return this.toView(updated);
   }
 
-  async retire(id: string, actorUserId: string): Promise<MessageView> {
-    const message = await this.prisma.message.findUnique({
-      where: { id },
-      select: { id: true, taskId: true, lifecycleState: true, task: { select: { id: true } } },
-    });
-    if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-    if (message.lifecycleState === LifecycleState.retired) {
-      throw new ConflictError('ALREADY_RETIRED', 'Message is already retired');
-    }
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.message.update({
-        where: { id },
-        data: {
-          lifecycleState: LifecycleState.retired,
-          retiredAt: new Date(),
-          version: { increment: 1 },
-        },
-        include: { attachments: true },
-      });
+  /**
+   * Delete a message and its files permanently. With replies it stays as an empty
+   * marker; otherwise the row goes too.
+   */
+  async delete(id: string, actorUserId: string): Promise<void> {
+    const message = await this.loadLive(id);
+    const blobs = await this.prisma.$transaction(async (tx) => {
+      const attachments = await tx.attachment.findMany({ where: { messageId: id }, select: { storageKey: true } });
+      await tx.attachment.deleteMany({ where: { messageId: id } });
+      const replies = await tx.message.count({ where: { parentMessageId: id } });
+      if (replies > 0) {
+        await tx.message.update({
+          where: { id },
+          data: { body: '', deletedAt: new Date(), version: { increment: 1 } },
+        });
+      } else {
+        await tx.message.delete({ where: { id } });
+      }
       await this.activity.logActivity({
         tx,
         actorUserId,
         subjectType: 'message',
         subjectId: id,
-        verb: 'message.retired',
-        payload: { messageId: id, taskId: message.taskId },
+        verb: 'message.deleted',
+        payload: { messageId: id, taskId: message.taskId, keptAsMarker: replies > 0 },
       });
-      return row;
+      return attachments.map((a) => a.storageKey);
     });
-    return this.toView(updated);
-  }
-
-  /**
-   * Revive a retired message (`message:revive`), the inverse of {@link retire}. Valid
-   * only while `retired` AND inside the grace window; otherwise `409 NOT_REVIVABLE`.
-   */
-  async revive(id: string, actorUserId: string): Promise<MessageView> {
-    const message = await this.prisma.message.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        taskId: true,
-        lifecycleState: true,
-        retiredAt: true,
-        task: { select: { id: true } },
-      },
-    });
-    if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-    const graceMs = await this.grace.windowMs();
-    if (!isRevivable(message, graceMs)) {
-      throw new ConflictError(
-        'NOT_REVIVABLE',
-        'Message is not retired or its grace period has elapsed',
+    // Blobs go after commit; one left behind is collected by the GC's blob reconcile.
+    for (const key of blobs) {
+      await this.storage.delete(key).catch((e) =>
+        this.logger.warn(`Blob delete failed for ${key}: ${(e as Error).message}`),
       );
     }
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.message.update({
-        where: { id },
-        data: {
-          lifecycleState: LifecycleState.active,
-          retiredAt: null,
-          version: { increment: 1 },
-        },
-        include: { attachments: true },
-      });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'message',
-        subjectId: id,
-        verb: 'message.revived',
-        payload: { messageId: id, taskId: message.taskId },
-      });
-      return row;
-    });
-    return this.toView(updated);
   }
 }

@@ -43,11 +43,9 @@ describe('Slice 7.1 — Revive endpoints', () => {
       'task:retire',
       'task:revive',
       'message:create',
-      'message:retire',
-      'message:revive',
+      'message:delete',
       'attachment:create',
-      'attachment:retire',
-      'attachment:revive',
+      'attachment:delete',
     ]) {
       const g = await auth(http().post('/api/grants')).send({
         roleId,
@@ -116,27 +114,8 @@ describe('Slice 7.1 — Revive endpoints', () => {
     });
   });
 
-  it('retires then revives a message within the grace window', async () => {
-    const msg = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({
-      body: 'A comment',
-    });
-    expect(msg.status).toBe(201);
-    const messageId = msg.body.id;
-
-    const retire = await auth(http().post(`/api/messages/${messageId}/retire`));
-    expect(retire.status).toBe(200);
-    expect(retire.body.lifecycleState).toBe('retired');
-
-    const revive = await auth(http().post(`/api/messages/${messageId}/revive`));
-    expect(revive.status).toBe(200);
-    expect(revive.body.lifecycleState).toBe('active');
-    expect(revive.body.retiredAt).toBeNull();
-  });
-
-  it('retires then revives an attachment; download 404s while retired', async () => {
-    const msg = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({
-      body: 'with file',
-    });
+  it('messages and attachments have no undo: deleting is permanent', async () => {
+    const msg = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'with file' });
     const messageId = msg.body.id;
     const up = await auth(http().post(`/api/messages/${messageId}/attachments`)).attach(
       'file',
@@ -145,20 +124,13 @@ describe('Slice 7.1 — Revive endpoints', () => {
     );
     expect(up.status).toBe(201);
     const attachmentId = up.body.id;
-
-    // Download works while active.
     expect((await auth(http().get(`/api/attachments/${attachmentId}`))).status).toBe(200);
 
-    const retire = await auth(http().post(`/api/attachments/${attachmentId}/retire`));
-    expect(retire.status).toBe(200);
-    expect(retire.body.lifecycleState).toBe('retired');
-
-    // A retired attachment is gone for download purposes.
+    expect((await auth(http().delete(`/api/attachments/${attachmentId}`))).status).toBe(204);
     expect((await auth(http().get(`/api/attachments/${attachmentId}`))).status).toBe(404);
-
-    const revive = await auth(http().post(`/api/attachments/${attachmentId}/revive`));
-    expect(revive.status).toBe(200);
-    expect(revive.body.lifecycleState).toBe('active');
-    expect((await auth(http().get(`/api/attachments/${attachmentId}`))).status).toBe(200);
+    // There are no revive routes for either.
+    expect((await auth(http().post(`/api/attachments/${attachmentId}/revive`))).status).toBe(404);
+    expect((await auth(http().delete(`/api/messages/${messageId}`))).status).toBe(204);
+    expect((await auth(http().post(`/api/messages/${messageId}/revive`))).status).toBe(404);
   });
 });

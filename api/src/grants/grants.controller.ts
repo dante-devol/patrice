@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -38,8 +39,8 @@ export class GrantsController {
   @Contract(ROUTES.listGrants)
   @Get('grants')
   @Authorize(ACTIONS.grantCreate.action, orgResource)
-  async list(@Query('include') include: string | undefined) {
-    return this.grants.list(include === 'retired');
+  async list() {
+    return this.grants.list();
   }
 
   @Contract(ROUTES.createGrant)
@@ -64,17 +65,11 @@ export class GrantsController {
     return this.grants.update(id, user.id, body);
   }
 
-  @Contract(ROUTES.retireGrant)
-  @Post('grants/:id/retire')
-  @Authorize(ACTIONS.grantRetire.action, orgResource)
-  async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
-    return this.grants.retire(id, user.id);
-  }
-
-  @Contract(ROUTES.reviveGrant)
-  @Post('grants/:id/revive')
-  @Authorize(ACTIONS.grantRevive.action, orgResource)
-  async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
-    return this.grants.revive(id, user.id);
+  @Contract(ROUTES.deleteGrant)
+  @Delete('grants/:id')
+  @HttpCode(204)
+  @Authorize(ACTIONS.grantDelete.action, orgResource)
+  async delete(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.grants.delete(id, user.id);
   }
 }

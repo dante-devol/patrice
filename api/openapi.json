@@ -613,16 +613,6 @@
             ],
             "format": "uuid"
           },
-          "lifecycleState": {
-            "$ref": "#/components/schemas/Lifecycle"
-          },
-          "retiredAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
           "version": {
             "type": "integer"
           }
@@ -636,8 +626,6 @@
           "scopeDivisionId",
           "scopeTeamId",
           "scopeRoleId",
-          "lifecycleState",
-          "retiredAt",
           "version"
         ],
         "additionalProperties": false
@@ -1033,6 +1021,574 @@
         ],
         "additionalProperties": false
       },
+      "TimelineEntry": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.created"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.claimed"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "userId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.left"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "userId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.claimant_evicted"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "userId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.requester_changed"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "fromUserId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "toUserId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "toUserId"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.claims_changed"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "openings": {
+                    "type": "integer"
+                  },
+                  "claimsClosed": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.completed"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.retired"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "task.revived"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "submission.submitted"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "submissionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "submissionNo": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "submissionId",
+                  "submissionNo"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "submission.reviewed"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "submissionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "submissionNo": {
+                    "type": "integer"
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "return",
+                      "reject"
+                    ]
+                  }
+                },
+                "required": [
+                  "submissionId",
+                  "submissionNo",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "submission.retired"
+                ]
+              },
+              "actorUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              },
+              "occurredAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "payload": {
+                "type": "object",
+                "properties": {
+                  "submissionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "submissionNo": {
+                    "type": "integer"
+                  },
+                  "claimantUserId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "submissionNo",
+                  "claimantUserId",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "actorUserId",
+              "occurredAt",
+              "payload"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
       "SubmissionState": {
         "type": "string",
         "enum": [
@@ -1144,13 +1700,6 @@
         ],
         "additionalProperties": false
       },
-      "MessageKind": {
-        "type": "string",
-        "enum": [
-          "comment",
-          "system"
-        ]
-      },
       "Attachment": {
         "type": "object",
         "properties": {
@@ -1201,9 +1750,6 @@
             "type": "string",
             "format": "uuid"
           },
-          "kind": {
-            "$ref": "#/components/schemas/MessageKind"
-          },
           "senderUserId": {
             "type": [
               "string",
@@ -1218,13 +1764,17 @@
             ],
             "format": "uuid"
           },
+          "submissionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "body": {
             "type": "string"
           },
-          "lifecycleState": {
-            "$ref": "#/components/schemas/Lifecycle"
-          },
-          "retiredAt": {
+          "deletedAt": {
             "type": [
               "string",
               "null"
@@ -1255,12 +1805,11 @@
         "required": [
           "id",
           "taskId",
-          "kind",
           "senderUserId",
           "parentMessageId",
+          "submissionId",
           "body",
-          "lifecycleState",
-          "retiredAt",
+          "deletedAt",
           "editedAt",
           "version",
           "createdAt",
@@ -1279,9 +1828,6 @@
             "type": "string",
             "format": "uuid"
           },
-          "kind": {
-            "$ref": "#/components/schemas/MessageKind"
-          },
           "senderUserId": {
             "type": [
               "string",
@@ -1296,13 +1842,17 @@
             ],
             "format": "uuid"
           },
+          "submissionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "body": {
             "type": "string"
           },
-          "lifecycleState": {
-            "$ref": "#/components/schemas/Lifecycle"
-          },
-          "retiredAt": {
+          "deletedAt": {
             "type": [
               "string",
               "null"
@@ -1339,12 +1889,11 @@
         "required": [
           "id",
           "taskId",
-          "kind",
           "senderUserId",
           "parentMessageId",
+          "submissionId",
           "body",
-          "lifecycleState",
-          "retiredAt",
+          "deletedAt",
           "editedAt",
           "version",
           "createdAt",
@@ -1410,16 +1959,6 @@
             "type": "string",
             "format": "uuid"
           },
-          "lifecycleState": {
-            "$ref": "#/components/schemas/Lifecycle"
-          },
-          "retiredAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -1434,8 +1973,6 @@
           "kind",
           "checksum",
           "uploaderUserId",
-          "lifecycleState",
-          "retiredAt",
           "createdAt"
         ],
         "additionalProperties": false
@@ -3916,19 +4453,6 @@
             "session": []
           }
         ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "retired"
-              ]
-            },
-            "required": false,
-            "name": "include",
-            "in": "query"
-          }
-        ],
         "responses": {
           "200": {
             "description": "List grants",
@@ -4158,16 +4682,14 @@
             }
           }
         }
-      }
-    },
-    "/grants/{id}/retire": {
-      "post": {
-        "operationId": "retireGrant",
+      },
+      "delete": {
+        "operationId": "deleteGrant",
         "tags": [
           "access"
         ],
-        "summary": "Retire a grant",
-        "description": "Gated by the `grant:retire` action.",
+        "summary": "Delete a grant (permanent, audited)",
+        "description": "Gated by the `grant:delete` action.",
         "security": [
           {
             "session": []
@@ -4184,62 +4706,8 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": "Retire a grant",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Grant"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error; `error.code` is one of `ErrorCode`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/grants/{id}/revive": {
-      "post": {
-        "operationId": "reviveGrant",
-        "tags": [
-          "access"
-        ],
-        "summary": "Revive a retired grant",
-        "description": "Gated by the `grant:revive` action.",
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Revive a retired grant",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Grant"
-                }
-              }
-            }
+          "204": {
+            "description": "No content"
           },
           "default": {
             "description": "An error; `error.code` is one of `ErrorCode`",
@@ -6804,6 +7272,56 @@
         }
       }
     },
+    "/tasks/{id}/timeline": {
+      "get": {
+        "operationId": "getTaskTimeline",
+        "tags": [
+          "tasks"
+        ],
+        "summary": "What happened on a task, as typed events",
+        "description": "Gated by the `task:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What happened on a task, as typed events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimelineEntry"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/tasks/{id}/submissions": {
       "post": {
         "operationId": "submit",
@@ -7248,6 +7766,10 @@
                   "parentMessageId": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "submissionId": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 },
                 "required": [
@@ -7347,16 +7869,14 @@
             }
           }
         }
-      }
-    },
-    "/messages/{id}/retire": {
-      "post": {
-        "operationId": "retireMessage",
+      },
+      "delete": {
+        "operationId": "deleteMessage",
         "tags": [
           "messages"
         ],
-        "summary": "Retire a message",
-        "description": "Gated by the `message:retire` action.",
+        "summary": "Delete a message (permanent; kept as a marker if it has replies)",
+        "description": "Gated by the `message:delete` action.",
         "security": [
           {
             "session": []
@@ -7373,62 +7893,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Retire a message",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Message"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error; `error.code` is one of `ErrorCode`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/messages/{id}/revive": {
-      "post": {
-        "operationId": "reviveMessage",
-        "tags": [
-          "messages"
-        ],
-        "summary": "Revive a retired message",
-        "description": "Gated by the `message:revive` action.",
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Revive a retired message",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Message"
-                }
-              }
-            }
+          "204": {
+            "description": "No content"
           },
           "default": {
             "description": "An error; `error.code` is one of `ErrorCode`",
@@ -7508,101 +7974,45 @@
         }
       }
     },
-    "/attachments/{id}/retire": {
-      "post": {
-        "operationId": "retireAttachment",
-        "tags": [
-          "messages"
-        ],
-        "summary": "Retire an attachment",
-        "description": "Gated by the `attachment:retire` action.",
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Retire an attachment",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AttachmentMeta"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error; `error.code` is one of `ErrorCode`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/attachments/{id}/revive": {
-      "post": {
-        "operationId": "reviveAttachment",
-        "tags": [
-          "messages"
-        ],
-        "summary": "Revive a retired attachment",
-        "description": "Gated by the `attachment:revive` action.",
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Revive a retired attachment",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AttachmentMeta"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "An error; `error.code` is one of `ErrorCode`",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/attachments/{id}": {
+      "delete": {
+        "operationId": "deleteAttachment",
+        "tags": [
+          "messages"
+        ],
+        "summary": "Delete an attachment (permanent, audited)",
+        "description": "Gated by the `attachment:delete` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "operationId": "downloadAttachment",
         "tags": [
@@ -7702,7 +8112,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid"
+              "pattern": "^(unread|read):[0-9a-f-]{36}$"
             },
             "required": false,
             "name": "after",

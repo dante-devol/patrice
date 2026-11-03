@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -71,19 +72,12 @@ export class MessagesController {
     return this.messages.update(id, user.id, body);
   }
 
-  @Contract(ROUTES.retireMessage)
-  @Post('messages/:id/retire')
-  @HttpCode(200)
-  @Authorize(ACTIONS.messageRetire.action, messageResource)
-  async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
-    return this.messages.retire(id, user.id);
-  }
-
-  @Contract(ROUTES.reviveMessage)
-  @Post('messages/:id/revive')
-  @HttpCode(200)
-  @Authorize(ACTIONS.messageRevive.action, messageResource)
-  async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
-    return this.messages.revive(id, user.id);
+  /** Delete permanently (a message with replies stays as an empty marker). */
+  @Contract(ROUTES.deleteMessage)
+  @Delete('messages/:id')
+  @HttpCode(204)
+  @Authorize(ACTIONS.messageDelete.action, messageResource)
+  async delete(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.messages.delete(id, user.id);
   }
 }

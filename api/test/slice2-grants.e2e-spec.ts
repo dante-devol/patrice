@@ -147,9 +147,11 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
     expect(onArt).toBe(false);
   });
 
-  it('retiring the grant removes it from projection (member no longer passes)', async () => {
-    const res = await auth(http().post(`/api/grants/${grantId}/retire`));
-    expect(res.status).toBe(201);
+  it('deleting the grant removes it from projection (member no longer passes)', async () => {
+    const res = await auth(http().delete(`/api/grants/${grantId}`));
+    expect(res.status).toBe(204);
+    const audit = await prisma.activity.findFirstOrThrow({ where: { verb: 'grant.deleted', subjectId: grantId } });
+    expect(audit.payload).toMatchObject({ action: 'task:review', effect: 'permit', scopeKind: 'own_division' });
 
     const user = await prisma.appUser.findFirstOrThrow({
       where: { email: 'lead@example.com' },
@@ -168,27 +170,5 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
       },
     });
     expect(onWriting).toBe(false);
-  });
-
-  it('reviving the grant restores it', async () => {
-    const res = await auth(http().post(`/api/grants/${grantId}/revive`));
-    expect(res.status).toBe(201);
-    const user = await prisma.appUser.findFirstOrThrow({
-      where: { email: 'lead@example.com' },
-      select: { id: true },
-    });
-    const onWriting = await access.decide({
-      userId: user.id,
-      action: 'task:review',
-      resource: {
-        type: 'Task',
-        id: randomUUID(),
-        attrs: {
-          division: { __entity: { type: 'Patrice::Division', id: writingId } },
-          retired: false,
-        },
-      },
-    });
-    expect(onWriting).toBe(true);
   });
 });

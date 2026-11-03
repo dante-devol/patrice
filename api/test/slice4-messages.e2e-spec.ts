@@ -15,7 +15,7 @@ import {
 } from './helpers';
 
 /** Slice 4.3 — messages, threading, attachments (local-fs), system messages (#19). */
-describe('Slice 4.3 — Messages, attachments, system messages', () => {
+describe('Messages, attachments and the task timeline', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;
@@ -49,7 +49,7 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
     const adminRoleId = adminUser.userRoles[0].roleId;
     for (const action of [
       'task:create', 'task:assign', 'task:change_requester',
-      'message:create', 'message:update', 'message:retire', 'attachment:create',
+      'message:create', 'message:update', 'message:delete', 'attachment:create',
     ]) {
       const g = await auth(http().post('/api/grants')).send({ roleId: adminRoleId, action, scopeKind: 'global' });
       expect(g.status).toBe(201);
@@ -80,8 +80,8 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
     it('posts a top-level comment', async () => {
       const res = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'Top level' });
       expect(res.status).toBe(201);
-      expect(res.body.kind).toBe('comment');
       expect(res.body.parentMessageId).toBeNull();
+      expect(res.body.deletedAt).toBeNull();
       topId = res.body.id;
     });
 
@@ -113,7 +113,7 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
     });
   });
 
-  describe('edit + retire', () => {
+  describe('edit + delete', () => {
     it('edits a message (sets editedAt, bumps version)', async () => {
       const created = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'original' });
       const res = await auth(http().patch(`/api/messages/${created.body.id}`)).send({ body: 'edited' });
@@ -123,11 +123,26 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
       expect(res.body.version).toBeGreaterThan(0);
     });
 
-    it('soft-retires a message', async () => {
-      const created = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'to retire' });
-      const res = await auth(http().post(`/api/messages/${created.body.id}/retire`));
-      expect(res.status).toBe(200);
-      expect(res.body.lifecycleState).toBe('retired');
+    it('deletes a message permanently, with an audit row', async () => {
+      const created = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'to delete' });
+      const res = await auth(http().delete(`/api/messages/${created.body.id}`));
+      expect(res.status).toBe(204);
+      expect(await prisma.message.findUnique({ where: { id: created.body.id } })).toBeNull();
+      const audit = await prisma.activity.findFirstOrThrow({ where: { verb: 'message.deleted', subjectId: created.body.id } });
+      expect(audit.payload).toMatchObject({ keptAsMarker: false });
+    });
+
+    it('a deleted message with replies stays as an empty marker', async () => {
+      const top = await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'has replies' });
+      await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'reply', parentMessageId: top.body.id });
+      expect((await auth(http().delete(`/api/messages/${top.body.id}`))).status).toBe(204);
+      const list = await auth(http().get(`/api/tasks/${taskId}/messages?limit=100`));
+      const marker = list.body.items.find((m: { id: string }) => m.id === top.body.id);
+      expect(marker.body).toBe('');
+      expect(marker.deletedAt).not.toBeNull();
+      expect(marker.replies).toHaveLength(1);
+      // A deleted message can't be edited or deleted again.
+      expect((await auth(http().patch(`/api/messages/${top.body.id}`)).send({ body: 'x' })).status).toBe(404);
     });
   });
 
@@ -186,29 +201,34 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
     });
   });
 
-  describe('system messages', () => {
-    it('emits a system message on claim', async () => {
+  describe('timeline', () => {
+    const timeline = async (t: string) => (await auth(http().get(`/api/tasks/${t}/timeline`))).body;
+
+    it('records a typed claim event, and the thread holds only comments', async () => {
       const t = (await auth(http().post('/api/tasks')).send({ name: 'Claim me', divisionId: writingId })).body.id;
       await as(claimer.session)(http().post(`/api/tasks/${t}/claim`));
-      const sys = await prisma.message.findFirst({ where: { taskId: t, kind: 'system' } });
-      expect(sys).not.toBeNull();
-      expect(sys!.senderUserId).toBeNull();
-      expect(sys!.body).toContain(claimer.userId);
+      const events = await timeline(t);
+      expect(events.map((e: { type: string }) => e.type)).toEqual(['task.created', 'task.claimed']);
+      expect(events[1]).toMatchObject({ actorUserId: claimer.userId, payload: { userId: claimer.userId } });
+      expect(await prisma.message.count({ where: { taskId: t } })).toBe(0);
     });
 
-    it('emits a system message on leave', async () => {
+    it('records claim then leave', async () => {
       const t = (await auth(http().post('/api/tasks')).send({ name: 'Leave me', divisionId: writingId })).body.id;
       await as(claimer.session)(http().post(`/api/tasks/${t}/claim`));
       await as(claimer.session)(http().post(`/api/tasks/${t}/leave`));
-      const count = await prisma.message.count({ where: { taskId: t, kind: 'system' } });
-      expect(count).toBe(2); // claim + leave
+      expect((await timeline(t)).map((e: { type: string }) => e.type)).toEqual([
+        'task.created',
+        'task.claimed',
+        'task.left',
+      ]);
     });
 
-    it('emits a system message on requester change', async () => {
+    it('records a requester change with both ends', async () => {
       const t = (await auth(http().post('/api/tasks')).send({ name: 'Reassign', divisionId: writingId })).body.id;
       await auth(http().post(`/api/tasks/${t}/requester`)).send({ userId: claimer.userId });
-      const sys = await prisma.message.findFirst({ where: { taskId: t, kind: 'system' } });
-      expect(sys!.body).toContain(claimer.userId);
+      const change = (await timeline(t)).find((e: { type: string }) => e.type === 'task.requester_changed');
+      expect(change.payload.toUserId).toBe(claimer.userId);
     });
   });
 });

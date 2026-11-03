@@ -130,7 +130,7 @@ export class PermissionsAdminComponent {
         this.api.listTeams(),
       ]);
       this.roles.set(roles);
-      this.grants.set(grants.filter((g) => g.lifecycleState === 'active'));
+      this.grants.set(grants);
       this.actions.set(actions.actions);
       this.divisions.set(divisions);
       this.teams.set(teams);
@@ -156,12 +156,12 @@ export class PermissionsAdminComponent {
     return this.cellGrant(roleId, action)?.scopeKind ?? '';
   }
 
-  /** Set/clear an id-less scope for a cell (retire-then-create, or just retire). */
+  /** Set/clear an id-less scope for a cell (delete-then-create, or just delete). */
   async setCell(roleId: string, action: string, scope: string): Promise<void> {
     this.error.set(null);
     const existing = this.cellGrant(roleId, action);
     try {
-      if (existing) await this.api.retireGrant(existing.id);
+      if (existing) await this.api.deleteGrant(existing.id);
       if (scope) {
         await this.api.createGrant({ roleId, action, scopeKind: scope as ScopeKind });
       }

@@ -13,6 +13,14 @@ import { z } from 'zod';
  */
 const uuid = z.string().uuid();
 
+/**
+ * Before → after values for changed configuration fields (§6.5): names, flags and
+ * numbers, never personal data or user-authored text. Absent on older rows.
+ */
+const changes = z
+  .record(z.object({ from: z.unknown(), to: z.unknown() }).strict())
+  .optional();
+
 export const activityPayloadSchemas = {
   'invite.created': z
     .object({
@@ -49,23 +57,43 @@ export const activityPayloadSchemas = {
 
   // Slice 2 — org configuration. IDs-only (no names/PII; render by joining at read).
   'role.created': z.object({ roleId: uuid }).strict(),
-  'role.updated': z.object({ roleId: uuid }).strict(),
+  'role.updated': z.object({ roleId: uuid, changes }).strict(),
   'role.retired': z.object({ roleId: uuid }).strict(),
   'role.revived': z.object({ roleId: uuid }).strict(),
   'division.created': z.object({ divisionId: uuid }).strict(),
-  'division.updated': z.object({ divisionId: uuid }).strict(),
+  'division.updated': z.object({ divisionId: uuid, changes }).strict(),
   'division.retired': z.object({ divisionId: uuid }).strict(),
   'division.revived': z.object({ divisionId: uuid }).strict(),
   'team.created': z.object({ teamId: uuid }).strict(),
   'membership.added': z.object({ userId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid }).strict(),
   'membership.removed': z.object({ userId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid }).strict(),
-  'team.updated': z.object({ teamId: uuid }).strict(),
+  'team.updated': z.object({ teamId: uuid, changes }).strict(),
   'team.retired': z.object({ teamId: uuid }).strict(),
   'team.revived': z.object({ teamId: uuid }).strict(),
   'grant.created': z.object({ grantId: uuid, roleId: uuid }).strict(),
-  'grant.updated': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  'grant.updated': z
+    .object({
+      grantId: uuid,
+      roleId: uuid,
+      // Configuration: recorded as values (before → after), not just ids.
+      before: z.object({ action: z.string(), effect: z.string(), scopeKind: z.string(), scopeId: uuid.nullable() }).strict().optional(),
+      after: z.object({ action: z.string(), effect: z.string(), scopeKind: z.string(), scopeId: uuid.nullable() }).strict().optional(),
+    })
+    .strict(),
   'grant.retired': z.object({ grantId: uuid, roleId: uuid }).strict(),
   'grant.revived': z.object({ grantId: uuid, roleId: uuid }).strict(),
+  // Phase 3: grants, messages and attachments are hard-deleted; the audit row records
+  // the grant's shape (configuration) so "what was removed" stays answerable.
+  'grant.deleted': z
+    .object({
+      grantId: uuid,
+      roleId: uuid,
+      action: z.string(),
+      effect: z.enum(['permit', 'forbid']),
+      scopeKind: z.string(),
+      scopeId: uuid.nullable(),
+    })
+    .strict(),
   'user_role.granted': z.object({ userId: uuid, roleId: uuid }).strict(),
   'user_role.revoked': z.object({ userId: uuid, roleId: uuid }).strict(),
   'user.updated': z.object({ userId: uuid }).strict(),
@@ -75,7 +103,7 @@ export const activityPayloadSchemas = {
   'user.retired': z.object({ userId: uuid }).strict(),
   'user.revived': z.object({ userId: uuid }).strict(),
   'config.updated': z
-    .object({ changedKeys: z.array(z.string()) })
+    .object({ changedKeys: z.array(z.string()), changes })
     .strict(),
   // Slice 3 — request template authoring. IDs + the (non-PII) question count only.
   'request_template.updated': z
@@ -117,12 +145,14 @@ export const activityPayloadSchemas = {
   'message.updated': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'message.retired': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'message.revived': z.object({ messageId: uuid, taskId: uuid }).strict(),
+  'message.deleted': z.object({ messageId: uuid, taskId: uuid, keptAsMarker: z.boolean() }).strict(),
   'attachment.created': z
     .object({ attachmentId: uuid, messageId: uuid })
     .strict(),
   // Slice 7 — attachment lifecycle (independent retire/revive of a single file).
   'attachment.retired': z.object({ attachmentId: uuid }).strict(),
   'attachment.revived': z.object({ attachmentId: uuid }).strict(),
+  'attachment.deleted': z.object({ attachmentId: uuid, taskId: uuid }).strict(),
   // Slice 5 — submission lifecycle. IDs + the (non-PII) submission_no/decision/status.
   'submission.submitted': z
     .object({
@@ -146,7 +176,8 @@ export const activityPayloadSchemas = {
       taskId: uuid,
       submissionId: uuid,
       claimantUserId: uuid,
-      reason: z.string(),
+      // The timeline entry that holds the reason; free text stays out of the audit log.
+      eventId: uuid,
     })
     .strict(),
   'task.claimant_removed': z

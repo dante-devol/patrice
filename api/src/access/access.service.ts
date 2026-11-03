@@ -67,7 +67,7 @@ export class AccessService {
   async projectPolicies(db: Db = this.prisma): Promise<string> {
     const { selfReviewAllowed, requireDiscordLink } = await this.settings.get(db);
     const grants = await db.grant.findMany({
-      where: { lifecycleState: 'active', role: { lifecycleState: 'active' } },
+      where: { role: { lifecycleState: 'active' } },
       select: {
         id: true,
         roleId: true,

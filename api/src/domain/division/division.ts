@@ -2,6 +2,7 @@ import { uuidv7 } from 'uuidv7';
 import { AggregateRoot } from '../shared/aggregate';
 import { DomainError } from '../shared/domain-error';
 import { Lifecycle } from '../shared/lifecycle';
+import { diffFields } from '../../activity/changes';
 
 export interface DivisionSettings {
   defaultOpenings: number;
@@ -73,6 +74,7 @@ export class Division extends AggregateRoot {
   /** A retired division can't be edited; revive it first. */
   update(changes: { name?: string } & Partial<DivisionSettings>): void {
     if (this._lifecycle.isRetired) throw new DomainError('DIVISION_RETIRED', 'Division is retired');
+    const before = { name: this._name, ...this._settings };
     if (changes.name !== undefined) this._name = Division.validName(changes.name);
     this._settings = {
       defaultOpenings:
@@ -86,7 +88,15 @@ export class Division extends AggregateRoot {
       type: 'division.updated',
       subjectType: 'division',
       subjectId: this.id,
-      payload: { divisionId: this.id },
+      payload: {
+        divisionId: this.id,
+        changes: diffFields(before, { name: this._name, ...this._settings }, [
+          'name',
+          'defaultOpenings',
+          'openingsLocked',
+          'restrictClaims',
+        ]),
+      },
     });
   }
 

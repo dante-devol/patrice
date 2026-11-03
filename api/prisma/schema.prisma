@@ -87,11 +87,6 @@ enum StatusCache {
   approved
 }
 
-enum MessageKind {
-  comment
-  system
-}
-
 /// A submission's per-version review state (Slice 5). The lifecycle min-rule rolls
 /// these up into a task's `status_cache`. `rejected` submissions are excluded from
 /// the roll-up (set aside, no resubmit); a `revising` submission invites a resubmit
@@ -200,6 +195,7 @@ model Division {
   tasks           Task[]
   teams           Team[]
   memberships     Membership[]
+  scopedGrants    Grant[]
 
   @@map("division")
 }
@@ -220,6 +216,7 @@ model Team {
   division    Division     @relation(fields: [divisionId], references: [id], onDelete: Restrict)
   tasks       Task[]
   memberships Membership[]
+  scopedGrants Grant[]
 
   @@index([divisionId])
   @@map("team")
@@ -296,7 +293,6 @@ model Invitation {
   id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   tokenHash       String    @unique @map("token_hash")
   email           String?   @db.Text // ALTERed to citext in migration
-  intendedRoleIds String[]  @map("intended_role_ids") @db.Uuid
   passcodeHash    String?   @map("passcode_hash")
   maxUses         Int       @default(1) @map("max_uses")
   useCount        Int       @default(0) @map("use_count")
@@ -306,6 +302,7 @@ model Invitation {
   revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
 
   uses InvitationUse[]
+  roles        InvitationRole[]
 
   @@map("invitation")
 }
@@ -373,6 +370,8 @@ model Role {
   grants        Grant[]
   groupMappings ExternalGroupMapping[]
   memberRoleOf  SystemSettings[]
+  scopedGrants  Grant[]                @relation("GrantScopeRole")
+  invitations   InvitationRole[]
 
   @@map("role")
 }
@@ -426,13 +425,14 @@ model Grant {
   scopeDivisionId String?        @map("scope_division_id") @db.Uuid
   scopeTeamId     String?        @map("scope_team_id") @db.Uuid
   scopeRoleId     String?        @map("scope_role_id") @db.Uuid
-  lifecycleState  LifecycleState @default(active) @map("lifecycle_state")
-  retiredAt       DateTime?      @map("retired_at") @db.Timestamptz(6)
   version         Int            @default(0)
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  role          Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  scopeDivision Division? @relation(fields: [scopeDivisionId], references: [id], onDelete: Cascade)
+  scopeTeam     Team?     @relation(fields: [scopeTeamId], references: [id], onDelete: Cascade)
+  scopeRole     Role?     @relation("GrantScopeRole", fields: [scopeRoleId], references: [id], onDelete: Cascade)
 
   @@index([roleId])
   @@map("grant")
@@ -526,6 +526,7 @@ model Task {
   claimants       TaskClaimant[]
   submissions     Submission[]
   messages        Message[]
+  events          DomainEvent[]
 
   @@index([divisionId])
   @@index([teamId])
@@ -563,13 +564,12 @@ model TaskClaimant {
 model Message {
   id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
   taskId          String         @map("task_id") @db.Uuid
-  kind            MessageKind    @default(comment)
   senderUserId    String?        @map("sender_user_id") @db.Uuid
   parentMessageId String?        @map("parent_message_id") @db.Uuid
   submissionId    String?        @map("submission_id") @db.Uuid
   body            String         @db.Text
-  lifecycleState  LifecycleState @default(active) @map("lifecycle_state")
-  retiredAt       DateTime?      @map("retired_at") @db.Timestamptz(6)
+  /// Set when a deleted message is kept as a marker because it has replies.
+  deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz(6)
   editedAt        DateTime?      @map("edited_at") @db.Timestamptz(6)
   version         Int            @default(0)
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -656,8 +656,6 @@ model Attachment {
   byteSize       BigInt         @map("byte_size")
   kind           AttachmentKind @default(other)
   checksum       String?
-  lifecycleState LifecycleState @default(active) @map("lifecycle_state")
-  retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
 
   message  Message? @relation(fields: [messageId], references: [id], onDelete: Restrict)
@@ -685,13 +683,16 @@ model Notification {
   subjectType     String    @map("subject_type")
   subjectId       String    @map("subject_id") @db.Uuid
   payload         Json      @default("{}")
-  eventSeq        BigInt    @map("event_seq")
+  /// The event this notification projects; (event, recipient) is unique, so
+  /// redelivering an event is a no-op.
+  eventId         String?   @map("event_id") @db.Uuid
   readAt          DateTime? @map("read_at") @db.Timestamptz(6)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  recipient AppUser @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+  recipient AppUser      @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+  event     DomainEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
-  @@unique([recipientUserId, type, subjectId, eventSeq])
+  @@unique([eventId, recipientUserId])
   @@index([recipientUserId, readAt, createdAt])
   @@map("notification")
 }
@@ -804,4 +805,37 @@ model SyncBaseline {
 enum ConflictWinner {
   patrice
   external
+}
+
+/// One thing that happened, in a typed shape the client renders directly. Events with
+/// a task are its timeline. `recipients` is the notification fan-out snapshotted when
+/// the event happened; `notified_at` is set once the notifications are written.
+model DomainEvent {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  type        String
+  taskId      String?   @map("task_id") @db.Uuid
+  actorUserId String?   @map("actor_user_id") @db.Uuid
+  payload     Json      @default("{}")
+  notifyType  String?   @map("notify_type")
+  recipients  String[]  @default([]) @db.Uuid
+  notifiedAt  DateTime? @map("notified_at") @db.Timestamptz(6)
+  occurredAt  DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  task          Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@index([taskId, occurredAt])
+  @@map("domain_event")
+}
+
+/// The roles an invitation pre-assigns.
+model InvitationRole {
+  invitationId String @map("invitation_id") @db.Uuid
+  roleId       String @map("role_id") @db.Uuid
+
+  invitation Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([invitationId, roleId])
+  @@map("invitation_role")
 }

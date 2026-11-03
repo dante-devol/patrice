@@ -1,15 +1,12 @@
-import { Message, Task } from '../../core/api.types';
+import { Message, TimelineEntry } from '../../core/api.types';
 import {
   buildHistory,
   divisionColor,
-  humanizeSystemBody,
   initials,
   isMultiClaim,
-  parseSubmitEvent,
   relativeTime,
   stampClass,
   stampStatus,
-  systemNodeKind,
   teamColor,
 } from './task-presentation';
 
@@ -73,101 +70,71 @@ describe('task-presentation', () => {
     });
   });
 
-  describe('systemNodeKind', () => {
-    it('classifies the canonical system bodies', () => {
-      expect(systemNodeKind('User abc claimed this task.')).toBe('claim');
-      expect(systemNodeKind('User abc left this task.')).toBe('leave');
-      expect(systemNodeKind('User abc submitted version 2.')).toBe('submit');
-      expect(systemNodeKind('Reviewer abc returned version 1.')).toBe('return');
-      expect(systemNodeKind('Reviewer abc approved version 2.')).toBe('approve');
-      expect(systemNodeKind('User abc marked this task complete.')).toBe('approve');
-      expect(systemNodeKind('Requester changed to user xyz.')).toBe('neutral');
-    });
-  });
-
-  describe('parseSubmitEvent', () => {
-    it('extracts the actor + version from a submit body, else null', () => {
-      expect(parseSubmitEvent('User u1 submitted version 3.')).toEqual({ actorId: 'u1', version: 3 });
-      expect(parseSubmitEvent('User u1 claimed this task.')).toBeNull();
-    });
-  });
-
-  describe('humanizeSystemBody', () => {
-    const name = (id: string) => ({ u1: 'Maya', u2: 'Aric', u3: 'Devin' }[id] ?? id);
-
-    it('rewrites canonical bodies into domain phrasing with resolved names', () => {
-      expect(humanizeSystemBody('User u1 claimed this task.', name)).toBe('Maya claimed an opening');
-      expect(humanizeSystemBody('User u1 left this task.', name)).toBe('Maya left');
-      expect(humanizeSystemBody('User u1 submitted version 2.', name)).toBe('Maya submitted v2 for review');
-      expect(humanizeSystemBody('Reviewer u3 returned version 1.', name)).toBe('Devin returned v1');
-      expect(humanizeSystemBody('Reviewer u3 approved version 2.', name)).toBe('Devin approved v2');
-      expect(humanizeSystemBody('Requester changed to user u2.', name)).toBe('requester changed to Aric');
-    });
-
-    it('never leaks a raw id for an unrecognised body', () => {
-      expect(humanizeSystemBody('User u1 did something odd.', name)).toContain('Maya');
-    });
-  });
-
   describe('buildHistory', () => {
-    const task: Pick<Task, 'requesterUserId' | 'createdAt'> = {
-      requesterUserId: 'u3',
-      createdAt: '2026-06-16T00:00:00.000Z',
-    };
     const resolve = (id: string | null) =>
       id === null ? 'System' : ({ u1: 'Maya', u3: 'Devin' }[id] ?? id);
+    const at = (day: number, hour = 0) => `2026-06-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:00:00.000Z`;
 
+    function entry(partial: Partial<TimelineEntry> & Pick<TimelineEntry, 'id' | 'type' | 'payload'>): TimelineEntry {
+      return { actorUserId: 'u1', occurredAt: at(17), ...partial } as TimelineEntry;
+    }
     function msg(partial: Partial<Message>): Message {
       return {
-        id: 'm', taskId: 't', kind: 'comment', senderUserId: 'u1', parentMessageId: null,
-        body: '', lifecycleState: 'active', retiredAt: null, editedAt: null, version: 1,
-        createdAt: '2026-06-17T00:00:00.000Z', attachments: [], ...partial,
+        id: 'm', taskId: 't', senderUserId: 'u1', parentMessageId: null, submissionId: null,
+        body: '', deletedAt: null, editedAt: null, version: 1,
+        createdAt: at(17), attachments: [], ...partial,
       };
     }
 
-    it('prepends a synthetic requested event from the task itself', () => {
-      const events = buildHistory(task, [], resolve);
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({ kind: 'system', node: 'request', text: 'Devin requested this task' });
+    it('renders typed events with resolved names', () => {
+      const events = buildHistory(
+        [
+          entry({ id: 'e0', type: 'task.created', actorUserId: 'u3', payload: {}, occurredAt: at(16) }),
+          entry({ id: 'e1', type: 'task.claimed', payload: { userId: 'u1' } }),
+        ],
+        [],
+        resolve,
+      );
+      expect(events.map((e) => [e.node, e.text])).toEqual([
+        ['request', 'Devin requested this task'],
+        ['claim', 'Maya claimed an opening'],
+      ]);
     });
 
-    it('threads one-level replies under their parent event and links submit events', () => {
+    it('threads a submission’s decisions and the comments about it under its submit event', () => {
       const events = buildHistory(
-        task,
         [
-          msg({
-            id: 'm1', kind: 'system', senderUserId: null,
-            body: 'User u1 submitted version 2.', createdAt: '2026-06-18T00:00:00.000Z',
-            replies: [
-              msg({ id: 'm1r', kind: 'system', senderUserId: null, body: 'Reviewer u3 returned version 2.', createdAt: '2026-06-19T00:00:00.000Z' }),
-              msg({ id: 'm1c', kind: 'comment', senderUserId: 'u3', body: 'Loosen lines 4–9.', createdAt: '2026-06-19T01:00:00.000Z' }),
-            ],
+          entry({ id: 'e1', type: 'submission.submitted', payload: { submissionId: 's1', submissionNo: 2 }, occurredAt: at(18) }),
+          entry({
+            id: 'e2',
+            type: 'submission.reviewed',
+            actorUserId: 'u3',
+            payload: { submissionId: 's1', submissionNo: 2, decision: 'return' },
+            occurredAt: at(19),
           }),
         ],
+        [msg({ id: 'c1', senderUserId: 'u3', submissionId: 's1', body: 'Loosen lines 4–9.', createdAt: at(19, 1) })],
         resolve,
       );
-      // Top-level stays the submit event; the decision + comment nest under it.
-      expect(events.map((e) => e.id)).toEqual(['requested', 'm1']);
-      expect(events[1].submission).toEqual({ actorId: 'u1', version: 2 });
-      expect(events[1].replies.map((r) => r.id)).toEqual(['m1r', 'm1c']);
-      expect(events[1].replies[0]).toMatchObject({ node: 'return', text: 'Devin returned v2' });
-      expect(events[1].replies[1]).toMatchObject({ kind: 'comment', text: 'Loosen lines 4–9.' });
+      expect(events.map((e) => e.id)).toEqual(['e1']);
+      expect(events[0].submission).toEqual({ submissionId: 's1', actorId: 'u1', version: 2 });
+      expect(events[0].replies.map((r) => r.id)).toEqual(['e2', 'c1']);
+      expect(events[0].replies[0]).toMatchObject({ node: 'return', text: 'Devin returned v2' });
+      expect(events[0].replies[1]).toMatchObject({ kind: 'comment', text: 'Loosen lines 4–9.' });
     });
 
-    it('humanises system messages and passes comments through as cards', () => {
+    it('interleaves comments with events by time, and shows deleted markers', () => {
       const events = buildHistory(
-        task,
+        [entry({ id: 'e1', type: 'task.claimed', payload: { userId: 'u1' }, occurredAt: at(17) })],
         [
-          msg({ id: 'm1', kind: 'system', senderUserId: null, body: 'User u1 claimed this task.' }),
-          msg({ id: 'm2', kind: 'comment', senderUserId: 'u1', body: 'On it.' }),
+          msg({ id: 'm1', body: 'On it.', createdAt: at(18) }),
+          msg({ id: 'm0', body: '', deletedAt: at(18), createdAt: at(16) }),
         ],
         resolve,
       );
-      expect(events.map((e) => e.kind)).toEqual(['system', 'system', 'comment']);
-      expect(events[1].text).toBe('Maya claimed an opening');
-      expect(events[1].node).toBe('claim');
-      expect(events[2].text).toBe('On it.');
-      expect(events[2].message?.id).toBe('m2');
+      expect(events.map((e) => e.id)).toEqual(['m0', 'e1', 'm1']);
+      expect(events[0].text).toBe('(deleted)');
+      expect(events[2]).toMatchObject({ kind: 'comment', text: 'On it.' });
     });
   });
 });

@@ -50,11 +50,9 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
   'task:complete': 'requester',
   // Senders and uploaders manage what they posted; attaching goes on your own message.
   'message:update': 'sender',
-  'message:retire': 'sender',
-  'message:revive': 'sender',
+  'message:delete': 'sender',
   'attachment:create': 'sender',
-  'attachment:retire': 'uploader',
-  'attachment:revive': 'uploader',
+  'attachment:delete': 'uploader',
   'session:revoke': 'owner',
 };
 

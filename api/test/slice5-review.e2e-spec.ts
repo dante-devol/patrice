@@ -104,10 +104,10 @@ describe('Slice 5.2 — Review lifecycle', () => {
     expect(v2.prevSubmissionId).toBe(v1.id);
     expect((await auth(http().get(`/api/tasks/${taskId}`))).body.statusCache).toBe('review');
 
-    const m2 = await prisma.message.findFirst({
-      where: { taskId, submissionId: v2.id, parentMessageId: null, kind: 'system' },
-    });
-    expect(m2).not.toBeNull();
+    const submitted = (await auth(http().get(`/api/tasks/${taskId}/timeline`))).body.filter(
+      (e: { type: string }) => e.type === 'submission.submitted',
+    );
+    expect(submitted.map((e: { payload: { submissionNo: number } }) => e.payload.submissionNo)).toEqual([1, 2]);
 
     // Approve v2 → task approved.
     const appr = await auth(http().post(`/api/submissions/${v2.id}/review`)).send({ decision: 'approve' });
@@ -115,10 +115,14 @@ describe('Slice 5.2 — Review lifecycle', () => {
     expect(appr.body.state).toBe('approved');
     expect((await auth(http().get(`/api/tasks/${taskId}`))).body.statusCache).toBe('approved');
 
-    // The return decision is a reply threaded under v1's M1.
-    const m1 = await prisma.message.findFirstOrThrow({ where: { taskId, submissionId: v1.id, parentMessageId: null } });
-    const reply = await prisma.message.findFirst({ where: { parentMessageId: m1.id, kind: 'system' } });
-    expect(reply).not.toBeNull();
+    // Each decision is a typed timeline entry tied to its submission.
+    const reviews = (await auth(http().get(`/api/tasks/${taskId}/timeline`))).body.filter(
+      (e: { type: string }) => e.type === 'submission.reviewed',
+    );
+    expect(reviews.map((e: { payload: { submissionId: string; decision: string } }) => e.payload)).toEqual([
+      expect.objectContaining({ submissionId: v1.id, decision: 'return' }),
+      expect.objectContaining({ submissionId: v2.id, decision: 'approve' }),
+    ]);
   });
 
   it('multi-claimant min-rule: reject excludes; approving the rest ⇒ approved', async () => {

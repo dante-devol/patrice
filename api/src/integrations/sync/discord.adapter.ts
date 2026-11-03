@@ -26,7 +26,7 @@ interface LinkPair {
 }
 import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
 import { DiscordRestClient } from './discord-rest.client';
-import { NotificationsService } from '../../notifications/notifications.service';
+import { EventStore } from '../../events/event-store.service';
 import { AdministrabilityService } from '../../access/administrability.service';
 
 interface DiscordGuildMember {
@@ -51,7 +51,7 @@ export class DiscordAdapter implements IntegrationSyncPort {
     @Inject(ENV) private readonly env: Env,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
     private readonly rest: DiscordRestClient,
-    private readonly notifications: NotificationsService,
+    private readonly events: EventStore,
     private readonly admin: AdministrabilityService,
   ) {}
 
@@ -593,14 +593,15 @@ export class DiscordAdapter implements IntegrationSyncPort {
   ): Promise<void> {
     const adminIds = await this.admin.effectiveAdminIds();
     if (adminIds.length === 0) return;
-    await this.notifications.emit(this.prisma, {
-      type: 'integration.push_failed',
-      subjectType: 'integration_connection',
-      subjectId: connection.id,
-      senderUserId: null,
-      recipientUserIds: adminIds,
-      payload: { connectionId: connection.id, reason },
-    });
+    await this.prisma.$transaction((tx) =>
+      this.events.record(tx, {
+        type: 'integration.push_failed',
+        actorUserId: null,
+        payload: { connectionId: connection.id, reason },
+        notify: { type: 'integration.push_failed', recipients: adminIds },
+      }),
+    );
+    await this.events.deliver();
   }
 
   // ---------------------------------------------------------------------------

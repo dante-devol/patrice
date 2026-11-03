@@ -49,11 +49,11 @@ export const ACTIONS = {
   // ---- Messages and attachments.
   messageCreate: { action: 'message:create', resourceType: 'Task' },
   messageUpdate: { action: 'message:update', resourceType: 'Message' },
-  messageRetire: { action: 'message:retire', resourceType: 'Message' },
-  messageRevive: { action: 'message:revive', resourceType: 'Message' },
+  // Messages, attachments and grants are deleted outright (with an audit row); only
+  // tasks, users, units, roles and connections have retire → grace → revive.
+  messageDelete: { action: 'message:delete', resourceType: 'Message' },
   attachmentCreate: { action: 'attachment:create', resourceType: 'Message' },
-  attachmentRetire: { action: 'attachment:retire', resourceType: 'Attachment' },
-  attachmentRevive: { action: 'attachment:revive', resourceType: 'Attachment' },
+  attachmentDelete: { action: 'attachment:delete', resourceType: 'Attachment' },
   // ---- Users.
   userRead: { action: 'user:read', resourceType: 'User' },
   userUpdate: { action: 'user:update', resourceType: 'User' },
@@ -70,8 +70,7 @@ export const ACTIONS = {
   // ---- Governance: the permission matrix. Org-wide by nature.
   grantCreate: { action: 'grant:create', resourceType: 'Organization' },
   grantUpdate: { action: 'grant:update', resourceType: 'Organization' },
-  grantRetire: { action: 'grant:retire', resourceType: 'Organization' },
-  grantRevive: { action: 'grant:revive', resourceType: 'Organization' },
+  grantDelete: { action: 'grant:delete', resourceType: 'Organization' },
   roleRead: { action: 'role:read', resourceType: 'Role' },
   roleCreate: { action: 'role:create', resourceType: 'Organization' },
   roleUpdate: { action: 'role:update', resourceType: 'Organization' },
@@ -121,7 +120,7 @@ export const TASK_FAMILY_ACTIONS: readonly string[] = Object.values(ACTIONS)
 export const EFFECTIVE_ADMIN_ACTIONS: readonly string[] = [
   'grant:create',
   'grant:update',
-  'grant:retire',
+  'grant:delete',
   'role:create',
   'role:update',
   'role:retire',
@@ -152,9 +151,9 @@ export const MEMBER_SEED_GRANTS: ReadonlyArray<{ action: string; scopeKind: 'glo
   { action: 'task:submit', scopeKind: 'own' },
   { action: 'message:create', scopeKind: 'own' },
   { action: 'message:update', scopeKind: 'own' },
-  { action: 'message:retire', scopeKind: 'own' },
+  { action: 'message:delete', scopeKind: 'own' },
   { action: 'attachment:create', scopeKind: 'own' },
-  { action: 'attachment:retire', scopeKind: 'own' },
+  { action: 'attachment:delete', scopeKind: 'own' },
   // Requesting work in your divisions, and running the tasks you requested.
   { action: 'task:create', scopeKind: 'own_division' },
   { action: 'task:update', scopeKind: 'own' },
