@@ -3,9 +3,22 @@ import { AuthMethod, Prisma } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { ActivityService } from '../activity/activity.service';
 import { generateOpaqueToken, hashToken } from '../common/tokens';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** The idle window slides at most this often, so reads don't write the session row. */
+const SLIDE_INTERVAL_MS = 60 * 1000;
+
+export interface SessionView {
+  id: string;
+  authMethod: AuthMethod;
+  createdAt: Date;
+  lastSeenAt: Date;
+  ip: string | null;
+  userAgent: string | null;
+  current: boolean;
+}
 
 export const SESSION_COOKIE = 'patrice_session';
 export const CSRF_COOKIE = 'patrice_csrf';
@@ -33,6 +46,7 @@ export class SessionService {
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    private readonly activity: ActivityService,
   ) {}
 
   private async durations(): Promise<SessionDurations> {
@@ -79,6 +93,7 @@ export class SessionService {
         revokedAt: true,
         absoluteExpiresAt: true,
         idleExpiresAt: true,
+        lastSeenAt: true,
         user: { select: { lifecycleState: true } },
       },
     });
@@ -87,14 +102,16 @@ export class SessionService {
     if (now >= session.absoluteExpiresAt || now >= session.idleExpiresAt) return null;
     if (session.user.lifecycleState !== 'active') return null;
 
-    const { idleDays } = await this.durations();
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: {
-        lastSeenAt: now,
-        idleExpiresAt: new Date(now.getTime() + idleDays * DAY_MS),
-      },
-    });
+    if (now.getTime() - session.lastSeenAt.getTime() >= SLIDE_INTERVAL_MS) {
+      const { idleDays } = await this.durations();
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: {
+          lastSeenAt: now,
+          idleExpiresAt: new Date(now.getTime() + idleDays * DAY_MS),
+        },
+      });
+    }
     return {
       sessionId: session.id,
       userId: session.userId,
@@ -110,15 +127,76 @@ export class SessionService {
     });
   }
 
-  /** Revoke all of a user's active sessions (the password-reset "doubt" path). */
+  /**
+   * Revoke all of a user's active sessions (the password-reset "doubt" path), or all
+   * but one (`exceptSessionId`, e.g. after a password change in that session).
+   */
   async revokeAllForUser(
     userId: string,
     tx?: Prisma.TransactionClient,
+    exceptSessionId?: string,
   ): Promise<void> {
     const db = tx ?? this.prisma;
     await db.session.updateMany({
-      where: { userId, revokedAt: null },
+      where: {
+        userId,
+        revokedAt: null,
+        ...(exceptSessionId ? { id: { not: exceptSessionId } } : {}),
+      },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  /** A user's live (unrevoked, unexpired) sessions, newest first. */
+  async listForUser(userId: string, currentSessionId?: string): Promise<SessionView[]> {
+    const now = new Date();
+    const rows = await this.prisma.session.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        absoluteExpiresAt: { gt: now },
+        idleExpiresAt: { gt: now },
+      },
+      orderBy: { lastSeenAt: 'desc' },
+    });
+    return rows.map((s) => ({
+      id: s.id,
+      authMethod: s.authMethod,
+      createdAt: s.createdAt,
+      lastSeenAt: s.lastSeenAt,
+      ip: s.ip,
+      userAgent: s.userAgent,
+      current: s.id === currentSessionId,
+    }));
+  }
+
+  /** The owner of a session, for authorization; null if there is no such session. */
+  async ownerOf(sessionId: string): Promise<string | null> {
+    const row = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { userId: true },
+    });
+    return row?.userId ?? null;
+  }
+
+  /** Revoke one session by id, with an audit row. Idempotent. */
+  async revoke(sessionId: string, actorUserId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const session = await tx.session.findUnique({ where: { id: sessionId }, select: { userId: true } });
+      const { count } = await tx.session.updateMany({
+        where: { id: sessionId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (session && count === 1) {
+        await this.activity.logActivity({
+          tx,
+          actorUserId,
+          subjectType: 'session',
+          subjectId: sessionId,
+          verb: 'session.revoked',
+          payload: { sessionId, userId: session.userId },
+        });
+      }
     });
   }
 }

@@ -14,7 +14,7 @@ import { EmailModule } from './email/email.module';
 import { AuthModule } from './auth/auth.module';
 import { SessionGuard } from './auth/session.guard';
 import { AuthenticatedGuard } from './auth/authenticated.guard';
-import { DiscordAuthModule } from './discord-auth/discord-auth.module';
+import { OAuthModule } from './oauth/oauth.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { RolesModule } from './roles/roles.module';
 import { DivisionsModule } from './divisions/divisions.module';
@@ -55,7 +55,7 @@ import { ContractCheckInterceptor } from './contract/contract-check.interceptor'
     EmailModule,
     AuthModule,
     InvitationsModule,
-    DiscordAuthModule,
+    OAuthModule,
     RolesModule,
     DivisionsModule,
     TeamsModule,

@@ -409,3 +409,25 @@ export const attachmentReviveResource: ResourceResolver = async (req, prisma) =>
     },
   };
 };
+
+/**
+ * The session named by `:id`, with its owner, for `session:revoke`. The baseline
+ * policy lets anyone revoke their own; others need a grant. 404 if it doesn't exist.
+ */
+export const sessionResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const session = await prisma.session.findUnique({ where: { id }, select: { id: true, userId: true } });
+  if (!session) throw new NotFoundError('SESSION_NOT_FOUND', 'Session not found');
+  return { type: 'Session', id: session.id, attrs: { owner: userEntity(session.userId) } };
+};
+
+/**
+ * Stands for "every session of user `:id`", for an admin listing a user's sessions.
+ * Same rule as revoking one: yourself always, anyone else with a grant.
+ */
+export const userSessionsResource: ResourceResolver = async (req, prisma) => {
+  const id = (req.params as Record<string, string>).id;
+  const user = await prisma.appUser.findUnique({ where: { id }, select: { id: true } });
+  if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
+  return { type: 'Session', id: `sessions-of:${user.id}`, attrs: { owner: userEntity(user.id) } };
+};

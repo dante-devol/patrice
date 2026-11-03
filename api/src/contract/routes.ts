@@ -3,12 +3,15 @@ import * as S from './schemas';
 import { listActivityQuerySchema } from '../activity/activity.dto';
 import {
   acceptInviteSchema,
+  confirmEmailChangeSchema,
   confirmVerificationSchema,
   createInvitationSchema,
   loginSchema,
   passwordResetConfirmSchema,
   passwordResetRequestSchema,
+  requestEmailChangeSchema,
   resendVerificationSchema,
+  setPasswordSchema,
 } from '../auth/auth.dto';
 import { createDivisionSchema, updateDivisionSchema } from '../divisions/divisions.dto';
 import { createGrantSchema, updateGrantSchema } from '../grants/grants.dto';
@@ -86,12 +89,20 @@ export const ROUTES = {
   requestPasswordReset: r({ method: 'post', path: '/auth/password-reset', tag: 'auth', summary: 'Email a password reset link', public: true, body: passwordResetRequestSchema, status: 200, kind: 'json', response: S.Ok }),
   confirmPasswordReset: r({ method: 'post', path: '/auth/password-reset/confirm', tag: 'auth', summary: 'Set a new password from a reset link', public: true, body: passwordResetConfirmSchema, status: 200, kind: 'json', response: S.Ok }),
 
-  // ---- Discord sign-in ----
-  discordLogin: r({ method: 'get', path: '/auth/discord/login', tag: 'auth', summary: 'Start Discord sign-in', public: true, status: 302, kind: 'redirect' }),
-  discordRegister: r({ method: 'get', path: '/auth/discord/register', tag: 'auth', summary: 'Start Discord registration from an invitation', public: true, query: z.object({ invite: z.string().optional() }), status: 302, kind: 'redirect' }),
-  discordStartLink: r({ method: 'get', path: '/auth/discord/link', tag: 'auth', summary: 'Start connecting Discord to the signed-in account', public: true, status: 302, kind: 'redirect' }),
-  discordCallback: r({ method: 'get', path: '/auth/discord/callback', tag: 'auth', summary: 'Discord OAuth callback', public: true, query: z.object({ code: z.string().optional(), state: z.string().optional(), error: z.string().optional() }), status: 302, kind: 'redirect' }),
-  discordUnlink: r({ method: 'delete', path: '/auth/discord', tag: 'auth', summary: 'Disconnect Discord from the signed-in account', status: 200, kind: 'json', response: S.CurrentUser }),
+  // ---- Self-service account ----
+  setPassword: r({ method: 'post', path: '/me/password', tag: 'auth', summary: 'Change your password, or add one to a provider-only account', body: setPasswordSchema, status: 204, kind: 'empty' }),
+  requestEmailChange: r({ method: 'post', path: '/me/email', tag: 'auth', summary: 'Start changing your email (confirmed from the new address)', body: requestEmailChangeSchema, status: 200, kind: 'json', response: S.Ok }),
+  confirmEmailChange: r({ method: 'post', path: '/auth/email-change/confirm', tag: 'auth', summary: 'Confirm an email change', public: true, body: confirmEmailChangeSchema, status: 200, kind: 'json', response: S.Ok }),
+  listMySessions: r({ method: 'get', path: '/me/sessions', tag: 'auth', summary: 'Your signed-in sessions', status: 200, kind: 'json', response: z.array(S.Session) }),
+  listUserSessions: r({ method: 'get', path: '/users/:id/sessions', tag: 'auth', summary: "A user's signed-in sessions", action: 'session:revoke', status: 200, kind: 'json', response: z.array(S.Session) }),
+  revokeSession: r({ method: 'delete', path: '/sessions/:id', tag: 'auth', summary: 'Sign a session out (your own, or any with a grant)', action: 'session:revoke', status: 204, kind: 'empty' }),
+
+  // ---- Sign-in providers (e.g. `discord`) ----
+  oauthLogin: r({ method: 'get', path: '/auth/:provider/login', tag: 'auth', summary: 'Start signing in with a provider', public: true, status: 302, kind: 'redirect' }),
+  oauthRegister: r({ method: 'get', path: '/auth/:provider/register', tag: 'auth', summary: 'Start registering from an invitation with a provider', public: true, query: z.object({ invite: z.string().optional() }), status: 302, kind: 'redirect' }),
+  oauthLink: r({ method: 'get', path: '/auth/:provider/link', tag: 'auth', summary: 'Start connecting a provider to the signed-in account', public: true, status: 302, kind: 'redirect' }),
+  oauthCallback: r({ method: 'get', path: '/auth/:provider/callback', tag: 'auth', summary: "A provider's OAuth callback", public: true, query: z.object({ code: z.string().optional(), state: z.string().optional(), error: z.string().optional() }), status: 302, kind: 'redirect' }),
+  oauthUnlink: r({ method: 'delete', path: '/auth/:provider', tag: 'auth', summary: 'Disconnect a provider from the signed-in account', status: 200, kind: 'json', response: S.CurrentUser }),
 
   // ---- Invitations ----
   bootstrapStatus: r({ method: 'get', path: '/bootstrap', tag: 'invitations', summary: 'Whether first-run setup is open', public: true, status: 200, kind: 'json', response: S.BootstrapStatus }),

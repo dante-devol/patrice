@@ -4,7 +4,6 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
-import { createHash } from 'node:crypto';
 import { GrantEffect, RoleKind, ScopeKind } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
@@ -104,7 +103,8 @@ export class BootstrapService implements OnApplicationBootstrap {
     });
 
     const key = generateOpaqueToken(24);
-    const passcodeHash = createHash('sha256').update(key).digest('hex');
+    // Peppered like every other stored secret (InvitationsService checks the same way).
+    const passcodeHash = hashToken(this.env.TOKEN_PEPPER, key);
     const expiresAt = new Date(Date.now() + BOOTSTRAP_EXPIRY_MS);
 
     const existing = await this.prisma.invitation.findFirst({

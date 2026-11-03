@@ -12,15 +12,14 @@ import {
   inviteAndAccept,
   resetDatabase,
 } from './helpers';
-import { signOAuthState } from '../src/auth/oauth-state';
+import { encryptOAuthSecret } from '../src/auth/oauth-secret.cipher';
 
 /**
  * Discord as an auth provider (ADR 0005): login / invite-register / link / unlink,
- * with the app-level Discord OAuth surface mocked at `global.fetch`. The signed
- * `state` is forged with the test SESSION_SECRET so we can drive the callback
- * directly without a real Discord round-trip.
+ * with the app-level Discord OAuth surface mocked at `global.fetch`. Each flow is
+ * started through the real endpoint, which redirects to Discord with a `state` and
+ * sets the browser's nonce cookie; the test then plays Discord's redirect back.
  */
-const SESSION_SECRET = process.env.SESSION_SECRET ?? 'test-session-secret-0123456789';
 
 const DISCORD_USER = {
   id: '900900900900900900',
@@ -58,8 +57,26 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
   const http = () => request(app.getHttpServer());
   const auth = (r: request.Test) =>
     r.set('Cookie', admin.cookies).set('x-csrf-token', admin.csrf);
-  const callback = (code: string, state: string) =>
-    http().get(`/api/auth/discord/callback?code=${code}&state=${encodeURIComponent(state)}`).redirects(0);
+
+  /** Start a flow; returns the `state` sent to Discord and the nonce cookie set. */
+  async function start(path: string, cookies?: string): Promise<{ state: string; nonce: string }> {
+    let req = http().get(path).redirects(0);
+    if (cookies) req = req.set('Cookie', cookies);
+    const res = await req;
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.location as string);
+    expect(location.host).toBe('discord.com');
+    const nonce = cookieValue(res.headers['set-cookie'] as unknown as string[], 'patrice_oauth');
+    return { state: location.searchParams.get('state')!, nonce: nonce! };
+  }
+
+  /** Discord's redirect back, in a browser holding `cookies` (the nonce, a session…). */
+  const callback = (code: string, state: string, cookies = '') =>
+    http()
+      .get(`/api/auth/discord/callback?code=${code}&state=${encodeURIComponent(state)}`)
+      .set('Cookie', cookies)
+      .redirects(0);
+  const nonceCookie = (nonce: string) => `patrice_oauth=${nonce}`;
 
   beforeAll(async () => {
     process.env.DISABLE_QUEUE = 'true';
@@ -92,22 +109,62 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
       expect(res.body).not.toHaveProperty('discordClientSecret');
     });
 
-    it('stores the client secret encrypted at rest (oauthsec: handle)', async () => {
+    it('stores the client secret encrypted under SECRETS_KEY (sec1: handle)', async () => {
       const secret = await prisma.secret.findUniqueOrThrow({
         where: { purpose: 'discord_oauth_client_secret' },
       });
-      expect(secret.ciphertext.startsWith('oauthsec:')).toBe(true);
+      expect(secret.ciphertext.startsWith('sec1:')).toBe(true);
       expect(secret.ciphertext).not.toContain('test-client-secret');
+    });
+
+    it('re-encrypts a legacy SESSION_SECRET-keyed secret on first use', async () => {
+      await prisma.secret.update({
+        where: { purpose: 'discord_oauth_client_secret' },
+        data: { ciphertext: encryptOAuthSecret(process.env.SESSION_SECRET!, 'test-client-secret') },
+      });
+      // Starting a flow reads the secret, which upgrades it in place.
+      const res = await http().get('/api/auth/discord/login').redirects(0);
+      expect(new URL(res.headers.location as string).host).toBe('discord.com');
+      const secret = await prisma.secret.findUniqueOrThrow({
+        where: { purpose: 'discord_oauth_client_secret' },
+      });
+      expect(secret.ciphertext.startsWith('sec1:')).toBe(true);
     });
   });
 
   describe('login', () => {
     it('rejects a Discord login with no matching identity (no auto-provision)', async () => {
       mockDiscordFetch();
-      const state = signOAuthState(SESSION_SECRET, { intent: 'login' });
-      const res = await callback('any-code', state);
+      const { state, nonce } = await start('/api/auth/discord/login');
+      const res = await callback('any-code', state, nonceCookie(nonce));
       expect(res.status).toBe(302);
       expect(res.headers.location).toContain('discord_no_account');
+    });
+
+    it("rejects an attacker's callback opened in a victim's browser (login CSRF)", async () => {
+      mockDiscordFetch();
+      // The attacker starts a flow in their own browser and captures the callback URL…
+      const { state } = await start('/api/auth/discord/login');
+      // …but the victim's browser never received the attacker's nonce cookie.
+      const res = await callback('attacker-code', state);
+      expect(res.headers.location).toContain('discord_state');
+      expect(res.headers['set-cookie']?.toString() ?? '').not.toContain('patrice_session');
+    });
+
+    it('a flow can be completed only once', async () => {
+      mockDiscordFetch();
+      const { state, nonce } = await start('/api/auth/discord/login');
+      await callback('any-code', state, nonceCookie(nonce));
+      const replay = await callback('any-code', state, nonceCookie(nonce));
+      expect(replay.headers.location).toContain('discord_state');
+    });
+
+    it('a nonce from a different flow does not unlock this one', async () => {
+      mockDiscordFetch();
+      const mine = await start('/api/auth/discord/login');
+      const theirs = await start('/api/auth/discord/login');
+      const res = await callback('any-code', mine.state, nonceCookie(theirs.nonce));
+      expect(res.headers.location).toContain('discord_state');
     });
   });
 
@@ -119,8 +176,11 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
       const token = inv.body.token as string;
 
       mockDiscordFetch();
-      const state = signOAuthState(SESSION_SECRET, { intent: 'register', inviteToken: token });
-      const res = await callback('any-code', state);
+      const { state, nonce } = await start(`/api/auth/discord/register?invite=${token}`);
+      // The invite token never travels through Discord.
+      expect(state).not.toContain(token);
+      expect(Buffer.from(state, 'base64url').toString('latin1')).not.toContain(token);
+      const res = await callback('any-code', state, nonceCookie(nonce));
 
       expect(res.status).toBe(302);
       expect(res.headers.location).toContain('/home');
@@ -144,8 +204,8 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
       const inv = await auth(http().post('/api/invitations')).send({});
       const token = inv.body.token as string;
       mockDiscordFetch();
-      const state = signOAuthState(SESSION_SECRET, { intent: 'register', inviteToken: token });
-      const res = await callback('any-code', state);
+      const { state, nonce } = await start(`/api/auth/discord/register?invite=${token}`);
+      const res = await callback('any-code', state, nonceCookie(nonce));
       expect(res.status).toBe(302);
       expect(res.headers.location).toContain('discord_already_linked');
     });
@@ -157,8 +217,8 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
 
     it('logs the registered Discord user in', async () => {
       mockDiscordFetch();
-      const state = signOAuthState(SESSION_SECRET, { intent: 'login' });
-      const res = await callback('any-code', state);
+      const { state, nonce } = await start('/api/auth/discord/login');
+      const res = await callback('any-code', state, nonceCookie(nonce));
       expect(res.status).toBe(302);
       expect(res.headers.location).toContain('/home');
       const setCookie = res.headers['set-cookie'] as unknown as string[];
@@ -174,6 +234,24 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
         .set('x-csrf-token', csrf);
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('LAST_AUTH_METHOD');
+    });
+    it('adds a password (no current password needed), then can disconnect Discord', async () => {
+      const set = await http()
+        .post('/api/me/password')
+        .set('Cookie', cookies)
+        .set('x-csrf-token', csrf)
+        .send({ newPassword: 'a discord user passphrase' });
+      expect(set.status).toBe(204);
+      const unlink = await http()
+        .delete('/api/auth/discord')
+        .set('Cookie', cookies)
+        .set('x-csrf-token', csrf);
+      expect(unlink.status).toBe(200);
+      expect(unlink.body.authMethods).toEqual(['password']);
+      const relogin = await http()
+        .post('/api/auth/login')
+        .send({ email: DISCORD_USER.email, password: 'a discord user passphrase' });
+      expect(relogin.status).toBe(200);
     });
   });
 
@@ -203,8 +281,8 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
         email: 'pwuser-discord@example.com',
       };
       mockDiscordFetch(linkUser);
-      const state = signOAuthState(SESSION_SECRET, { intent: 'link', userId });
-      const res = await callback('any-code', state).set('Cookie', session.cookies);
+      const { state, nonce } = await start('/api/auth/discord/link', session.cookies);
+      const res = await callback('any-code', state, `${session.cookies}; ${nonceCookie(nonce)}`);
       expect(res.status).toBe(302);
       expect(res.headers.location).toContain('/account?linked=1');
 
@@ -219,8 +297,8 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
 
     it('a link callback without a session is rejected', async () => {
       mockDiscordFetch();
-      const state = signOAuthState(SESSION_SECRET, { intent: 'link', userId });
-      const res = await callback('any-code', state); // no session cookie
+      const { state, nonce } = await start('/api/auth/discord/link', session.cookies);
+      const res = await callback('any-code', state, nonceCookie(nonce)); // no session cookie
       expect(res.status).toBe(302);
       expect(res.headers.location).toContain('discord_session');
     });

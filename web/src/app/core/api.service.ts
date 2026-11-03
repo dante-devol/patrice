@@ -102,6 +102,12 @@ export class ApiService {
     );
   }
 
+  confirmEmailChange(token: string): Promise<{ ok: boolean }> {
+    return firstValueFrom(
+      this.http.post<{ ok: boolean }>('/api/auth/email-change/confirm', { token }),
+    );
+  }
+
   confirmVerification(token: string): Promise<{ ok: boolean }> {
     return firstValueFrom(
       this.http.post<{ ok: boolean }>('/api/auth/verify-email/confirm', { token }),

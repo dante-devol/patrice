@@ -60,5 +60,10 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/verify-email.component').then((m) => m.VerifyEmailComponent),
   },
+  {
+    path: 'confirm-email-change',
+    loadComponent: () =>
+      import('./pages/confirm-email-change.component').then((m) => m.ConfirmEmailChangeComponent),
+  },
   { path: '**', redirectTo: 'home' },
 ];

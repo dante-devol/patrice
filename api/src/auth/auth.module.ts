@@ -6,9 +6,13 @@ import { SessionService } from './session.service';
 import { SessionGuard } from './session.guard';
 import { VerificationService } from './verification.service';
 import { DiscordOAuthService } from './discord-oauth.service';
+import { OAuthFlowService } from './oauth-flow.service';
+import { AuthMailService } from './auth-mail.service';
+import { AccountService } from './account.service';
+import { AccountController } from './account.controller';
 
 @Module({
-  controllers: [AuthController],
+  controllers: [AuthController, AccountController],
   providers: [
     AuthService,
     PasswordService,
@@ -16,6 +20,9 @@ import { DiscordOAuthService } from './discord-oauth.service';
     SessionGuard,
     VerificationService,
     DiscordOAuthService,
+    OAuthFlowService,
+    AuthMailService,
+    AccountService,
   ],
   exports: [
     AuthService,
@@ -24,6 +31,9 @@ import { DiscordOAuthService } from './discord-oauth.service';
     SessionGuard,
     VerificationService,
     DiscordOAuthService,
+    OAuthFlowService,
+    AuthMailService,
+    AccountService,
   ],
 })
 export class AuthModule {}

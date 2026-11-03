@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ActivitySource, AuthProvider, LifecycleState } from '@prisma/client';
+import { ActivitySource, LifecycleState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
-import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
+import { ConflictError } from '../common/errors';
 import { SyncService } from './sync/sync.service';
-import type { DiscordOAuthUser } from '../auth/discord-oauth.service';
+import type { ExternalProfile } from '../auth/providers/login-provider';
 
 /**
  * The **user-driven** Discord account connection (distinct from the admin-driven
@@ -26,51 +26,12 @@ export class DiscordLinkService {
     private readonly sync: SyncService,
   ) {}
 
-  /** Connect the acting user's Discord account. Idempotent (re-link refreshes handle/avatar). */
-  async completeLink(userId: string, discordUser: DiscordOAuthUser): Promise<void> {
-    const user = await this.prisma.appUser.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
-    if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
-
-    // 1. Discord sign-in identity. (provider, subject) is globally unique, so a
-    //    Discord account already used by *another* Patrice user is rejected.
-    const existingAuth = await this.prisma.userIdentity.findUnique({
-      where: {
-        provider_providerSubject: {
-          provider: AuthProvider.discord,
-          providerSubject: discordUser.id,
-        },
-      },
-      select: { userId: true },
-    });
-    if (existingAuth && existingAuth.userId !== userId) {
-      throw new ConflictError(
-        'DISCORD_ALREADY_LINKED',
-        'That Discord account is already linked to another Patrice account',
-      );
-    }
-    if (!existingAuth) {
-      await this.prisma.userIdentity.create({
-        data: {
-          userId,
-          provider: AuthProvider.discord,
-          providerSubject: discordUser.id,
-          verifiedAt: new Date(), // OAuth proves control at consent time
-        },
-      });
-      await this.activity.logActivity({
-        actorUserId: userId,
-        subjectType: 'user',
-        subjectId: userId,
-        verb: 'auth.discord_linked',
-        payload: { userId },
-      });
-    }
-
-    // 2. Integration link per active Discord connection (v1: usually one). Reconcile
-    //    is enqueued so mapped roles populate without waiting for the floor sweep.
+  /**
+   * Create the user's integration link on every active Discord connection, after
+   * their Discord sign-in identity has been attached. Idempotent (a re-link refreshes
+   * handle and avatar). Reconcile is enqueued so mapped roles populate promptly.
+   */
+  async linkConnections(userId: string, profile: ExternalProfile): Promise<void> {
     const connections = await this.prisma.integrationConnection.findMany({
       where: { provider: 'discord', lifecycleState: LifecycleState.active },
       select: { id: true },
@@ -79,7 +40,7 @@ export class DiscordLinkService {
     for (const conn of connections) {
       const clash = await this.prisma.externalIdentity.findUnique({
         where: {
-          connectionId_externalUserId: { connectionId: conn.id, externalUserId: discordUser.id },
+          connectionId_externalUserId: { connectionId: conn.id, externalUserId: profile.subject },
         },
         select: { userId: true },
       });
@@ -96,13 +57,13 @@ export class DiscordLinkService {
         create: {
           userId,
           connectionId: conn.id,
-          externalUserId: discordUser.id,
-          externalHandle: discordUser.globalName ?? discordUser.username,
-          externalAvatarHash: discordUser.avatar,
+          externalUserId: profile.subject,
+          externalHandle: profile.displayName ?? profile.username,
+          externalAvatarHash: profile.avatar,
         },
         update: {
-          externalHandle: discordUser.globalName ?? discordUser.username,
-          externalAvatarHash: discordUser.avatar,
+          externalHandle: profile.displayName ?? profile.username,
+          externalAvatarHash: profile.avatar,
         },
         select: { id: true },
       });
@@ -123,37 +84,16 @@ export class DiscordLinkService {
   }
 
   /**
-   * Disconnect the user's Discord account entirely: removes the sign-in method, the
-   * integration link(s), any integration-sourced roles, and baseline rows. Refuses
-   * if Discord is the user's *only* sign-in method (don't lock them out).
+   * Remove the user's integration links on every Discord connection, with the
+   * integration-sourced roles and baseline rows they carried. Runs after the Discord
+   * sign-in identity is detached (or when only links remain).
+   * Returns whether there was anything to remove.
    */
-  async unlink(userId: string): Promise<void> {
-    const user = await this.prisma.appUser.findUnique({
-      where: { id: userId },
-      select: {
-        identities: { select: { id: true, provider: true } },
-      },
-    });
-    if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
-
-    const discordIdentity = user.identities.find((i) => i.provider === AuthProvider.discord);
+  async removeLinks(userId: string): Promise<boolean> {
     const links = await this.prisma.externalIdentity.findMany({
       where: { userId, connection: { provider: 'discord' } },
       select: { id: true, connectionId: true, externalUserId: true },
     });
-
-    if (!discordIdentity && links.length === 0) {
-      throw new UnprocessableError('NOT_LINKED', 'No Discord account is connected');
-    }
-
-    // Last-sign-in-method guard: refuse to strip the only way in.
-    if (discordIdentity && user.identities.length === 1) {
-      throw new ConflictError(
-        'LAST_AUTH_METHOD',
-        'Add another sign-in method before disconnecting Discord — it is your only way to log in',
-      );
-    }
-
 
     for (const link of links) {
       // Revoke integration-sourced roles this connection granted the user; the
@@ -191,15 +131,6 @@ export class DiscordLinkService {
       });
     }
 
-    if (discordIdentity) {
-      await this.prisma.userIdentity.delete({ where: { id: discordIdentity.id } });
-      await this.activity.logActivity({
-        actorUserId: userId,
-        subjectType: 'user',
-        subjectId: userId,
-        verb: 'auth.discord_unlinked',
-        payload: { userId },
-      });
-    }
+    return links.length > 0;
   }
 }

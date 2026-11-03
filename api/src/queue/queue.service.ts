@@ -26,7 +26,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   constructor(@Inject(ENV) private readonly env: Env) {}
 
   async onModuleInit(): Promise<void> {
-    if (process.env.DISABLE_QUEUE === 'true') {
+    if (this.env.DISABLE_QUEUE) {
       this.logger.warn('DISABLE_QUEUE=true — pg-boss disabled (jobs are no-ops).');
       return;
     }
@@ -77,13 +77,22 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
    * active) — the GC sweep passes `'gc-sweep'` so concurrent triggers can't overlap.
    * `startAfterSeconds` delays execution, letting a singleton absorb follow-on
    * events that arrive within the window (role-change batching in Slice 8).
+   * `runInlineWhenUnavailable` runs the queue's handler in-process instead of
+   * dropping the job when pg-boss is off (DISABLE_QUEUE in tests and local runs).
    */
   async publish(
     queue: string,
     data: unknown,
-    opts: { singletonKey?: string; startAfterSeconds?: number } = {},
+    opts: { singletonKey?: string; startAfterSeconds?: number; runInlineWhenUnavailable?: boolean } = {},
   ): Promise<void> {
     if (!this.boss) {
+      const inline = opts.runInlineWhenUnavailable
+        ? this.pendingWorkers.find((w) => w.queue === queue)
+        : undefined;
+      if (inline) {
+        await inline.handler(data);
+        return;
+      }
       this.logger.warn(`Queue unavailable; dropping job for "${queue}".`);
       return;
     }

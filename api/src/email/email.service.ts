@@ -1,53 +1,25 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { createTransport, Transporter } from 'nodemailer';
 import { ENV, Env } from '../config/env';
-import { QueueService } from '../queue/queue.service';
-
-const EMAIL_QUEUE = 'email.send';
-
-interface EmailJob {
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
-}
 
 /**
- * SMTP email via nodemailer, dispatched through the pg-boss queue so a slow or
- * down SMTP server never blocks a request. Verification/reset links are built
- * against `PUBLIC_BASE_URL`. Callers must treat sending as best-effort — the
- * verify-email flow returns success unconditionally to avoid an enumeration oracle.
+ * SMTP email via nodemailer. Sends synchronously: callers run inside a queue job
+ * (see AuthMailService), so a slow SMTP server never blocks a request. Links are
+ * built against `PUBLIC_BASE_URL`. A failed send throws, so the job can retry.
  */
 @Injectable()
 export class EmailService implements OnModuleInit {
-  private readonly logger = new Logger(EmailService.name);
   private transporter: Transporter | null = null;
 
-  constructor(
-    @Inject(ENV) private readonly env: Env,
-    private readonly queue: QueueService,
-  ) {}
+  constructor(@Inject(ENV) private readonly env: Env) {}
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
     this.transporter = createTransport(this.env.SMTP_URL);
-    await this.queue.work(EMAIL_QUEUE, async (data) => {
-      await this.deliver(data as EmailJob);
-    });
   }
 
-  private async deliver(job: EmailJob): Promise<void> {
+  private async deliver(to: string, subject: string, text: string, html: string): Promise<void> {
     if (!this.transporter) return;
-    try {
-      await this.transporter.sendMail({
-        from: this.env.EMAIL_FROM,
-        to: job.to,
-        subject: job.subject,
-        text: job.text,
-        html: job.html,
-      });
-    } catch (err) {
-      this.logger.error(`Email send failed to ${job.to}: ${(err as Error).message}`);
-    }
+    await this.transporter.sendMail({ from: this.env.EMAIL_FROM, to, subject, text, html });
   }
 
   private link(path: string): string {
@@ -56,21 +28,31 @@ export class EmailService implements OnModuleInit {
 
   async sendVerificationEmail(to: string, token: string): Promise<void> {
     const url = this.link(`/verify-email?token=${encodeURIComponent(token)}`);
-    await this.queue.publish(EMAIL_QUEUE, {
+    await this.deliver(
       to,
-      subject: 'Verify your Patrice email',
-      text: `Confirm your email address: ${url}`,
-      html: `<p>Confirm your email address: <a href="${url}">${url}</a></p>`,
-    } satisfies EmailJob);
+      'Verify your Patrice email',
+      `Confirm your email address: ${url}`,
+      `<p>Confirm your email address: <a href="${url}">${url}</a></p>`,
+    );
   }
 
   async sendPasswordResetEmail(to: string, token: string): Promise<void> {
     const url = this.link(`/reset-password?token=${encodeURIComponent(token)}`);
-    await this.queue.publish(EMAIL_QUEUE, {
+    await this.deliver(
       to,
-      subject: 'Reset your Patrice password',
-      text: `Reset your password: ${url}`,
-      html: `<p>Reset your password: <a href="${url}">${url}</a></p>`,
-    } satisfies EmailJob);
+      'Reset your Patrice password',
+      `Reset your password: ${url}`,
+      `<p>Reset your password: <a href="${url}">${url}</a></p>`,
+    );
+  }
+
+  async sendEmailChangeEmail(to: string, token: string): Promise<void> {
+    const url = this.link(`/confirm-email-change?token=${encodeURIComponent(token)}`);
+    await this.deliver(
+      to,
+      'Confirm your new Patrice email address',
+      `Confirm this is your new email address: ${url}`,
+      `<p>Confirm this is your new email address: <a href="${url}">${url}</a></p>`,
+    );
   }
 }

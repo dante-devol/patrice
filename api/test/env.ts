@@ -5,6 +5,7 @@ process.env.DATABASE_URL ||=
 process.env.PUBLIC_BASE_URL ||= 'http://localhost:4200';
 process.env.SESSION_SECRET ||= 'test-session-secret-0123456789';
 process.env.TOKEN_PEPPER ||= 'test-token-pepper-0123456789';
+process.env.SECRETS_KEY ||= 'abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd';
 process.env.SMTP_URL ||= 'smtp://localhost:1025';
 process.env.EMAIL_FROM ||= 'Patrice Test <test@patrice.local>';
 process.env.NODE_ENV = 'test';

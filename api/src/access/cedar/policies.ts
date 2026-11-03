@@ -170,6 +170,17 @@ export function staticPolicies(opts: StaticPolicyOptions): string[] {
       )}, resource) when { principal == resource };`,
   );
 
+  // Baseline own-session control: a user may always end their own sessions (logout,
+  // "sign out other devices"), with no grant required. Revoking *other* users'
+  // sessions needs a `session:revoke` grant.
+  policies.push(
+    `@id("static_baseline_own_sessions")
+` +
+      `permit(principal, action == ${actionRef(
+        'session:revoke',
+      )}, resource) when { resource has owner && resource.owner == principal };`,
+  );
+
   // Self-review forbid (Slice 5): when self-review is disabled, a requester may not
   // review a submission they authored. The `task:review` resource carries `claimant`
   // (the reviewed submission's author), so the forbid fires exactly when the reviewer

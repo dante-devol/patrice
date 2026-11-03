@@ -1,9 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { ActivityService } from '../activity/activity.service';
-import { ENV, Env } from '../config/env';
-import { encryptOAuthSecret } from '../auth/oauth-secret.cipher';
 import { SettingsService, SYSTEM_SUBJECT_ID } from '../settings/settings.service';
 import { SecretStore } from '../settings/secret-store.service';
 import { UpdateConfigDto } from './users.dto';
@@ -36,7 +34,6 @@ export class ConfigService {
     private readonly activity: ActivityService,
     private readonly settings: SettingsService,
     private readonly secrets: SecretStore,
-    @Inject(ENV) private readonly env: Env,
   ) {}
 
   async get(): Promise<OrgSettings> {
@@ -68,11 +65,7 @@ export class ConfigService {
         // Admin cleared it → disable Discord sign-in.
         await this.secrets.clear('discord_oauth_client_secret', tx);
       } else if (discordClientSecret !== undefined) {
-        await this.secrets.put(
-          'discord_oauth_client_secret',
-          encryptOAuthSecret(this.env.SESSION_SECRET, discordClientSecret),
-          tx,
-        );
+        await this.secrets.put('discord_oauth_client_secret', discordClientSecret, tx);
       }
       await this.activity.logActivity({
         tx,

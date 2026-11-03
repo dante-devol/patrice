@@ -13,7 +13,6 @@ import {
   hashToken,
   safeEqualHex,
 } from '../common/tokens';
-import { createHash } from 'node:crypto';
 import {
   ConflictError,
   DeniedError,
@@ -54,7 +53,7 @@ export interface AcceptResult {
 /** How the redeeming user's first `user_identity` (sign-in method) is created. */
 type IdentitySpec =
   | { provider: typeof AuthProvider.password; passwordHash: string }
-  | { provider: typeof AuthProvider.discord; providerSubject: string };
+  | { provider: Exclude<AuthProvider, 'password'>; providerSubject: string };
 
 /**
  * Invitations are the **only** account-creation path (no open sign-up). A bootstrap
@@ -72,8 +71,9 @@ export class InvitationsService {
     private readonly verification: VerificationService,
   ) {}
 
+  /** Peppered, like every other stored secret (see BootstrapService). */
   private passcodeHash(passcode: string): string {
-    return createHash('sha256').update(passcode).digest('hex');
+    return hashToken(this.env.TOKEN_PEPPER, passcode);
   }
 
   /**
@@ -203,9 +203,11 @@ export class InvitationsService {
   }
 
   private async findByToken(token: string) {
-    return this.prisma.invitation.findUnique({
-      where: { tokenHash: hashToken(this.env.TOKEN_PEPPER, token) },
-    });
+    return this.findByTokenHash(hashToken(this.env.TOKEN_PEPPER, token));
+  }
+
+  private async findByTokenHash(tokenHash: string) {
+    return this.prisma.invitation.findUnique({ where: { tokenHash } });
   }
 
   /**
@@ -221,7 +223,7 @@ export class InvitationsService {
   }): Promise<AcceptResult> {
     const passwordHash = await this.passwords.hash(args.password);
     return this.redeem({
-      token: args.token,
+      tokenHash: hashToken(this.env.TOKEN_PEPPER, args.token),
       passcode: args.passcode,
       email: args.email,
       displayName: args.displayName,
@@ -241,19 +243,19 @@ export class InvitationsService {
    * `email` may be null (the user declined the `email` scope); it is captured only
    * as a contact attribute, never the join key.
    */
-  async acceptWithDiscord(args: {
-    token: string;
-    passcode?: string;
+  async acceptWithProvider(args: {
+    /** The invite token's hash; the plaintext never travels through the provider. */
+    inviteTokenHash: string;
+    provider: Exclude<AuthProvider, 'password'>;
     email: string | null;
     displayName: string;
-    discordUserId: string;
+    providerSubject: string;
   }): Promise<AcceptResult> {
     return this.redeem({
-      token: args.token,
-      passcode: args.passcode,
+      tokenHash: args.inviteTokenHash,
       email: args.email,
       displayName: args.displayName,
-      identity: { provider: AuthProvider.discord, providerSubject: args.discordUserId },
+      identity: { provider: args.provider, providerSubject: args.providerSubject },
     });
   }
 
@@ -264,13 +266,13 @@ export class InvitationsService {
    * verification email; password identities verify via the email-token flow.
    */
   private async redeem(args: {
-    token: string;
+    tokenHash: string;
     passcode?: string;
     email: string | null;
     displayName: string;
     identity: IdentitySpec;
   }): Promise<AcceptResult> {
-    const inv = await this.findByToken(args.token);
+    const inv = await this.findByTokenHash(args.tokenHash);
     if (!inv) throw new NotFoundError('INVITE_NOT_FOUND', 'Invitation not found');
 
     const status = deriveInvitationStatus(inv);
@@ -306,13 +308,13 @@ export class InvitationsService {
       await this.assertRolesGrantable(inv.createdBy!, inv.intendedRoleIds);
     }
 
-    // One Discord account maps to one Patrice user ((provider, subject) unique).
+    // One provider account maps to one Patrice user ((provider, subject) unique).
     // Pre-check for a friendly error before the DB constraint fires.
-    if (args.identity.provider === AuthProvider.discord) {
+    if (args.identity.provider !== AuthProvider.password) {
       const linked = await this.prisma.userIdentity.findUnique({
         where: {
           provider_providerSubject: {
-            provider: AuthProvider.discord,
+            provider: args.identity.provider,
             providerSubject: args.identity.providerSubject,
           },
         },
@@ -418,7 +420,7 @@ export class InvitationsService {
     if (!isBootstrap && args.identity.provider === AuthProvider.password && args.email) {
       // Send a verification email for normal password registrations (best-effort).
       await this.verification
-        .issueVerification(result.userId, args.email)
+        .issueVerification(result.userId)
         .catch(() => undefined);
     }
 
@@ -432,7 +434,7 @@ export class InvitationsService {
       invitationId: string;
       grantedRoleIds: string[];
       isBootstrap: boolean;
-      identityProvider: 'password' | 'discord';
+      identityProvider: AuthProvider;
     },
   ): Promise<void> {
     await this.activity.logActivity({

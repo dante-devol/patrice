@@ -64,6 +64,7 @@ enum UserRoleSource {
 enum AuthTokenKind {
   email_verification
   password_reset
+  email_change
 }
 
 enum ActivitySource {
@@ -244,6 +245,7 @@ model AppUser {
   attachments        Attachment[]
   notifications      Notification[]
   externalIdentities ExternalIdentity[]
+  oauthFlows         OAuthFlow[]
 
   @@unique([email])
   @@map("app_user")
@@ -324,11 +326,33 @@ model AuthToken {
   createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   expiresAt  DateTime      @map("expires_at") @db.Timestamptz(6)
   consumedAt DateTime?     @map("consumed_at") @db.Timestamptz(6)
+  /// email_change only: the address that becomes the user's email once verified.
+  newEmail   String?       @map("new_email") @db.Text // ALTERed to citext in migration
 
   user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@map("auth_token")
+}
+
+/// One in-progress OAuth sign-in, register or link flow. The `state` sent to the
+/// provider and the browser's nonce cookie are both stored hashed; the callback must
+/// present both, and consuming the flow deletes it (login-CSRF and replay defence).
+model OAuthFlow {
+  id              String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  stateHash       String       @unique @map("state_hash")
+  nonceHash       String       @map("nonce_hash")
+  provider        AuthProvider
+  intent          String
+  userId          String?      @map("user_id") @db.Uuid
+  inviteTokenHash String?      @map("invite_token_hash")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt       DateTime     @map("expires_at") @db.Timestamptz(6)
+
+  user AppUser? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("oauth_flow")
 }
 
 model Role {

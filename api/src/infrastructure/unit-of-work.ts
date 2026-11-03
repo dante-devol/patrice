@@ -7,6 +7,8 @@ import { SettingsService } from '../settings/settings.service';
 import { DomainEvent } from '../domain/shared/aggregate';
 import { DivisionRepository } from '../domain/division/division.repository';
 import { PrismaDivisionRepository } from './prisma-division.repository';
+import { UserAccountRepository } from '../domain/account/user-account.repository';
+import { PrismaUserAccountRepository } from './prisma-user-account.repository';
 
 /** Repositories hand the events of each saved aggregate to the unit of work. */
 export type EventSink = (events: DomainEvent[]) => void;
@@ -15,6 +17,7 @@ export type EventSink = (events: DomainEvent[]) => void;
 export interface UnitOfWorkContext {
   tx: Prisma.TransactionClient;
   divisions: DivisionRepository;
+  accounts: UserAccountRepository;
 }
 
 /**
@@ -42,7 +45,11 @@ export class UnitOfWork {
     const result = await this.prisma.$transaction(async (tx) => {
       const events: DomainEvent[] = [];
       const sink: EventSink = (e) => events.push(...e);
-      const value = await work({ tx, divisions: new PrismaDivisionRepository(tx, sink) });
+      const value = await work({
+        tx,
+        divisions: new PrismaDivisionRepository(tx, sink),
+        accounts: new PrismaUserAccountRepository(tx, sink),
+      });
 
       for (const e of events) {
         await this.activity.logActivity({

@@ -29,6 +29,9 @@ import {
   type ResendVerificationDto,
 } from './auth.dto';
 import { Public, CurrentUser, type CurrentUserRef } from './current-user';
+import { AccessService } from '../access/access.service';
+import { ACTIONS } from '../access/actions';
+import { DeniedError } from '../common/errors';
 import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
@@ -39,6 +42,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
     private readonly verification: VerificationService,
+    private readonly access: AccessService,
   ) {}
 
   // Brute-force ceiling on password guessing (per-IP). argon2 raises per-attempt cost;
@@ -72,6 +76,16 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
+    // Logout is `session:revoke` on your own session. The baseline policy always
+    // permits it, so only an explicit forbid can stop a user signing out.
+    if (req.user && req.sessionId) {
+      const allowed = await this.access.decide({
+        userId: req.user.id,
+        action: ACTIONS.sessionRevoke.action,
+        resource: { type: 'Session', id: req.sessionId, attrs: { owner: { __entity: { type: 'Patrice::User', id: req.user.id } } } },
+      });
+      if (!allowed) throw new DeniedError('FORBIDDEN', `Not permitted: ${ACTIONS.sessionRevoke.action}`);
+    }
     const token = req.cookies?.[SESSION_COOKIE];
     if (token) await this.sessions.revokeByToken(token);
     clearAuthCookies(res, this.env.COOKIE_SECURE);

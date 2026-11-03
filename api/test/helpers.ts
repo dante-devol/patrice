@@ -32,6 +32,7 @@ export async function resetDatabase(): Promise<void> {
 export interface EmailCapture {
   verifications: Array<{ to: string; token: string }>;
   resets: Array<{ to: string; token: string }>;
+  emailChanges: Array<{ to: string; token: string }>;
   /** Most-recent verification token issued to `to`, or null. */
   lastVerificationToken(to: string): string | null;
   /** Most-recent reset token issued to `to`, or null. */
@@ -52,18 +53,23 @@ function lastFor(
 export function createEmailCapture(): { stub: object; capture: EmailCapture } {
   const verifications: Array<{ to: string; token: string }> = [];
   const resets: Array<{ to: string; token: string }> = [];
+  const emailChanges: Array<{ to: string; token: string }> = [];
   const stub = {
-    async onModuleInit(): Promise<void> {},
+    onModuleInit(): void {},
     async sendVerificationEmail(to: string, token: string): Promise<void> {
       verifications.push({ to, token });
     },
     async sendPasswordResetEmail(to: string, token: string): Promise<void> {
       resets.push({ to, token });
     },
+    async sendEmailChangeEmail(to: string, token: string): Promise<void> {
+      emailChanges.push({ to, token });
+    },
   };
   const capture: EmailCapture = {
     verifications,
     resets,
+    emailChanges,
     lastVerificationToken: (to) => lastFor(verifications, to),
     lastResetToken: (to) => lastFor(resets, to),
   };

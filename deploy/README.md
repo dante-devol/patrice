@@ -31,6 +31,7 @@ Edit `.env` and fill in every `CHANGE_ME`. At minimum:
 - `PATRICE_VERSION` — pin to the release you are deploying (e.g. `1.4.0`).
 - `PUBLIC_BASE_URL` — the public **https** URL users will hit.
 - `SESSION_SECRET`, `TOKEN_PEPPER` — `openssl rand -base64 48` each.
+- `SECRETS_KEY` — `openssl rand -hex 32`. Encrypts secrets stored in the database (login-provider client secrets). Losing it means re-entering those secrets in Settings.
 - `POSTGRES_PASSWORD` — must match the password inside `DATABASE_URL`.
 - `SMTP_URL`, `EMAIL_FROM` — a real outbound mail server (invites + email login
   links go through it).

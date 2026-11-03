@@ -228,6 +228,12 @@ export const activityPayloadSchemas = {
   // auth-security event, distinct from the per-connection integration link above.
   'auth.discord_linked': z.object({ userId: uuid }).strict(),
   'auth.discord_unlinked': z.object({ userId: uuid }).strict(),
+  // Phase 1 account self-service. `provider` is a sign-in method, not personal data.
+  'auth.identity_linked': z.object({ userId: uuid, provider: z.enum(['password', 'google', 'discord']) }).strict(),
+  'auth.identity_unlinked': z.object({ userId: uuid, provider: z.enum(['password', 'google', 'discord']) }).strict(),
+  'auth.password_changed': z.object({ userId: uuid }).strict(),
+  'auth.email_changed': z.object({ userId: uuid }).strict(),
+  'session.revoked': z.object({ sessionId: uuid, userId: uuid }).strict(),
   'external_group_mapping.created': z
     .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
     .strict(),

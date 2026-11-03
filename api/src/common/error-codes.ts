@@ -48,6 +48,8 @@ export const ERROR_CODES = {
   ALREADY_SUBMITTED: { status: 409, description: 'A submission is already awaiting review' },
   CLAIMS_CLOSED: { status: 409, description: 'The task is not accepting claims' },
   DISCORD_ALREADY_LINKED: { status: 409, description: 'This Discord account belongs to another user' },
+  IDENTITY_TAKEN: { status: 409, description: 'That sign-in account already belongs to another user' },
+  PROVIDER_ALREADY_CONNECTED: { status: 409, description: 'A different account from this provider is already connected' },
   DIVISION_RETIRED: { status: 409, description: 'Division is retired' },
   DUPLICATE_CONNECTION: { status: 409, description: 'That workspace is already connected' },
   DUPLICATE_MAPPING: { status: 409, description: 'That mapping already exists' },

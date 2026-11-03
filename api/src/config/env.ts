@@ -18,6 +18,10 @@ export const envSchema = z.object({
   PUBLIC_BASE_URL: z.string().url(),
   SESSION_SECRET: z.string().min(16),
   TOKEN_PEPPER: z.string().min(16),
+  // Root key for secrets stored in the database (the `secret` table), e.g. the
+  // login-provider client secrets. 32 bytes as hex (64 chars). Each purpose gets its
+  // own key derived from this one. Separate from SESSION_SECRET so either can rotate.
+  SECRETS_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'SECRETS_KEY must be 64 hex characters'),
   SMTP_URL: z.string().min(1),
   EMAIL_FROM: z.string().min(1),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug', 'verbose']).default('info'),
@@ -27,9 +31,8 @@ export const envSchema = z.object({
   ARGON2_MEMORY_COST: z.coerce.number().int().positive().optional(),
   ARGON2_TIME_COST: z.coerce.number().int().positive().optional(),
   ARGON2_PARALLELISM: z.coerce.number().int().positive().optional(),
-  // Restore window after `retired_at` during which Revive is allowed (and, in
-  // Slice 7, GC will not collect). A revive attempt past this window → 409.
-  RETIREMENT_GRACE_DAYS: z.coerce.number().int().positive().default(30),
+  // Runs without pg-boss: enqueues are dropped. For tests and queue-less local runs.
+  DISABLE_QUEUE: boolFromString.default('false'),
 
   // Object storage (Slice 4.3). `local` writes blobs to STORAGE_LOCAL_DIR (single
   // instance only — see the slice doc's multi-instance caveat); `s3` uses an
@@ -44,9 +47,9 @@ export const envSchema = z.object({
   S3_FORCE_PATH_STYLE: boolFromString.default('false'),
   // Upload cap enforced at the attachment boundary (default 25 MiB).
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(26_214_400),
-  // NB: the Discord OAuth client id/secret are NOT startup config — they live in
+  // NB: login-provider client ids/secrets are NOT startup config — they live in
   // `system_settings` + `secret` (runtime config, admin-editable; the secret encrypted
-  // with a SESSION_SECRET-derived key). See ADR 0006. Any DISCORD_CLIENT_* env vars
+  // under a key derived from SECRETS_KEY). See ADR 0006. Any DISCORD_CLIENT_* env vars
   // a deployment still sets are simply ignored.
   // Batching window: role-change events within this window collapse into one sync
   // job per connection (pg-boss singletonKey deduplication). Default 5 s (#61).

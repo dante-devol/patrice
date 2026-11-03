@@ -2,7 +2,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ENV, Env } from '../config/env';
 import { SettingsService } from '../settings/settings.service';
 import { SecretStore } from '../settings/secret-store.service';
-import { decryptOAuthSecret } from './oauth-secret.cipher';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
@@ -43,14 +42,9 @@ export class DiscordOAuthService {
    */
   private async loadCreds(): Promise<{ clientId: string; clientSecret: string } | null> {
     const { discordClientId } = await this.settings.get();
-    const handle = await this.secrets.get('discord_oauth_client_secret');
-    if (!discordClientId || !handle) return null;
-    try {
-      return { clientId: discordClientId, clientSecret: decryptOAuthSecret(this.env.SESSION_SECRET, handle) };
-    } catch (err) {
-      this.logger.error(`Discord OAuth secret failed to decrypt — re-enter it in Settings: ${(err as Error).message}`);
-      return null;
-    }
+    const clientSecret = await this.secrets.get('discord_oauth_client_secret');
+    if (!discordClientId || !clientSecret) return null;
+    return { clientId: discordClientId, clientSecret };
   }
 
   async isConfigured(): Promise<boolean> {

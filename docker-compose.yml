@@ -30,6 +30,8 @@ x-common-env: &common-env
   PUBLIC_BASE_URL: http://localhost:8080
   SESSION_SECRET: ${SESSION_SECRET:-dev-session-secret-change-me-please}
   TOKEN_PEPPER: ${TOKEN_PEPPER:-dev-token-pepper-change-me-please}
+  # Throwaway dev key — override via root .env for any persistent data.
+  SECRETS_KEY: ${SECRETS_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
   SMTP_URL: smtp://mailpit:1025
   EMAIL_FROM: Patrice <no-reply@patrice.local>
   NODE_ENV: development

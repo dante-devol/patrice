@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { PrismaClient } from '@prisma/client';
 import {
   BootedApp,
   EmailCapture,
@@ -206,13 +207,31 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     expect(accept.status).toBe(410);
   });
 
+  it('invitation expiry must be in the future and at most 90 days away → 422', async () => {
+    const send = (expiresAt: Date) =>
+      http()
+        .post('/api/invitations')
+        .set('Cookie', adminCookies)
+        .set('x-csrf-token', adminCsrf)
+        .send({ expiresAt: expiresAt.toISOString() });
+    expect((await send(new Date(Date.now() - 1000))).status).toBe(422);
+    expect((await send(new Date(Date.now() + 91 * 24 * 60 * 60 * 1000))).status).toBe(422);
+    expect((await send(new Date(Date.now() + 24 * 60 * 60 * 1000))).status).toBe(201);
+  });
+
   it('an expired invite cannot be redeemed → 410', async () => {
     const created = await http()
       .post('/api/invitations')
       .set('Cookie', adminCookies)
       .set('x-csrf-token', adminCsrf)
-      .send({ expiresAt: new Date(Date.now() - 1000).toISOString() });
+      .send({});
     const token = created.body.token as string;
+    const prisma = new PrismaClient();
+    await prisma.invitation.update({
+      where: { id: created.body.id as string },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    await prisma.$disconnect();
 
     const accept = await http()
       .post(`/api/invite/${token}/accept`)

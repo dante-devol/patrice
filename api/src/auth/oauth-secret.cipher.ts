@@ -1,15 +1,12 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 
 /**
- * At-rest encryption for the **app-level Discord OAuth client secret**, which lives
- * in the `secret` table (runtime config) rather than env (ADR 0006). The key is
- * derived from `SESSION_SECRET` via HKDF with a fixed label — the api role already
- * holds `SESSION_SECRET` (it signs sessions + OAuth state), so this needs no new env
- * and no worker round-trip (unlike the bot token's worker-only SecretCipherPort).
+ * **Legacy** at-rest format for the Discord OAuth client secret, encrypted under a key
+ * derived from `SESSION_SECRET`. New secrets use `SECRETS_KEY` (settings/secret-cipher);
+ * the SecretStore re-encrypts a legacy handle the first time it reads it. Only the
+ * decrypt path is still needed; encrypt remains for tests that seed a legacy row.
  *
  * Format: `oauthsec:<base64url(iv ‖ authTag ‖ ciphertext)>`. AES-256-GCM.
- * A `SESSION_SECRET` rotation makes stored handles undecryptable — the admin simply
- * re-enters the client secret (rare, and surfaced as "not configured").
  */
 const TAG = 'oauthsec:';
 const HKDF_INFO = Buffer.from('patrice:oauth-client-secret:v1');

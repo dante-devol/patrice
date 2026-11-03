@@ -69,6 +69,19 @@ export const CurrentUser = z
   .strict()
   .openapi('CurrentUser');
 
+export const Session = z
+  .object({
+    id,
+    authMethod: AuthMethod,
+    createdAt: timestamp,
+    lastSeenAt: timestamp,
+    ip: z.string().nullable(),
+    userAgent: z.string().nullable(),
+    current: z.boolean(),
+  })
+  .strict()
+  .openapi('Session');
+
 export const BootstrapStatus = z
   .object({ open: z.boolean(), inviteToken: z.string().nullable() })
   .strict()

@@ -39,6 +39,7 @@ jobs:
       PUBLIC_BASE_URL: http://localhost:4200
       SESSION_SECRET: ci-session-secret-0123456789
       TOKEN_PEPPER: ci-token-pepper-0123456789
+      SECRETS_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       SMTP_URL: smtp://localhost:1025
       EMAIL_FROM: Patrice CI <ci@patrice.local>
       DISABLE_QUEUE: 'true'

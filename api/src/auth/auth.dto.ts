@@ -58,9 +58,37 @@ export const passwordResetConfirmSchema = z.object({
 });
 export type PasswordResetConfirmDto = z.infer<typeof passwordResetConfirmSchema>;
 
+/** The longest an invitation may stay open. */
+export const MAX_INVITE_LIFETIME_DAYS = 90;
+
 export const createInvitationSchema = z.object({
   email: email.optional(),
   intendedRoleIds: z.array(z.string().uuid()).optional(),
-  expiresAt: z.coerce.date().optional(),
+  // Must be in the future, and at most MAX_INVITE_LIFETIME_DAYS away.
+  expiresAt: z.coerce
+    .date()
+    .refine((d) => d.getTime() > Date.now(), 'Expiry must be in the future')
+    .refine(
+      (d) => d.getTime() <= Date.now() + MAX_INVITE_LIFETIME_DAYS * 24 * 60 * 60 * 1000,
+      `Expiry can be at most ${MAX_INVITE_LIFETIME_DAYS} days away`,
+    )
+    .optional(),
 });
 export type CreateInvitationDto = z.infer<typeof createInvitationSchema>;
+
+// ---- Self-service account (Phase 1) ----------------------------------------
+
+/** Change the password (`currentPassword` required when one exists) or add a first one. */
+export const setPasswordSchema = z
+  .object({ currentPassword: z.string().min(1).optional(), newPassword })
+  .strict();
+export type SetPasswordDto = z.infer<typeof setPasswordSchema>;
+
+/** Start an email change; accounts with a password must confirm it. */
+export const requestEmailChangeSchema = z
+  .object({ newEmail: email, currentPassword: z.string().min(1).optional() })
+  .strict();
+export type RequestEmailChangeDto = z.infer<typeof requestEmailChangeSchema>;
+
+export const confirmEmailChangeSchema = z.object({ token: z.string().min(1) }).strict();
+export type ConfirmEmailChangeDto = z.infer<typeof confirmEmailChangeSchema>;

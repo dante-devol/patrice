@@ -62,8 +62,9 @@ To override any of them, create a `.env` **in the repo root** (Compose reads it 
 
 ```bash
 # .env (repo root) — all optional in dev; override the throwaway defaults
-SESSION_SECRET=...            # ≥16 chars; also derives the OAuth-secret encryption key
+SESSION_SECRET=...            # ≥16 chars; signs session and CSRF cookies
 TOKEN_PEPPER=...              # session/invite token hashing pepper
+SECRETS_KEY=...               # 64 hex chars (32 bytes) — encrypts secrets stored in the database
 INTEGRATION_TOKEN_KEY=...     # 64 hex chars (32 bytes) — AES key for the bot-token cipher
 COOKIE_SECURE=false           # true behind TLS
 ```
