@@ -85,9 +85,9 @@ export class IntegrationsService {
   // Connection CRUD
   // ---------------------------------------------------------------------------
 
-  async list(organizationId: string, includeRetired: boolean) {
+  async list(includeRetired: boolean) {
     const rows = await this.prisma.integrationConnection.findMany({
-      where: { organizationId, ...activeFilter(includeRetired) },
+      where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
     });
     return rows.map((c) => ({
@@ -96,10 +96,9 @@ export class IntegrationsService {
     }));
   }
 
-  async connect(organizationId: string, actorUserId: string, dto: ConnectIntegrationDto) {
+  async connect(actorUserId: string, dto: ConnectIntegrationDto) {
     const existing = await this.prisma.integrationConnection.findFirst({
       where: {
-        organizationId,
         provider: dto.provider,
         externalWorkspaceId: dto.externalWorkspaceId,
         lifecycleState: { not: LifecycleState.retired },
@@ -115,7 +114,6 @@ export class IntegrationsService {
     );
     const connection = await this.prisma.integrationConnection.create({
       data: {
-        organizationId,
         provider: dto.provider,
         externalWorkspaceId: dto.externalWorkspaceId,
         displayName: dto.displayName,
@@ -124,7 +122,6 @@ export class IntegrationsService {
       },
     });
     await this.activity.logActivity({
-      organizationId,
       actorUserId,
       subjectType: 'integration_connection',
       subjectId: connection.id,
@@ -135,7 +132,7 @@ export class IntegrationsService {
   }
 
   async update(id: string, actorUserId: string, dto: UpdateIntegrationDto) {
-    const connection = await this.loadActive(id);
+    await this.loadActive(id);
     const data: Prisma.IntegrationConnectionUpdateInput = {};
     if (dto.displayName !== undefined) data.displayName = dto.displayName;
     if (dto.credentialsRef !== undefined) data.credentialsRef = dto.credentialsRef;
@@ -150,7 +147,6 @@ export class IntegrationsService {
     }
     const updated = await this.prisma.integrationConnection.update({ where: { id }, data });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'integration_connection',
       subjectId: id,
@@ -175,7 +171,6 @@ export class IntegrationsService {
       data: { credentialsRef: ref, config: safeConfig as Prisma.InputJsonValue },
     });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'integration_connection',
       subjectId: id,
@@ -196,7 +191,6 @@ export class IntegrationsService {
       data: { lifecycleState: LifecycleState.retired, retiredAt: new Date() },
     });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'integration_connection',
       subjectId: id,
@@ -209,7 +203,7 @@ export class IntegrationsService {
   async revive(id: string, actorUserId: string) {
     const connection = await this.prisma.integrationConnection.findUnique({ where: { id } });
     if (!connection) throw new NotFoundError('CONNECTION_NOT_FOUND', 'Integration connection not found');
-    const graceMs = await this.grace.windowMs(connection.organizationId);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(connection, graceMs)) {
       throw new ConflictError('NOT_REVIVABLE', 'Connection is not retired or its grace period has elapsed');
     }
@@ -218,7 +212,6 @@ export class IntegrationsService {
       data: { lifecycleState: LifecycleState.active, retiredAt: null },
     });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'integration_connection',
       subjectId: id,
@@ -241,7 +234,7 @@ export class IntegrationsService {
   }
 
   async createMapping(connectionId: string, actorUserId: string, dto: CreateMappingDto) {
-    const connection = await this.loadActive(connectionId);
+    await this.loadActive(connectionId);
 
     // Reject mapping a retired role.
     const role = await this.prisma.role.findUnique({ where: { id: dto.roleId } });
@@ -276,7 +269,6 @@ export class IntegrationsService {
       },
     });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'external_group_mapping',
       subjectId: mapping.id,
@@ -292,7 +284,7 @@ export class IntegrationsService {
     actorUserId: string,
     dto: UpdateMappingDto,
   ) {
-    const connection = await this.loadActive(connectionId);
+    await this.loadActive(connectionId);
     const mapping = await this.prisma.externalGroupMapping.findUnique({ where: { id: mappingId } });
     if (!mapping || mapping.connectionId !== connectionId) {
       throw new NotFoundError('MAPPING_NOT_FOUND', 'Mapping not found');
@@ -310,7 +302,6 @@ export class IntegrationsService {
       },
     });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'external_group_mapping',
       subjectId: mappingId,
@@ -321,14 +312,13 @@ export class IntegrationsService {
   }
 
   async deleteMapping(connectionId: string, mappingId: string, actorUserId: string) {
-    const connection = await this.loadActive(connectionId);
+    await this.loadActive(connectionId);
     const mapping = await this.prisma.externalGroupMapping.findUnique({ where: { id: mappingId } });
     if (!mapping || mapping.connectionId !== connectionId) {
       throw new NotFoundError('MAPPING_NOT_FOUND', 'Mapping not found');
     }
     await this.prisma.externalGroupMapping.delete({ where: { id: mappingId } });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'external_group_mapping',
       subjectId: mappingId,
@@ -339,9 +329,8 @@ export class IntegrationsService {
 
   /** Record an admin-initiated reconcile in the audit log (the enqueue is the caller's). */
   async requestManualSync(id: string, actorUserId: string): Promise<void> {
-    const conn = await this.loadActive(id);
+    await this.loadActive(id);
     await this.activity.logActivity({
-      organizationId: conn.organizationId,
       actorUserId,
       subjectType: 'integration_connection',
       subjectId: id,
@@ -352,7 +341,7 @@ export class IntegrationsService {
 
   /** Clear a mapping's broken flag so the next sync re-evaluates it (admin recovery). */
   async retryMapping(connectionId: string, mappingId: string, actorUserId: string) {
-    const connection = await this.loadActive(connectionId);
+    await this.loadActive(connectionId);
     const mapping = await this.prisma.externalGroupMapping.findUnique({ where: { id: mappingId } });
     if (!mapping || mapping.connectionId !== connectionId) {
       throw new NotFoundError('MAPPING_NOT_FOUND', 'Mapping not found');
@@ -362,7 +351,6 @@ export class IntegrationsService {
       data: { isBroken: false },
     });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId,
       subjectType: 'external_group_mapping',
       subjectId: mappingId,

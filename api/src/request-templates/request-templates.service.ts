@@ -70,7 +70,7 @@ export class RequestTemplatesService {
   ): Promise<RequestTemplateView> {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, organizationId: true },
+      select: { id: true },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
 
@@ -114,7 +114,6 @@ export class RequestTemplatesService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'request_template',
         subjectId: requestTemplate.id,
@@ -161,13 +160,12 @@ export class RequestTemplatesService {
    * are enforced by the route guard before this runs.
    */
   async putForDivision(
-    organizationId: string,
     divisionId: string,
     actorUserId: string,
     dto: PutRequestTemplateDto,
   ): Promise<RequestTemplateView> {
     const division = await this.prisma.division.findFirst({
-      where: { id: divisionId, organizationId },
+      where: { id: divisionId },
       select: { id: true },
     });
     if (!division) {
@@ -184,7 +182,7 @@ export class RequestTemplatesService {
         ? existing.id
         : (
             await tx.requestTemplate.create({
-              data: { organizationId, ownerDivisionId: divisionId },
+              data: { ownerDivisionId: divisionId },
               select: { id: true },
             })
           ).id;
@@ -212,7 +210,6 @@ export class RequestTemplatesService {
 
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'request_template',
         subjectId: requestTemplateId,

@@ -108,12 +108,11 @@ export class TasksService {
    * Insertion order is task → request_template(owner_task_id) → questions, all in one tx.
    */
   async create(
-    organizationId: string,
     actorUserId: string,
     dto: CreateTaskDto,
   ): Promise<TaskView> {
     const division = await this.prisma.division.findFirst({
-      where: { id: dto.divisionId, organizationId },
+      where: { id: dto.divisionId },
       select: { id: true, lifecycleState: true, defaultOpenings: true },
     });
     if (!division) {
@@ -125,7 +124,7 @@ export class TasksService {
 
     if (dto.teamId) {
       const team = await this.prisma.team.findFirst({
-        where: { id: dto.teamId, organizationId },
+        where: { id: dto.teamId },
         select: { id: true, lifecycleState: true },
       });
       if (!team) throw new NotFoundError('TEAM_NOT_FOUND', 'Team not found');
@@ -155,7 +154,6 @@ export class TasksService {
     const created = await this.prisma.$transaction(async (tx) => {
       const task = await tx.task.create({
         data: {
-          organizationId,
           name: dto.name,
           description: dto.description ?? '',
           divisionId: dto.divisionId,
@@ -170,7 +168,7 @@ export class TasksService {
       // Deep-copy: a fresh request template row owned by the task, then fresh question
       // rows (new ids) carrying the source's ordinal/type/prompt/required/constraints.
       const requestTemplate = await tx.requestTemplate.create({
-        data: { organizationId, ownerTaskId: task.id },
+        data: { ownerTaskId: task.id },
         select: { id: true },
       });
       if (source.questions.length > 0) {
@@ -188,7 +186,6 @@ export class TasksService {
 
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: task.id,
@@ -209,11 +206,9 @@ export class TasksService {
 
   /** Faceted + keyset list (newest-first by UUIDv7 PK; `after` is the last seen id). */
   async list(
-    organizationId: string,
     query: ListTasksQuery,
   ): Promise<TaskListResult> {
     const where: Prisma.TaskWhereInput = {
-      organizationId,
       ...activeFilter(query.include === 'retired'),
     };
     if (query.division) where.divisionId = { in: query.division };
@@ -251,7 +246,7 @@ export class TasksService {
   ): Promise<TaskView> {
     const task = await this.prisma.task.findUnique({
       where: { id },
-      select: { id: true, organizationId: true },
+      select: { id: true },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
 
@@ -267,7 +262,6 @@ export class TasksService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: task.id,
@@ -282,7 +276,7 @@ export class TasksService {
   async retire(id: string, actorUserId: string): Promise<TaskView> {
     const task = await this.prisma.task.findUnique({
       where: { id },
-      select: { id: true, organizationId: true, lifecycleState: true },
+      select: { id: true, lifecycleState: true },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
     if (task.lifecycleState === LifecycleState.retired) {
@@ -303,7 +297,6 @@ export class TasksService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: task.id,
@@ -313,7 +306,6 @@ export class TasksService {
       // Active claimants hear the task was retired (the actor — usually the requester
       // — is suppressed).
       notified = await this.notifications.emit(tx, {
-        organizationId: task.organizationId,
         type: 'task.retired',
         subjectType: 'task',
         subjectId: task.id,
@@ -338,13 +330,12 @@ export class TasksService {
       where: { id },
       select: {
         id: true,
-        organizationId: true,
         lifecycleState: true,
         retiredAt: true,
       },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
-    const graceMs = await this.grace.windowMs(task.organizationId);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(task, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
@@ -364,7 +355,6 @@ export class TasksService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: task.id,
@@ -394,7 +384,6 @@ export class TasksService {
       where: { id },
       select: {
         id: true,
-        organizationId: true,
         openings: true,
         claimsClosed: true,
         lifecycleState: true,
@@ -451,7 +440,6 @@ export class TasksService {
       const status = await this.recomputeStatus(tx, taskId);
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId: userId,
         subjectType: 'task',
         subjectId: taskId,
@@ -461,7 +449,6 @@ export class TasksService {
       await this.messages.createSystemMessage(tx, taskId, `User ${userId} claimed this task.`);
       // Notify the requester of the new claim (the claimer is suppressed).
       notified = await this.notifications.emit(tx, {
-        organizationId: task.organizationId,
         type: 'task.claim_joined',
         subjectType: 'task',
         subjectId: taskId,
@@ -481,7 +468,7 @@ export class TasksService {
 
   /** Leave a claim (`task:assign`, own slot). Frees the slot (no submits in Slice 4). */
   async leave(taskId: string, userId: string): Promise<TaskView> {
-    const task = await this.loadActiveTask(taskId);
+    await this.loadActiveTask(taskId);
     let notified: string[] = [];
     const view = await this.prisma.$transaction(async (tx) => {
       // Lock the task so the claim_left event_seq computation can't race a sibling.
@@ -500,7 +487,6 @@ export class TasksService {
       const status = await this.recomputeStatus(tx, taskId);
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId: userId,
         subjectType: 'task',
         subjectId: taskId,
@@ -510,7 +496,6 @@ export class TasksService {
       await this.messages.createSystemMessage(tx, taskId, `User ${userId} left this task.`);
       // Notify the requester that a claimant left (the leaver is suppressed).
       notified = await this.notifications.emit(tx, {
-        organizationId: task.organizationId,
         type: 'task.claim_left',
         subjectType: 'task',
         subjectId: taskId,
@@ -581,7 +566,6 @@ export class TasksService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: taskId,
@@ -597,7 +581,6 @@ export class TasksService {
       // eligible users discover it on the list). The actor (requester) is suppressed.
       if (dto.claimsClosed === true) {
         notified = await this.notifications.emit(tx, {
-          organizationId: task.organizationId,
           type: 'task.claims_closed',
           subjectType: 'task',
           subjectId: taskId,
@@ -619,7 +602,7 @@ export class TasksService {
    * system message + activity row.
    */
   async complete(taskId: string, actorUserId: string): Promise<TaskView> {
-    const task = await this.loadActiveTask(taskId);
+    await this.loadActiveTask(taskId);
     let notified: string[] = [];
     const view = await this.prisma.$transaction(async (tx) => {
       const row = await tx.task.update({
@@ -634,7 +617,6 @@ export class TasksService {
       );
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: taskId,
@@ -643,7 +625,6 @@ export class TasksService {
       });
       // Notify the active claimants their work is accepted (requester is suppressed).
       notified = await this.notifications.emit(tx, {
-        organizationId: task.organizationId,
         type: 'task.completed',
         subjectType: 'task',
         subjectId: taskId,
@@ -667,7 +648,7 @@ export class TasksService {
     actorUserId: string,
     targetUserId: string,
   ): Promise<TaskView> {
-    const task = await this.loadActiveTask(taskId);
+    await this.loadActiveTask(taskId);
     let notified: string[] = [];
     const view = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
@@ -676,7 +657,7 @@ export class TasksService {
         select: { id: true, leftAt: true },
       });
       if (!slot || slot.leftAt !== null) {
-        throw new NotFoundError('NOT_CLAIMED', 'User does not hold a slot on this task');
+        throw new NotFoundError('CLAIMANT_NOT_FOUND', 'User does not hold a slot on this task');
       }
       await tx.taskClaimant.update({
         where: { id: slot.id },
@@ -685,7 +666,6 @@ export class TasksService {
       const status = await this.recomputeStatus(tx, taskId);
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: taskId,
@@ -694,7 +674,6 @@ export class TasksService {
       });
       await this.messages.createSystemMessage(tx, taskId, `User ${targetUserId} left this task.`);
       notified = await this.notifications.emit(tx, {
-        organizationId: task.organizationId,
         type: 'task.claim_left',
         subjectType: 'task',
         subjectId: taskId,
@@ -718,9 +697,9 @@ export class TasksService {
     actorUserId: string,
     dto: ChangeRequesterDto,
   ): Promise<TaskView> {
-    const task = await this.loadActiveTask(taskId);
+    await this.loadActiveTask(taskId);
     const newRequester = await this.prisma.appUser.findFirst({
-      where: { id: dto.userId, organizationId: task.organizationId },
+      where: { id: dto.userId },
       select: { id: true, lifecycleState: true },
     });
     if (!newRequester) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
@@ -739,7 +718,6 @@ export class TasksService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'task',
         subjectId: taskId,
@@ -753,7 +731,6 @@ export class TasksService {
       );
       // Both the outgoing and incoming requester hear about it (actor suppressed).
       notified = await this.notifications.emit(tx, {
-        organizationId: task.organizationId,
         type: 'task.requester_changed',
         subjectType: 'task',
         subjectId: taskId,

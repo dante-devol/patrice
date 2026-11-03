@@ -1,7 +1,6 @@
-import { Body, Controller, Get, Param, Put, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { NotFoundError, UnauthenticatedError } from '../common/errors';
+import { NotFoundError } from '../common/errors';
 import { Authorize, divisionResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { RequestTemplatesService } from './request-templates.service';
@@ -9,10 +8,9 @@ import {
   putRequestTemplateSchema,
   type PutRequestTemplateDto,
 } from './request-templates.dto';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 /**
  * Division default request template endpoints (Slice 3). GET is a read (ungated per
@@ -23,9 +21,9 @@ interface AuthedRequest extends Request {
 export class RequestTemplatesController {
   constructor(private readonly requestTemplates: RequestTemplatesService) {}
 
+  @Contract(ROUTES.getDivisionTemplate)
   @Get(':id/request-template')
-  async get(@Param('id') id: string, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
+  async get(@Param('id') id: string) {
     const rt = await this.requestTemplates.getForDivision(id);
     if (!rt) {
       throw new NotFoundError(
@@ -36,18 +34,17 @@ export class RequestTemplatesController {
     return rt;
   }
 
+  @Contract(ROUTES.putDivisionTemplate)
   @Put(':id/request-template')
   @Authorize(ACTIONS.divisionUpdate.action, divisionResource)
   async put(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(putRequestTemplateSchema)) body: PutRequestTemplateDto,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
     return this.requestTemplates.putForDivision(
-      req.user.organizationId,
       id,
-      req.user.id,
+      user.id,
       body,
     );
   }

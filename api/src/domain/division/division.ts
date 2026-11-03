@@ -1,0 +1,148 @@
+import { uuidv7 } from 'uuidv7';
+import { AggregateRoot } from '../shared/aggregate';
+import { DomainError } from '../shared/domain-error';
+import { Lifecycle } from '../shared/lifecycle';
+
+export interface DivisionSettings {
+  defaultOpenings: number;
+  openingsLocked: boolean;
+  restrictClaims: boolean;
+}
+
+export interface DivisionState extends DivisionSettings {
+  id: string;
+  name: string;
+  lifecycle: Lifecycle;
+  version: number;
+  /**
+   * The division's inherent role. It shares the division's name and lifecycle, so it
+   * lives inside this consistency boundary until membership replaces inherent roles.
+   */
+  inherentRoleId: string;
+}
+
+export const MAX_DIVISION_NAME = 120;
+export const MAX_DEFAULT_OPENINGS = 10_000;
+
+/** A division: the axis of labour, a claim-restriction scope and a permission scope. */
+export class Division extends AggregateRoot {
+  private _name: string;
+  private _settings: DivisionSettings;
+  private _lifecycle: Lifecycle;
+  readonly inherentRoleId: string;
+
+  private constructor(s: DivisionState) {
+    super(s.id, s.version);
+    this._name = s.name;
+    this._settings = {
+      defaultOpenings: s.defaultOpenings,
+      openingsLocked: s.openingsLocked,
+      restrictClaims: s.restrictClaims,
+    };
+    this._lifecycle = s.lifecycle;
+    this.inherentRoleId = s.inherentRoleId;
+  }
+
+  static create(name: string, settings: Partial<DivisionSettings> = {}): Division {
+    const d = new Division({
+      id: uuidv7(),
+      name: Division.validName(name),
+      defaultOpenings: Division.validOpenings(settings.defaultOpenings ?? 1),
+      openingsLocked: settings.openingsLocked ?? false,
+      restrictClaims: settings.restrictClaims ?? false,
+      lifecycle: Lifecycle.active(),
+      version: 0,
+      inherentRoleId: uuidv7(),
+    });
+    d.raise({
+      type: 'division.created',
+      subjectType: 'division',
+      subjectId: d.id,
+      payload: { divisionId: d.id },
+    });
+    d.raise({
+      type: 'role.created',
+      subjectType: 'role',
+      subjectId: d.inherentRoleId,
+      payload: { roleId: d.inherentRoleId },
+    });
+    return d;
+  }
+
+  /** Rebuild from storage. Raises no events. */
+  static restore(s: DivisionState): Division {
+    return new Division(s);
+  }
+
+  get name(): string {
+    return this._name;
+  }
+  get settings(): Readonly<DivisionSettings> {
+    return this._settings;
+  }
+  get lifecycle(): Lifecycle {
+    return this._lifecycle;
+  }
+
+  /** Edits are allowed on a retired division (the access layer blocks them today). */
+  update(changes: { name?: string } & Partial<DivisionSettings>): void {
+    if (changes.name !== undefined) this._name = Division.validName(changes.name);
+    this._settings = {
+      defaultOpenings:
+        changes.defaultOpenings !== undefined
+          ? Division.validOpenings(changes.defaultOpenings)
+          : this._settings.defaultOpenings,
+      openingsLocked: changes.openingsLocked ?? this._settings.openingsLocked,
+      restrictClaims: changes.restrictClaims ?? this._settings.restrictClaims,
+    };
+    this.raise({
+      type: 'division.updated',
+      subjectType: 'division',
+      subjectId: this.id,
+      payload: { divisionId: this.id },
+    });
+  }
+
+  /** Retiring cascades to the inherent role, which changes the projected policy set. */
+  retire(now: Date): void {
+    this._lifecycle = this._lifecycle.retire(now, 'Division');
+    this.raiseLifecycle('retired');
+  }
+
+  revive(now: Date, graceMs: number): void {
+    this._lifecycle = this._lifecycle.revive(now, graceMs, 'Division');
+    this.raiseLifecycle('revived');
+  }
+
+  private raiseLifecycle(kind: 'retired' | 'revived'): void {
+    this.raise({
+      type: `division.${kind}`,
+      subjectType: 'division',
+      subjectId: this.id,
+      payload: { divisionId: this.id },
+      policyChanged: true,
+    });
+    this.raise({
+      type: `role.${kind}`,
+      subjectType: 'role',
+      subjectId: this.inherentRoleId,
+      payload: { roleId: this.inherentRoleId },
+      policyChanged: true,
+    });
+  }
+
+  private static validName(name: string): string {
+    const trimmed = name.trim();
+    if (trimmed.length === 0 || trimmed.length > MAX_DIVISION_NAME) {
+      throw new DomainError('VALIDATION_FAILED', 'Division name must be 1–120 characters');
+    }
+    return trimmed;
+  }
+
+  private static validOpenings(n: number): number {
+    if (!Number.isInteger(n) || n < 0 || n > MAX_DEFAULT_OPENINGS) {
+      throw new DomainError('VALIDATION_FAILED', 'Default openings must be 0–10000');
+    }
+    return n;
+  }
+}

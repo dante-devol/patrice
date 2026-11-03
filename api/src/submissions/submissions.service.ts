@@ -121,7 +121,7 @@ export class SubmissionsService {
   ): Promise<SubmissionView> {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, organizationId: true, lifecycleState: true },
+      select: { id: true, lifecycleState: true },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
     if (task.lifecycleState === LifecycleState.retired) {
@@ -164,7 +164,6 @@ export class SubmissionsService {
       const att = await this.prisma.attachment.findFirst({
         where: {
           id: attId,
-          organizationId: task.organizationId,
           lifecycleState: LifecycleState.active,
         },
         select: { contentType: true, kind: true },
@@ -236,7 +235,6 @@ export class SubmissionsService {
           await tx.attachment.updateMany({
             where: {
               id: { in: dtoAnswer.attachmentIds },
-              organizationId: task.organizationId,
             },
             data: { answerId: answer.id, messageId: null },
           });
@@ -260,7 +258,6 @@ export class SubmissionsService {
 
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'submission',
         subjectId: submission.id,
@@ -275,7 +272,6 @@ export class SubmissionsService {
 
       // Notify the task requester (sender — the claimant — is suppressed).
       notified = await this.notifications.emit(tx, {
-        organizationId: task.organizationId,
         type: 'task.submitted',
         subjectType: 'submission',
         subjectId: submission.id,
@@ -335,7 +331,7 @@ export class SubmissionsService {
         state: true,
         version: true,
         lifecycleState: true,
-        task: { select: { organizationId: true } },
+        task: { select: { id: true } },
       },
     });
     if (!submission) {
@@ -406,7 +402,6 @@ export class SubmissionsService {
       const status = await this.status.recompute(tx, submission.taskId);
       await this.activity.logActivity({
         tx,
-        organizationId: submission.task.organizationId,
         actorUserId,
         subjectType: 'submission',
         subjectId: submissionId,
@@ -422,7 +417,6 @@ export class SubmissionsService {
       // Notify the submission's claimant of the decision (reviewer is suppressed —
       // self-review is forbidden by Cedar anyway, this is the backstop).
       notified = await this.notifications.emit(tx, {
-        organizationId: submission.task.organizationId,
         type: REVIEW_DECISION_TYPE[dto.decision],
         subjectType: 'submission',
         subjectId: submissionId,
@@ -457,7 +451,7 @@ export class SubmissionsService {
         submissionNo: true,
         claimantUserId: true,
         lifecycleState: true,
-        task: { select: { organizationId: true } },
+        task: { select: { id: true } },
       },
     });
     if (!submission) {
@@ -516,7 +510,6 @@ export class SubmissionsService {
       // 6. Org-level audit (distinct from the task-thread audit message in step 1).
       await this.activity.logActivity({
         tx,
-        organizationId: submission.task.organizationId,
         actorUserId,
         subjectType: 'submission',
         subjectId: submissionId,

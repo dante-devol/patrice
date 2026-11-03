@@ -3,7 +3,6 @@ import { toConnectionResponse } from './integrations.service';
 describe('toConnectionResponse', () => {
   const base = {
     id: 'conn-1',
-    organizationId: 'org-1',
     provider: 'discord' as const,
     externalWorkspaceId: '111',
     displayName: 'Test Guild',
@@ -30,7 +29,6 @@ describe('toConnectionResponse', () => {
     const result = toConnectionResponse(base);
     expect(result).toMatchObject({
       id: 'conn-1',
-      organizationId: 'org-1',
       provider: 'discord',
       externalWorkspaceId: '111',
       displayName: 'Test Guild',

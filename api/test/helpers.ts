@@ -11,7 +11,7 @@ export async function resetDatabase(): Promise<void> {
   const prisma = new PrismaClient();
   try {
     await prisma.$executeRawUnsafe(
-      `TRUNCATE organization, app_user, user_identity, session, invitation,
+      `TRUNCATE system_settings, secret, app_user, user_identity, session, invitation,
        invitation_use, auth_token, role, user_role, "grant", activity,
        division, team, request_template, question, task, task_claimant,
        message, attachment, notification,

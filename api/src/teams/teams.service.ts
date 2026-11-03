@@ -32,9 +32,9 @@ export class TeamsService {
     private readonly grace: GraceService,
   ) {}
 
-  async list(organizationId: string, includeRetired = false): Promise<TeamView[]> {
+  async list(includeRetired = false): Promise<TeamView[]> {
     const rows = await this.prisma.team.findMany({
-      where: { organizationId, ...activeFilter(includeRetired) },
+      where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
       include: { inherentRole: true },
     });
@@ -56,21 +56,18 @@ export class TeamsService {
   }
 
   async create(
-    organizationId: string,
     actorUserId: string,
     dto: CreateTeamDto,
   ): Promise<TeamView> {
     const row = await this.prisma.$transaction(async (tx) => {
       const team = await tx.team.create({
         data: {
-          organizationId,
           name: dto.name,
           restrictClaims: dto.restrictClaims ?? false,
         },
       });
       const role = await tx.role.create({
         data: {
-          organizationId,
           name: team.name,
           kind: RoleKind.team,
           teamId: team.id,
@@ -79,7 +76,6 @@ export class TeamsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'team',
         subjectId: team.id,
@@ -88,7 +84,6 @@ export class TeamsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'role',
         subjectId: role.id,
@@ -140,7 +135,6 @@ export class TeamsService {
       }
       await this.activity.logActivity({
         tx,
-        organizationId: team.organizationId,
         actorUserId,
         subjectType: 'team',
         subjectId: team.id,
@@ -178,7 +172,6 @@ export class TeamsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: team.organizationId,
         actorUserId,
         subjectType: 'team',
         subjectId: team.id,
@@ -187,14 +180,13 @@ export class TeamsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: team.organizationId,
         actorUserId,
         subjectType: 'role',
         subjectId: team.inherentRole!.id,
         verb: 'role.retired',
         payload: { roleId: team.inherentRole!.id },
       });
-      await this.access.bumpConfigVersion(team.organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
       return updated;
     });
     return this.toView(row);
@@ -202,7 +194,7 @@ export class TeamsService {
 
   async revive(id: string, actorUserId: string): Promise<TeamView> {
     const team = await this.load(id);
-    const graceMs = await this.grace.windowMs(team.organizationId);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(team, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
@@ -229,7 +221,6 @@ export class TeamsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: team.organizationId,
         actorUserId,
         subjectType: 'team',
         subjectId: team.id,
@@ -238,14 +229,13 @@ export class TeamsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: team.organizationId,
         actorUserId,
         subjectType: 'role',
         subjectId: team.inherentRole!.id,
         verb: 'role.revived',
         payload: { roleId: team.inherentRole!.id },
       });
-      await this.access.bumpConfigVersion(team.organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
       return updated;
     });
     return this.toView(row);

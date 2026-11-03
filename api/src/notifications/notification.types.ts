@@ -51,7 +51,6 @@ export const REVIEW_DECISION_TYPE: Readonly<
  * `payload` is IDs + small enums only (no PII).
  */
 export interface NotificationEvent {
-  organizationId: string;
   type: NotificationType;
   /** The entity the idempotency key groups on (e.g. 'task', 'submission', 'message'). */
   subjectType: string;

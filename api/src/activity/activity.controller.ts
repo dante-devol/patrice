@@ -1,15 +1,11 @@
-import { Controller, Get, Query, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { UnauthenticatedError } from '../common/errors';
 import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { ActivityService } from './activity.service';
 import { listActivityQuerySchema, type ListActivityQuery } from './activity.dto';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 /**
  * The org-level audit log read surface. Gated by `config:update` — the Effective-Admin
@@ -21,13 +17,13 @@ interface AuthedRequest extends Request {
 export class ActivityController {
   constructor(private readonly activity: ActivityService) {}
 
+  @Contract(ROUTES.listActivity)
   @Get()
   @Authorize(ACTIONS.configUpdate.action, orgResource)
   async list(
     @Query(new ZodValidationPipe(listActivityQuerySchema)) query: ListActivityQuery,
-    @Req() req: AuthedRequest,
+    
   ) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.activity.list(req.user.organizationId, query);
+    return this.activity.list(query);
   }
 }

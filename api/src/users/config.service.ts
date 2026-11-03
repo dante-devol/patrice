@@ -4,39 +4,9 @@ import { AccessService } from '../access/access.service';
 import { ActivityService } from '../activity/activity.service';
 import { ENV, Env } from '../config/env';
 import { encryptOAuthSecret } from '../auth/oauth-secret.cipher';
+import { SettingsService, SYSTEM_SUBJECT_ID } from '../settings/settings.service';
+import { SecretStore } from '../settings/secret-store.service';
 import { UpdateConfigDto } from './users.dto';
-
-/** Org-settings v1 defaults (docs/slices/02 "Organization settings"). */
-export const SETTINGS_DEFAULTS = {
-  requireVerifiedEmailToLogIn: false,
-  selfReviewAllowed: false,
-  anonymizeLabel: false,
-  sessionAbsoluteDays: 30,
-  sessionIdleDays: 7,
-  // Retire→revive grace window (Slice 7.2). GC skips, and Revive is allowed, while
-  // `retired_at > now() - gracePeriodHours`. Default 24h.
-  gracePeriodHours: 24,
-  // Slice 8: require users to link a Discord account before accessing tasks.
-  requireDiscordLink: false,
-} as const;
-
-/**
- * Settings as stored in `organization.settings`. Includes the **encrypted** Discord
- * OAuth client secret handle — never leaves the service; {@link ConfigService.get}
- * returns the redacted {@link OrgSettings} instead (ADR 0006).
- */
-export type RawOrgSettings = {
-  requireVerifiedEmailToLogIn: boolean;
-  selfReviewAllowed: boolean;
-  anonymizeLabel: boolean;
-  sessionAbsoluteDays: number;
-  sessionIdleDays: number;
-  gracePeriodHours: number;
-  requireDiscordLink: boolean;
-  discordClientId?: string;
-  /** `oauthsec:` handle — encrypted at rest, never returned by any read. */
-  discordClientSecret?: string;
-};
 
 /** The public view: the client *id* is shown, the secret is replaced by a boolean. */
 export type OrgSettings = {
@@ -52,11 +22,11 @@ export type OrgSettings = {
 };
 
 /**
- * The structured `organization.settings` editor (Slice 2.4). Flipping
- * `selfReviewAllowed` changes the projected static policy set (the conditional
- * self-review forbid) so every config write bumps `config_version` and drops the
- * projection cache. Flipping `requireVerifiedEmailToLogIn` only gates **new**
- * logins — it never invalidates existing sessions.
+ * The settings editor (Slice 2.4). Flipping `selfReviewAllowed` changes the projected
+ * static policy set (the conditional self-review forbid), so every config write bumps
+ * `config_version` and drops the projection cache. Flipping
+ * `requireVerifiedEmailToLogIn` only gates **new** logins; it never invalidates
+ * existing sessions.
  */
 @Injectable()
 export class ConfigService {
@@ -64,68 +34,57 @@ export class ConfigService {
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly activity: ActivityService,
+    private readonly settings: SettingsService,
+    private readonly secrets: SecretStore,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  /** Raw stored settings incl. the encrypted secret handle — service-internal only. */
-  private async getRaw(organizationId: string): Promise<RawOrgSettings> {
-    const org = await this.prisma.organization.findUniqueOrThrow({
-      where: { id: organizationId },
-      select: { settings: true },
-    });
-    return { ...SETTINGS_DEFAULTS, ...(org.settings as Partial<RawOrgSettings>) };
-  }
-
-  async get(organizationId: string): Promise<OrgSettings> {
-    const r = await this.getRaw(organizationId);
+  async get(): Promise<OrgSettings> {
+    const s = await this.settings.get();
     return {
-      requireVerifiedEmailToLogIn: r.requireVerifiedEmailToLogIn,
-      selfReviewAllowed: r.selfReviewAllowed,
-      anonymizeLabel: r.anonymizeLabel,
-      sessionAbsoluteDays: r.sessionAbsoluteDays,
-      sessionIdleDays: r.sessionIdleDays,
-      gracePeriodHours: r.gracePeriodHours,
-      requireDiscordLink: r.requireDiscordLink,
-      discordClientId: r.discordClientId ?? null,
-      discordOAuthConfigured: !!r.discordClientSecret,
+      requireVerifiedEmailToLogIn: s.requireVerifiedEmailToLogIn,
+      selfReviewAllowed: s.selfReviewAllowed,
+      anonymizeLabel: s.anonymizeLabel,
+      sessionAbsoluteDays: s.sessionAbsoluteDays,
+      sessionIdleDays: s.sessionIdleDays,
+      gracePeriodHours: s.gracePeriodHours,
+      requireDiscordLink: s.requireDiscordLink,
+      discordClientId: s.discordClientId,
+      discordOAuthConfigured: await this.secrets.has('discord_oauth_client_secret'),
     };
   }
 
-  async update(
-    organizationId: string,
-    actorUserId: string,
-    dto: UpdateConfigDto,
-  ): Promise<OrgSettings> {
-    const current = await this.getRaw(organizationId);
-    // The secret is handled separately (encrypt / clear); everything else spreads.
+  async update(actorUserId: string, dto: UpdateConfigDto): Promise<OrgSettings> {
+    // The secret is handled separately (encrypt / clear); everything else is a column.
     const { discordClientSecret, ...rest } = dto;
-    const next: RawOrgSettings = { ...current, ...rest };
-    if (discordClientSecret !== undefined) {
-      if (discordClientSecret === '') {
-        delete next.discordClientSecret; // admin cleared it → disable Discord sign-in
-      } else {
-        next.discordClientSecret = encryptOAuthSecret(this.env.SESSION_SECRET, discordClientSecret);
-      }
-    }
     const changedKeys = Object.keys(dto);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.organization.update({
-        where: { id: organizationId },
-        data: { settings: next },
-      });
+      await this.settings.update(
+        { ...rest, ...(rest.discordClientId === '' ? { discordClientId: null } : {}) },
+        tx,
+      );
+      if (discordClientSecret === '') {
+        // Admin cleared it → disable Discord sign-in.
+        await this.secrets.clear('discord_oauth_client_secret', tx);
+      } else if (discordClientSecret !== undefined) {
+        await this.secrets.put(
+          'discord_oauth_client_secret',
+          encryptOAuthSecret(this.env.SESSION_SECRET, discordClientSecret),
+          tx,
+        );
+      }
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
-        subjectType: 'organization',
-        subjectId: organizationId,
+        subjectType: 'system',
+        subjectId: SYSTEM_SUBJECT_ID,
         verb: 'config.updated',
         payload: { changedKeys },
       });
       // Re-project: a selfReviewAllowed flip changes the static policy set.
-      await this.access.bumpConfigVersion(organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
     });
-    return this.get(organizationId); // redacted — never echo the secret handle
+    return this.get(); // redacted — never echo the secret handle
   }
 }

@@ -105,7 +105,7 @@ export class AttachmentsService {
       select: {
         id: true,
         lifecycleState: true,
-        task: { select: { organizationId: true } },
+        task: { select: { id: true } },
       },
     });
     if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
@@ -113,8 +113,7 @@ export class AttachmentsService {
       throw new ConflictError('MESSAGE_RETIRED', 'Message is retired');
     }
 
-    const organizationId = message.task.organizationId;
-    const storageKey = `attachments/${organizationId}/${uuidv7()}`;
+    const storageKey = `attachments/${uuidv7()}`;
     const checksum = createHash('sha256').update(file.buffer).digest('hex');
 
     await this.storage.put(storageKey, file.buffer, file.mimetype);
@@ -123,7 +122,6 @@ export class AttachmentsService {
       const created = await this.prisma.$transaction(async (tx) => {
         const attachment = await tx.attachment.create({
           data: {
-            organizationId,
             messageId,
             uploaderUserId,
             storageKey,
@@ -136,7 +134,6 @@ export class AttachmentsService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId,
           actorUserId: uploaderUserId,
           subjectType: 'attachment',
           subjectId: attachment.id,
@@ -159,7 +156,6 @@ export class AttachmentsService {
       where: { id },
       select: {
         id: true,
-        organizationId: true,
         lifecycleState: true,
         retiredAt: true,
       },
@@ -185,7 +181,6 @@ export class AttachmentsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: att.organizationId,
         actorUserId,
         subjectType: 'attachment',
         subjectId: id,
@@ -200,7 +195,7 @@ export class AttachmentsService {
   /** Revive a retired attachment (`attachment:revive`) within the grace window. */
   async revive(id: string, actorUserId: string): Promise<AttachmentMetaView> {
     const att = await this.loadLifecycle(id);
-    const graceMs = await this.grace.windowMs(att.organizationId);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(att, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
@@ -214,7 +209,6 @@ export class AttachmentsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: att.organizationId,
         actorUserId,
         subjectType: 'attachment',
         subjectId: id,

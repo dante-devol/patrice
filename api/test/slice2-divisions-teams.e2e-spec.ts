@@ -77,6 +77,36 @@ describe('Slice 2.2 — Divisions + Teams', () => {
     expect(role?.name).toBe('Writing & Editing');
   });
 
+  it('PATCH with a stale version → 409 STALE_VERSION and no change', async () => {
+    const current = await prisma.division.findUniqueOrThrow({ where: { id: writingId } });
+    const res = await auth(http().patch(`/api/divisions/${writingId}`)).send({
+      restrictClaims: true,
+      version: current.version - 1,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('STALE_VERSION');
+    const after = await prisma.division.findUniqueOrThrow({ where: { id: writingId } });
+    expect(after.version).toBe(current.version);
+    expect(after.restrictClaims).toBe(current.restrictClaims);
+
+    const ok = await auth(http().patch(`/api/divisions/${writingId}`)).send({
+      restrictClaims: current.restrictClaims,
+      version: current.version,
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body.version).toBe(current.version + 1);
+  });
+
+  it('division commands write their audit rows in the same transaction', async () => {
+    const rows = await prisma.activity.findMany({
+      where: { subjectId: writingId },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(rows.map((r) => r.verb)).toEqual(
+      expect.arrayContaining(['division.created', 'division.updated']),
+    );
+  });
+
   it('PATCH with a disallowed field → 422', async () => {
     const res = await auth(http().patch(`/api/divisions/${writingId}`)).send({
       lifecycleState: 'retired',

@@ -36,7 +36,6 @@ export class AdministrabilityService {
 
   /** Count distinct active users who are effective admins. */
   async effectiveAdminCount(
-    organizationId: string,
     tx?: Prisma.TransactionClient,
   ): Promise<number> {
     const db = tx ?? this.prisma;
@@ -46,8 +45,7 @@ export class AdministrabilityService {
       JOIN user_role ur ON ur.user_id = u.id
       JOIN role r ON r.id = ur.role_id
       JOIN "grant" g ON g.role_id = r.id
-      WHERE u.organization_id = ${organizationId}::uuid
-        AND u.lifecycle_state = 'active'
+      WHERE u.lifecycle_state = 'active'
         AND r.lifecycle_state = 'active'
         AND g.lifecycle_state = 'active'
         AND g.effect = 'permit'
@@ -59,15 +57,13 @@ export class AdministrabilityService {
 
   /** Whether at least one effective admin exists. */
   async effectiveAdminExists(
-    organizationId: string,
     tx?: Prisma.TransactionClient,
   ): Promise<boolean> {
-    return (await this.effectiveAdminCount(organizationId, tx)) > 0;
+    return (await this.effectiveAdminCount(tx)) > 0;
   }
 
   /** The user ids of every active effective admin — the cohort for admin alerts. */
   async effectiveAdminIds(
-    organizationId: string,
     tx?: Prisma.TransactionClient,
   ): Promise<string[]> {
     const db = tx ?? this.prisma;
@@ -77,8 +73,7 @@ export class AdministrabilityService {
       JOIN user_role ur ON ur.user_id = u.id
       JOIN role r ON r.id = ur.role_id
       JOIN "grant" g ON g.role_id = r.id
-      WHERE u.organization_id = ${organizationId}::uuid
-        AND u.lifecycle_state = 'active'
+      WHERE u.lifecycle_state = 'active'
         AND r.lifecycle_state = 'active'
         AND g.lifecycle_state = 'active'
         AND g.effect = 'permit'
@@ -95,12 +90,11 @@ export class AdministrabilityService {
    * invariant in predict-by-applying-then-checking form (docs/slices/02).
    */
   async assertFloorWithinTx(
-    organizationId: string,
     path: string,
     subjectId: string,
     tx: Prisma.TransactionClient,
   ): Promise<void> {
-    const count = await this.effectiveAdminCount(organizationId, tx);
+    const count = await this.effectiveAdminCount(tx);
     if (count === 0) throw new LastAdminError(path, subjectId);
   }
 
@@ -110,7 +104,6 @@ export class AdministrabilityService {
    * guarded transaction is gone) and raise `409 LAST_ADMIN`.
    */
   async withAdminFloor<T>(
-    organizationId: string,
     actorUserId: string,
     subject: { type: string; id: string; path: string },
     mutate: (tx: Prisma.TransactionClient) => Promise<T>,
@@ -118,13 +111,12 @@ export class AdministrabilityService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const result = await mutate(tx);
-        await this.assertFloorWithinTx(organizationId, subject.path, subject.id, tx);
+        await this.assertFloorWithinTx(subject.path, subject.id, tx);
         return result;
       });
     } catch (e) {
       if (e instanceof LastAdminError) {
         await this.activity.logActivity({
-          organizationId,
           actorUserId,
           subjectType: subject.type,
           subjectId: subject.id,

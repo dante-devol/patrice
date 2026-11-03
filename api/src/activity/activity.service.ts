@@ -8,7 +8,6 @@ import {
 } from './activity.types';
 
 export interface LogActivityArgs<V extends ActivityVerb> {
-  organizationId: string;
   actorUserId?: string | null;
   subjectType: string;
   subjectId: string;
@@ -77,7 +76,6 @@ export class ActivityService {
     const db = args.tx ?? this.prisma;
     await db.activity.create({
       data: {
-        organizationId: args.organizationId,
         actorUserId: args.actorUserId ?? null,
         subjectType: args.subjectType,
         subjectId: args.subjectId,
@@ -96,10 +94,9 @@ export class ActivityService {
    * keeps its tombstone label, so historical rows still attribute correctly.
    */
   async list(
-    organizationId: string,
     filters: ListActivityFilters,
   ): Promise<ActivityListResult> {
-    const where: Prisma.ActivityWhereInput = { organizationId };
+    const where: Prisma.ActivityWhereInput = {};
     if (filters.verb) where.verb = filters.verb;
     else if (filters.verbPrefix) where.verb = { startsWith: filters.verbPrefix };
     if (filters.actorUserId) where.actorUserId = filters.actorUserId;

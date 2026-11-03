@@ -94,7 +94,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   let configVersionBefore: bigint;
 
   it('grants task:review @ own_division to WritingLead and bumps config_version', async () => {
-    const org = await prisma.organization.findFirstOrThrow({
+    const org = await prisma.systemSettings.findFirstOrThrow({
       select: { configVersion: true },
     });
     configVersionBefore = org.configVersion;
@@ -107,7 +107,7 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
     expect(res.status).toBe(201);
     grantId = res.body.id;
 
-    const after = await prisma.organization.findFirstOrThrow({
+    const after = await prisma.systemSettings.findFirstOrThrow({
       select: { configVersion: true },
     });
     expect(after.configVersion > configVersionBefore).toBe(true);
@@ -118,7 +118,6 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
     // role (for own_division membership).
     const user = await prisma.appUser.create({
       data: {
-        organizationId: (await prisma.organization.findFirstOrThrow()).id,
         email: 'lead@example.com',
         displayName: 'Lead',
       },

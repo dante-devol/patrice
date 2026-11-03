@@ -6,24 +6,20 @@ import {
   Param,
   Post,
   Query,
-  Req,
   Sse,
   MessageEvent,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import { Observable } from 'rxjs';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { UnauthenticatedError } from '../common/errors';
 import { NotificationsService } from './notifications.service';
 import { PUBSUB_PORT, PubSubPort } from './pubsub.port';
 import {
   listNotificationsQuerySchema,
   type ListNotificationsQuery,
 } from './notifications.dto';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 /** Keep the SSE connection from idling out behind proxies (also a liveness ping). */
 const HEARTBEAT_MS = 25_000;
@@ -45,10 +41,10 @@ export class NotificationsController {
    * immediately) and a further `sync` on every new notification for this user; a
    * periodic `ping` keeps the connection warm. No payload rides the stream.
    */
+  @Contract(ROUTES.notificationStream)
   @Sse('stream')
-  stream(@Req() req: AuthedRequest): Observable<MessageEvent> {
-    if (!req.user) throw new UnauthenticatedError();
-    const userId = req.user.id;
+  stream(@CurrentUser() user: CurrentUserRef): Observable<MessageEvent> {
+    const userId = user.id;
     return new Observable<MessageEvent>((subscriber) => {
       subscriber.next({ type: 'sync', data: '{}' });
       const unsubscribe = this.pubsub.subscribe(userId, () =>
@@ -66,30 +62,30 @@ export class NotificationsController {
   }
 
   /** The caller's durable notifications (unread-first), with the badge `unreadCount`. */
+  @Contract(ROUTES.listNotifications)
   @Get()
   list(
     @Query(new ZodValidationPipe(listNotificationsQuerySchema))
     query: ListNotificationsQuery,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.notifications.listForUser(req.user.id, {
+    return this.notifications.listForUser(user.id, {
       after: query.after,
       limit: query.limit,
     });
   }
 
+  @Contract(ROUTES.markNotificationRead)
   @Post(':id/read')
   @HttpCode(200)
-  markRead(@Param('id') id: string, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.notifications.markRead(req.user.id, id);
+  markRead(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.notifications.markRead(user.id, id);
   }
 
+  @Contract(ROUTES.markAllNotificationsRead)
   @Post('read-all')
   @HttpCode(200)
-  markAllRead(@Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.notifications.markAllRead(req.user.id);
+  markAllRead(@CurrentUser() user: CurrentUserRef) {
+    return this.notifications.markAllRead(user.id);
   }
 }

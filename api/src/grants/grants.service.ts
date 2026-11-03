@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { GrantEffect, LifecycleState, Prisma, ScopeKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { CedarEngine } from '../access/cedar/engine';
@@ -59,6 +60,7 @@ export class GrantsService {
     private readonly cedar: CedarEngine,
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** The closed action vocabulary, for the matrix UI. */
@@ -66,9 +68,9 @@ export class GrantsService {
     return ALL_ACTION_STRINGS;
   }
 
-  async list(organizationId: string, includeRetired = false): Promise<GrantView[]> {
+  async list(includeRetired = false): Promise<GrantView[]> {
     return this.prisma.grant.findMany({
-      where: { organizationId, ...activeFilter(includeRetired) },
+      where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
       select: this.viewSelect(),
     });
@@ -150,20 +152,13 @@ export class GrantsService {
 
   /** Project static + all active grants, substituting the candidate, then validate. */
   private async validateActivation(
-    organizationId: string,
     candidate: ProjectableGrant,
     excludeGrantId?: string,
   ): Promise<void> {
-    const org = await this.prisma.organization.findUniqueOrThrow({
-      where: { id: organizationId },
-      select: { settings: true },
-    });
-    const selfReviewAllowed =
-      (org.settings as Record<string, unknown>)?.selfReviewAllowed === true;
+    const { selfReviewAllowed } = await this.settings.get();
 
     const active = await this.prisma.grant.findMany({
       where: {
-        organizationId,
         lifecycleState: 'active',
         role: { lifecycleState: 'active' },
         ...(excludeGrantId ? { id: { not: excludeGrantId } } : {}),
@@ -207,9 +202,9 @@ export class GrantsService {
   }
 
   /** Confirm the granted role exists and is active (422 otherwise). */
-  private async assertRole(organizationId: string, roleId: string): Promise<void> {
+  private async assertRole(roleId: string): Promise<void> {
     const role = await this.prisma.role.findFirst({
-      where: { id: roleId, organizationId },
+      where: { id: roleId },
       select: { lifecycleState: true },
     });
     if (!role) {
@@ -220,12 +215,11 @@ export class GrantsService {
   }
 
   async create(
-    organizationId: string,
     actorUserId: string,
     dto: CreateGrantDto,
   ): Promise<GrantView> {
     this.assertShape(dto.action, dto);
-    await this.assertRole(organizationId, dto.roleId);
+    await this.assertRole(dto.roleId);
 
     const candidate: ProjectableGrant = {
       id: randomUUID(),
@@ -237,12 +231,11 @@ export class GrantsService {
       scopeTeamId: dto.scopeTeamId ?? null,
       scopeRoleId: dto.scopeRoleId ?? null,
     };
-    await this.validateActivation(organizationId, candidate);
+    await this.validateActivation(candidate);
 
     const grant = await this.prisma.$transaction(async (tx) => {
       const g = await tx.grant.create({
         data: {
-          organizationId,
           roleId: dto.roleId,
           action: dto.action,
           effect: dto.effect as GrantEffect,
@@ -255,14 +248,13 @@ export class GrantsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'grant',
         subjectId: g.id,
         verb: 'grant.created',
         payload: { grantId: g.id, roleId: g.roleId },
       });
-      await this.access.bumpConfigVersion(organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
       return g;
     });
     return grant;
@@ -271,7 +263,7 @@ export class GrantsService {
   private async load(id: string) {
     const grant = await this.prisma.grant.findUnique({
       where: { id },
-      select: { ...this.viewSelect(), organizationId: true },
+      select: { ...this.viewSelect() },
     });
     if (!grant) throw new NotFoundError('GRANT_NOT_FOUND', 'Grant not found');
     return grant;
@@ -317,11 +309,10 @@ export class GrantsService {
       scopeTeamId: merged.scopeTeamId ?? null,
       scopeRoleId: merged.scopeRoleId ?? null,
     };
-    await this.validateActivation(existing.organizationId, candidate, existing.id);
+    await this.validateActivation(candidate, existing.id);
 
     // Editing a governance grant can revoke admin authority — guard the floor.
     const grant = await this.admin.withAdminFloor(
-      existing.organizationId,
       actorUserId,
       { type: 'grant', id: existing.id, path: 'grant.update' },
       async (tx) => {
@@ -340,14 +331,13 @@ export class GrantsService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId: existing.organizationId,
           actorUserId,
           subjectType: 'grant',
           subjectId: g.id,
           verb: 'grant.updated',
           payload: { grantId: g.id, roleId: g.roleId },
         });
-        await this.access.bumpConfigVersion(existing.organizationId, tx);
+        await this.access.bumpConfigVersion(tx);
         return g;
       },
     );
@@ -360,7 +350,6 @@ export class GrantsService {
       throw new ConflictError('ALREADY_RETIRED', 'Grant is already retired');
     }
     const grant = await this.admin.withAdminFloor(
-      existing.organizationId,
       actorUserId,
       { type: 'grant', id: existing.id, path: 'grant.retire' },
       async (tx) => {
@@ -375,14 +364,13 @@ export class GrantsService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId: existing.organizationId,
           actorUserId,
           subjectType: 'grant',
           subjectId: g.id,
           verb: 'grant.retired',
           payload: { grantId: g.id, roleId: g.roleId },
         });
-        await this.access.bumpConfigVersion(existing.organizationId, tx);
+        await this.access.bumpConfigVersion(tx);
         return g;
       },
     );
@@ -391,7 +379,7 @@ export class GrantsService {
 
   async revive(id: string, actorUserId: string): Promise<GrantView> {
     const existing = await this.load(id);
-    const graceMs = await this.grace.windowMs(existing.organizationId);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(existing, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
@@ -410,14 +398,13 @@ export class GrantsService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: existing.organizationId,
         actorUserId,
         subjectType: 'grant',
         subjectId: g.id,
         verb: 'grant.revived',
         payload: { grantId: g.id, roleId: g.roleId },
       });
-      await this.access.bumpConfigVersion(existing.organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
       return g;
     });
     return grant;

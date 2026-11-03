@@ -93,11 +93,11 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
     });
 
     it('stores the client secret encrypted at rest (oauthsec: handle)', async () => {
-      const org = await prisma.organization.findFirstOrThrow({ select: { settings: true } });
-      const settings = org.settings as { discordClientSecret?: string };
-      expect(settings.discordClientSecret).toBeDefined();
-      expect(settings.discordClientSecret!.startsWith('oauthsec:')).toBe(true);
-      expect(settings.discordClientSecret).not.toContain('test-client-secret');
+      const secret = await prisma.secret.findUniqueOrThrow({
+        where: { purpose: 'discord_oauth_client_secret' },
+      });
+      expect(secret.ciphertext.startsWith('oauthsec:')).toBe(true);
+      expect(secret.ciphertext).not.toContain('test-client-secret');
     });
   });
 

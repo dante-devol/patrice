@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
-import { UnauthenticatedError } from '../common/errors';
 import {
   Authorize,
   attachmentCreateResource,
@@ -20,10 +19,9 @@ import {
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { AttachmentsService } from './attachments.service';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 // A coarse multipart safety cap; the precise, configurable limit (ATTACHMENT_MAX_BYTES)
 // is enforced in the service so it can return the friendly 422.
@@ -39,6 +37,7 @@ const MULTIPART_HARD_LIMIT = 256 * 1024 * 1024;
 export class AttachmentsController {
   constructor(private readonly attachments: AttachmentsService) {}
 
+  @Contract(ROUTES.uploadAttachment)
   @Post('messages/:id/attachments')
   @HttpCode(201)
   @Authorize(ACTIONS.attachmentCreate.action, attachmentCreateResource)
@@ -48,35 +47,34 @@ export class AttachmentsController {
   async upload(
     @Param('id') messageId: string,
     @UploadedFile() file: UploadFileLike | undefined,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.attachments.upload(messageId, req.user.id, file);
+    return this.attachments.upload(messageId, user.id, file);
   }
 
+  @Contract(ROUTES.retireAttachment)
   @Post('attachments/:id/retire')
   @HttpCode(200)
   @Authorize(ACTIONS.attachmentRetire.action, attachmentResource)
-  async retire(@Param('id') id: string, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.attachments.retire(id, req.user.id);
+  async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.attachments.retire(id, user.id);
   }
 
+  @Contract(ROUTES.reviveAttachment)
   @Post('attachments/:id/revive')
   @HttpCode(200)
   @Authorize(ACTIONS.attachmentRevive.action, attachmentReviveResource)
-  async revive(@Param('id') id: string, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.attachments.revive(id, req.user.id);
+  async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.attachments.revive(id, user.id);
   }
 
+  @Contract(ROUTES.downloadAttachment)
   @Get('attachments/:id')
   async download(
     @Param('id') id: string,
-    @Req() req: AuthedRequest,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
     const target = await this.attachments.resolveDownload(id);
 
     const url = await this.attachments.signedUrl(target);

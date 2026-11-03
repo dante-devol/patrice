@@ -10,7 +10,7 @@ import {
 
 /** A minimal Question of `type` with the given constraints. */
 function q(type: QuestionType, constraints: Question['constraints'] = {}): Question {
-  return { id: type, type, prompt: `${type} prompt`, required: false, constraints };
+  return { id: type, ordinal: 0, type, prompt: `${type} prompt`, required: false, constraints };
 }
 
 describe('RequestTemplateFormService', () => {

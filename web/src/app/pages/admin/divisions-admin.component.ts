@@ -28,13 +28,8 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
             <tr [class.row--retired]="d.lifecycleState === 'retired'" [class.row--deactivated]="d.lifecycleState === 'deactivated'">
               <td><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" /></td>
               <td>
-                <div class="row" style="gap:4px;align-items:center;flex-wrap:nowrap">
-                  <input type="color" [value]="d.color ?? computeColor(d)"
-                         (change)="saveColor(d, $event)" style="width:32px;height:26px;padding:2px;cursor:pointer" />
-                  @if (d.color) {
-                    <button class="secondary" style="padding:2px 6px;font-size:11px" (click)="clearColor(d)" title="Reset to auto">×</button>
-                  }
-                </div>
+                <span [style.background]="computeColor(d)" title="Computed from the name"
+                      style="display:inline-block;width:26px;height:20px;border-radius:3px"></span>
               </td>
               <td>
                 <input type="number" min="0" [(ngModel)]="d.defaultOpenings"
@@ -77,14 +72,6 @@ export class DivisionsAdminComponent {
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
   computeColor(d: Division): string { return computeDivColor(d.name); }
 
-  async saveColor(d: Division, ev: Event): Promise<void> {
-    d.color = (ev.target as HTMLInputElement).value;
-    await this.save(d, { color: d.color });
-  }
-  async clearColor(d: Division): Promise<void> {
-    d.color = null;
-    await this.save(d, { color: null });
-  }
 
   toggleRequestTemplate(id: string): void {
     this.openRequestTemplate.update((cur) => (cur === id ? null : id));

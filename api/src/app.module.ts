@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ConfigModule } from './config/config.module';
 import { CommonModule } from './common/common.module';
+import { SettingsModule } from './settings/settings.module';
+import { InfrastructureModule } from './infrastructure/infrastructure.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ActivityModule } from './activity/activity.module';
 import { AccessModule } from './access/access.module';
@@ -11,6 +13,7 @@ import { QueueModule } from './queue/queue.module';
 import { EmailModule } from './email/email.module';
 import { AuthModule } from './auth/auth.module';
 import { SessionGuard } from './auth/session.guard';
+import { AuthenticatedGuard } from './auth/authenticated.guard';
 import { DiscordAuthModule } from './discord-auth/discord-auth.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { RolesModule } from './roles/roles.module';
@@ -29,6 +32,7 @@ import { GcModule } from './gc/gc.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { HealthController } from './health/health.controller';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { ContractCheckInterceptor } from './contract/contract-check.interceptor';
 
 @Module({
   imports: [
@@ -42,6 +46,8 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     }),
     ConfigModule,
     CommonModule,
+    SettingsModule,
+    InfrastructureModule,
     PrismaModule,
     ActivityModule,
     AccessModule,
@@ -68,11 +74,17 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
   controllers: [HealthController],
   providers: [
     // Order matters: throttle before any work, then SessionGuard resolves identity
-    // (+ CSRF), then the AuthorizeGuard enforces the declared Cedar action.
+    // (+ CSRF), then AuthenticatedGuard 401s non-public routes without a session, then
+    // the AuthorizeGuard enforces the declared Cedar action.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
+    { provide: APP_GUARD, useClass: AuthenticatedGuard },
     { provide: APP_GUARD, useClass: AuthorizeGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    // Tests validate every response against the contract (contract/routes.ts).
+    ...(process.env.NODE_ENV === 'test'
+      ? [{ provide: APP_INTERCEPTOR, useClass: ContractCheckInterceptor }]
+      : []),
   ],
 })
 export class AppModule {}

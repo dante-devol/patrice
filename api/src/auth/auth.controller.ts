@@ -12,7 +12,6 @@ import type { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { ENV, Env } from '../config/env';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { UnauthenticatedError } from '../common/errors';
 import { AuthService } from './auth.service';
 import { SessionService, SESSION_COOKIE } from './session.service';
 import { VerificationService } from './verification.service';
@@ -29,10 +28,9 @@ import {
   type PasswordResetRequestDto,
   type ResendVerificationDto,
 } from './auth.dto';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { Public, CurrentUser, type CurrentUserRef } from './current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 @Controller()
 export class AuthController {
@@ -46,6 +44,8 @@ export class AuthController {
   // Brute-force ceiling on password guessing (per-IP). argon2 raises per-attempt cost;
   // this caps attempt *volume*.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.login)
   @Post('auth/login')
   @HttpCode(200)
   async login(
@@ -64,10 +64,12 @@ export class AuthController {
     return this.auth.getMe(userId);
   }
 
+  @Public()
+  @Contract(ROUTES.logout)
   @Post('auth/logout')
   @HttpCode(204)
   async logout(
-    @Req() req: AuthedRequest,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     const token = req.cookies?.[SESSION_COOKIE];
@@ -75,14 +77,16 @@ export class AuthController {
     clearAuthCookies(res, this.env.COOKIE_SECURE);
   }
 
+  @Contract(ROUTES.me)
   @Get('me')
-  async me(@Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.auth.getMe(req.user.id);
+  async me(@CurrentUser() user: CurrentUserRef) {
+    return this.auth.getMe(user.id);
   }
 
   // Cap email-dispatch + token-guessing volume on the unauthenticated flows.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.resendVerification)
   @Post('auth/verify-email/resend')
   @HttpCode(200)
   async resendVerification(
@@ -93,6 +97,8 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.confirmVerification)
   @Post('auth/verify-email/confirm')
   @HttpCode(200)
   async confirmVerification(
@@ -103,6 +109,8 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.requestPasswordReset)
   @Post('auth/password-reset')
   @HttpCode(200)
   async requestPasswordReset(
@@ -113,6 +121,8 @@ export class AuthController {
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.confirmPasswordReset)
   @Post('auth/password-reset/confirm')
   @HttpCode(200)
   async confirmPasswordReset(

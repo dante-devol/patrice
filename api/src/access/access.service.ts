@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { ALL_ACTION_STRINGS, CedarEntityType } from './actions';
 import { CedarEngine, CedarEntity, CedarUid } from './cedar/engine';
 import {
@@ -13,6 +14,12 @@ export interface ResourceRef {
   id: string;
   attrs?: Record<string, unknown>;
 }
+
+/**
+ * The Cedar resource for org-wide (governance and create) actions. Single-org, so
+ * this is a fixed entity rather than a database row.
+ */
+export const ORGANIZATION_RESOURCE: ResourceRef = { type: 'Organization', id: 'patrice' };
 
 export interface DecideArgs {
   userId: string;
@@ -28,7 +35,7 @@ interface ProjectedSet {
 
 /**
  * The single access-evaluation engine (docs/ARCHITECTURE.md §2.3). Projects grant
- * rows + static policies into a Cedar policy set cached by `organization.config_version`,
+ * rows + static policies into a Cedar policy set cached by `system_settings.config_version`,
  * resolves the principal per request, and returns the Cedar decision.
  *
  * `config_version` is read **fresh from the DB per request** — it is the cache key,
@@ -43,41 +50,25 @@ export class AccessService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cedar: CedarEngine,
+    private readonly settings: SettingsService,
   ) {}
 
-  /** Read the singleton org's id + current config_version (one indexed PK read). */
-  private async readOrg(): Promise<{ id: string; configVersion: bigint }> {
-    const org = await this.prisma.organization.findFirstOrThrow({
-      select: { id: true, configVersion: true },
-    });
-    return { id: org.id, configVersion: org.configVersion };
-  }
-
   /** Build (or reuse cached) projected policy text for the given config version. */
-  private async getPolicies(
-    orgId: string,
-    configVersion: bigint,
-  ): Promise<string> {
+  private async getPolicies(configVersion: bigint): Promise<string> {
     if (this.cache && this.cache.configVersion === configVersion) {
       return this.cache.policiesText;
     }
-    const policiesText = await this.projectPolicies(orgId);
+    const policiesText = await this.projectPolicies();
     this.cache = { configVersion, policiesText };
     return policiesText;
   }
 
   /** Project all active grants + static policies into one Cedar policy-set text. */
-  async projectPolicies(orgId: string): Promise<string> {
-    const org = await this.prisma.organization.findUniqueOrThrow({
-      where: { id: orgId },
-      select: { settings: true },
-    });
-    const settings = (org.settings ?? {}) as Record<string, unknown>;
-    const selfReviewAllowed = settings.selfReviewAllowed === true;
+  async projectPolicies(): Promise<string> {
+    const { selfReviewAllowed } = await this.settings.get();
 
     const grants = await this.prisma.grant.findMany({
       where: {
-        organizationId: orgId,
         lifecycleState: 'active',
         role: { lifecycleState: 'active' },
       },
@@ -118,19 +109,14 @@ export class AccessService {
   }
 
   /**
-   * Bump `organization.config_version` (org-wide cache generation) and drop the
+   * Bump `system_settings.config_version` (the cache generation) and drop the
    * local projection cache. Call inside the same transaction as any role/grant/
    * membership/settings change so a reader on the next request re-projects.
    */
   async bumpConfigVersion(
-    organizationId: string,
     tx?: PrismaService | import('@prisma/client').Prisma.TransactionClient,
   ): Promise<void> {
-    const db = tx ?? this.prisma;
-    await db.organization.update({
-      where: { id: organizationId },
-      data: { configVersion: { increment: 1 } },
-    });
+    await this.settings.bumpConfigVersion(tx ?? this.prisma);
     this.invalidate();
   }
 
@@ -196,8 +182,7 @@ export class AccessService {
 
   /** Evaluate one authorization request. Returns true iff Cedar decides `allow`. */
   async decide(args: DecideArgs): Promise<boolean> {
-    const org = await this.readOrg();
-    const policiesText = await this.getPolicies(org.id, org.configVersion);
+    const policiesText = await this.getPolicies(await this.settings.configVersion());
     const { principal, entities } = await this.buildPrincipalEntities(args.userId);
 
     const resourceUid: CedarUid = {

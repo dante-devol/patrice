@@ -11,7 +11,6 @@ import { CreateRoleDto, UpdateRoleDto } from './roles.dto';
 
 export interface RoleView {
   id: string;
-  organizationId: string;
   name: string;
   kind: RoleKind;
   divisionId: string | null;
@@ -46,27 +45,24 @@ export class RolesService {
     return r;
   }
 
-  async list(organizationId: string, includeRetired = false): Promise<RoleView[]> {
+  async list(includeRetired = false): Promise<RoleView[]> {
     return this.prisma.role.findMany({
-      where: { organizationId, ...activeFilter(includeRetired) },
+      where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
     });
   }
 
   async create(
-    organizationId: string,
     actorUserId: string,
     dto: CreateRoleDto,
   ): Promise<RoleView> {
     const role = await this.prisma.role.create({
       data: {
-        organizationId,
         name: dto.name,
         kind: RoleKind.standalone,
       },
     });
     await this.activity.logActivity({
-      organizationId,
       actorUserId,
       subjectType: 'role',
       subjectId: role.id,
@@ -102,7 +98,6 @@ export class RolesService {
       data: { name: dto.name, version: { increment: 1 } },
     });
     await this.activity.logActivity({
-      organizationId: role.organizationId,
       actorUserId,
       subjectType: 'role',
       subjectId: role.id,
@@ -120,7 +115,6 @@ export class RolesService {
     // Retiring a role drops its grants from the projection — if it carried the last
     // global governance grant, the admin floor would hit zero. Guarded.
     const updated = await this.admin.withAdminFloor(
-      role.organizationId,
       actorUserId,
       { type: 'role', id: role.id, path: 'role.retire' },
       async (tx) => {
@@ -134,14 +128,13 @@ export class RolesService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId: role.organizationId,
           actorUserId,
           subjectType: 'role',
           subjectId: role.id,
           verb: 'role.retired',
           payload: { roleId: role.id },
         });
-        await this.access.bumpConfigVersion(role.organizationId, tx);
+        await this.access.bumpConfigVersion(tx);
         return r;
       },
     );
@@ -150,7 +143,7 @@ export class RolesService {
 
   async revive(id: string, actorUserId: string): Promise<RoleView> {
     const role = await this.loadStandalone(id);
-    const graceMs = await this.grace.windowMs(role.organizationId);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(role, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
@@ -168,14 +161,13 @@ export class RolesService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: role.organizationId,
         actorUserId,
         subjectType: 'role',
         subjectId: role.id,
         verb: 'role.revived',
         payload: { roleId: role.id },
       });
-      await this.access.bumpConfigVersion(role.organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
       return r;
     });
     return this.toView(updated);

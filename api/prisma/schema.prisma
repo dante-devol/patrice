@@ -3,7 +3,7 @@
 // Conventions (docs/slices/00-overview.md):
 //   - UUIDv7 PKs (PostgreSQL 18 `uuidv7()` default; see migration).
 //   - timestamptz everywhere, UTC.
-//   - Tenant tables carry organization_id (singleton org in v1).
+//   - Single-org: no tenant column. Org-wide settings are the one `system_settings` row.
 //   - lifecycle_state + retired_at on core entities; FKs to core data ON DELETE RESTRICT.
 //   - Some structures (citext columns, the partial bootstrap unique index, the
 //     singleton CHECK) are hand-applied in the SQL migration — Prisma can't express them.
@@ -151,36 +151,40 @@ enum SyncState {
   running
 }
 
-model Organization {
-  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name          String
-  settings      Json     @default("{}")
-  configVersion BigInt   @default(0) @map("config_version")
-  // Singleton guard column: always 0, with a UNIQUE so only one row can exist.
-  singleton     Int      @default(0)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+/// Org-wide settings: exactly one row (id = 1, CHECK-enforced in the migration).
+/// `config_version` is the Cedar projection cache key; bump it whenever policy text
+/// changes. Secrets never live here (see `Secret`).
+model SystemSettings {
+  id                          Int      @id @default(1)
+  orgName                     String   @default("Patrice") @map("org_name")
+  configVersion               BigInt   @default(0) @map("config_version")
+  requireVerifiedEmailToLogIn Boolean  @default(false) @map("require_verified_email_to_log_in")
+  selfReviewAllowed           Boolean  @default(false) @map("self_review_allowed")
+  anonymizeLabel              Boolean  @default(false) @map("anonymize_label")
+  sessionAbsoluteDays         Int      @default(30) @map("session_absolute_days")
+  sessionIdleDays             Int      @default(7) @map("session_idle_days")
+  gracePeriodHours            Int      @default(24) @map("grace_period_hours")
+  requireDiscordLink          Boolean  @default(false) @map("require_discord_link")
+  discordClientId             String?  @map("discord_client_id")
+  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  users                  AppUser[]
-  invitations            Invitation[]
-  roles                  Role[]
-  grants                 Grant[]
-  activities             Activity[]
-  divisions              Division[]
-  teams                  Team[]
-  requestTemplates       RequestTemplate[]
-  tasks                  Task[]
-  attachments            Attachment[]
-  notifications          Notification[]
-  integrationConnections IntegrationConnection[]
+  @@map("system_settings")
+}
 
-  @@unique([singleton])
-  @@map("organization")
+/// An encrypted secret, one row per purpose (e.g. `discord_oauth_client_secret`).
+/// `ciphertext` is an opaque handle from the secret cipher; it is never returned by
+/// any read endpoint.
+model Secret {
+  purpose    String   @id
+  ciphertext String
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("secret")
 }
 
 model Division {
   id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId  String         @map("organization_id") @db.Uuid
   name            String
   defaultOpenings Int            @default(1) @map("default_openings")
   openingsLocked  Boolean        @default(false) @map("openings_locked")
@@ -191,20 +195,17 @@ model Division {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   // The atomically-created inherent role (kind='division'); UNIQUE role.division_id.
-  inherentRole Role?
+  inherentRole    Role?
   // The division's default request template (0..1); UNIQUE request_template.owner_division_id.
   requestTemplate RequestTemplate?
   tasks           Task[]
 
-  @@index([organizationId])
   @@map("division")
 }
 
 model Team {
   id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId String         @map("organization_id") @db.Uuid
   name           String
   restrictClaims Boolean        @default(false) @map("restrict_claims")
   lifecycleState LifecycleState @default(active) @map("lifecycle_state")
@@ -213,43 +214,38 @@ model Team {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   inherentRole Role?
   tasks        Task[]
 
-  @@index([organizationId])
   @@map("team")
 }
 
 model AppUser {
-  id                      String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId          String         @map("organization_id") @db.Uuid
-  email                   String?        @db.Text // ALTERed to citext in migration
-  displayName             String         @map("display_name")
-  createdViaInvitationId  String?        @map("created_via_invitation_id") @db.Uuid
-  lifecycleState          LifecycleState @default(active) @map("lifecycle_state")
-  deactivatedAt           DateTime?      @map("deactivated_at") @db.Timestamptz(6)
-  retiredAt               DateTime?      @map("retired_at") @db.Timestamptz(6)
-  version                 Int            @default(0)
-  createdAt               DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt               DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                     String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  email                  String?        @db.Text // ALTERed to citext in migration
+  displayName            String         @map("display_name")
+  createdViaInvitationId String?        @map("created_via_invitation_id") @db.Uuid
+  lifecycleState         LifecycleState @default(active) @map("lifecycle_state")
+  deactivatedAt          DateTime?      @map("deactivated_at") @db.Timestamptz(6)
+  retiredAt              DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version                Int            @default(0)
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  identities          UserIdentity[]
-  sessions            Session[]
-  userRoles           UserRole[]
-  authTokens          AuthToken[]
-  invitationUses      InvitationUse[]
-  requestedTasks      Task[]
-  taskClaimants       TaskClaimant[]
-  submissions         Submission[]
-  messages            Message[]
-  attachments         Attachment[]
-  notifications       Notification[]
-  externalIdentities  ExternalIdentity[]
+  identities         UserIdentity[]
+  sessions           Session[]
+  userRoles          UserRole[]
+  authTokens         AuthToken[]
+  invitationUses     InvitationUse[]
+  requestedTasks     Task[]
+  taskClaimants      TaskClaimant[]
+  submissions        Submission[]
+  messages           Message[]
+  attachments        Attachment[]
+  notifications      Notification[]
+  externalIdentities ExternalIdentity[]
 
-  @@unique([organizationId, email])
-  @@index([organizationId])
+  @@unique([email])
   @@map("app_user")
 }
 
@@ -271,17 +267,17 @@ model UserIdentity {
 }
 
 model Session {
-  id               String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId           String     @map("user_id") @db.Uuid
-  tokenHash        String     @unique @map("token_hash")
-  authMethod       AuthMethod @map("auth_method")
-  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  lastSeenAt       DateTime   @default(now()) @map("last_seen_at") @db.Timestamptz(6)
-  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(6)
-  idleExpiresAt    DateTime   @map("idle_expires_at") @db.Timestamptz(6)
-  revokedAt        DateTime?  @map("revoked_at") @db.Timestamptz(6)
-  ip               String?    @db.Inet
-  userAgent        String?    @map("user_agent")
+  id                String     @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId            String     @map("user_id") @db.Uuid
+  tokenHash         String     @unique @map("token_hash")
+  authMethod        AuthMethod @map("auth_method")
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt        DateTime   @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  absoluteExpiresAt DateTime   @map("absolute_expires_at") @db.Timestamptz(6)
+  idleExpiresAt     DateTime   @map("idle_expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime?  @map("revoked_at") @db.Timestamptz(6)
+  ip                String?    @db.Inet
+  userAgent         String?    @map("user_agent")
 
   user AppUser @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -291,7 +287,6 @@ model Session {
 
 model Invitation {
   id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId  String    @map("organization_id") @db.Uuid
   tokenHash       String    @unique @map("token_hash")
   email           String?   @db.Text // ALTERed to citext in migration
   intendedRoleIds String[]  @map("intended_role_ids") @db.Uuid
@@ -303,10 +298,8 @@ model Invitation {
   expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
   revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  uses         InvitationUse[]
+  uses InvitationUse[]
 
-  @@index([organizationId])
   @@map("invitation")
 }
 
@@ -340,7 +333,6 @@ model AuthToken {
 
 model Role {
   id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId String         @map("organization_id") @db.Uuid
   name           String
   kind           RoleKind
   divisionId     String?        @unique @map("division_id") @db.Uuid
@@ -351,15 +343,13 @@ model Role {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  userRoles       UserRole[]
-  grants          Grant[]
-  groupMappings   ExternalGroupMapping[]
+  userRoles     UserRole[]
+  grants        Grant[]
+  groupMappings ExternalGroupMapping[]
   // Inherent-role back-relations: an inherent role points at its division/team.
-  division        Division?              @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  team            Team?                  @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  division      Division?              @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  team          Team?                  @relation(fields: [teamId], references: [id], onDelete: Restrict)
 
-  @@index([organizationId])
   @@map("role")
 }
 
@@ -382,32 +372,28 @@ model UserRole {
 }
 
 model Grant {
-  id               String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId   String      @map("organization_id") @db.Uuid
-  roleId           String      @map("role_id") @db.Uuid
-  action           String
-  effect           GrantEffect @default(permit)
-  scopeKind        ScopeKind   @map("scope_kind")
-  scopeDivisionId  String?     @map("scope_division_id") @db.Uuid
-  scopeTeamId      String?     @map("scope_team_id") @db.Uuid
-  scopeRoleId      String?     @map("scope_role_id") @db.Uuid
-  lifecycleState   LifecycleState @default(active) @map("lifecycle_state")
-  retiredAt        DateTime?   @map("retired_at") @db.Timestamptz(6)
-  version          Int         @default(0)
-  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  roleId          String         @map("role_id") @db.Uuid
+  action          String
+  effect          GrantEffect    @default(permit)
+  scopeKind       ScopeKind      @map("scope_kind")
+  scopeDivisionId String?        @map("scope_division_id") @db.Uuid
+  scopeTeamId     String?        @map("scope_team_id") @db.Uuid
+  scopeRoleId     String?        @map("scope_role_id") @db.Uuid
+  lifecycleState  LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt       DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version         Int            @default(0)
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
-  @@index([organizationId])
   @@index([roleId])
   @@map("grant")
 }
 
 model Activity {
   id                 String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId     String         @map("organization_id") @db.Uuid
   actorUserId        String?        @map("actor_user_id") @db.Uuid
   subjectType        String         @map("subject_type")
   subjectId          String         @map("subject_id") @db.Uuid
@@ -416,8 +402,6 @@ model Activity {
   source             ActivitySource
   sourceConnectionId String?        @map("source_connection_id") @db.Uuid
   createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
   @@index([subjectType, subjectId, createdAt])
   @@index([createdAt])
@@ -431,18 +415,15 @@ model Activity {
 /// a bare column for now; its FK to `task` lands in Slice 4 with the task table.
 model RequestTemplate {
   id              String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId  String   @map("organization_id") @db.Uuid
   ownerDivisionId String?  @unique @map("owner_division_id") @db.Uuid
   ownerTaskId     String?  @unique @map("owner_task_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  ownerDivision Division?    @relation(fields: [ownerDivisionId], references: [id], onDelete: Restrict)
-  ownerTask     Task?        @relation(fields: [ownerTaskId], references: [id], onDelete: Restrict)
+  ownerDivision Division?  @relation(fields: [ownerDivisionId], references: [id], onDelete: Restrict)
+  ownerTask     Task?      @relation(fields: [ownerTaskId], references: [id], onDelete: Restrict)
   questions     Question[]
 
-  @@index([organizationId])
   @@map("request_template")
 }
 
@@ -477,7 +458,6 @@ model Question {
 /// through PATCH (name/description only); authority/structure changes via named actions.
 model Task {
   id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId  String         @map("organization_id") @db.Uuid
   name            String
   description     String         @default("") @db.Text
   divisionId      String         @map("division_id") @db.Uuid
@@ -492,10 +472,9 @@ model Task {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  division     Division       @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  team         Team?          @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  requester    AppUser        @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
+  division        Division         @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  team            Team?            @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  requester       AppUser          @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
   // The task's own request template copy (0..1); UNIQUE request_template.owner_task_id.
   requestTemplate RequestTemplate?
   claimants       TaskClaimant[]
@@ -506,7 +485,6 @@ model Task {
   @@index([teamId])
   @@index([statusCache])
   @@index([requesterUserId])
-  @@index([organizationId])
   @@map("task")
 }
 
@@ -550,10 +528,10 @@ model Message {
   version         Int            @default(0)
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  task     Task      @relation(fields: [taskId], references: [id], onDelete: Restrict)
-  sender   AppUser?  @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
-  parent   Message?  @relation("MessageThread", fields: [parentMessageId], references: [id], onDelete: Restrict)
-  replies  Message[] @relation("MessageThread")
+  task        Task         @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  sender      AppUser?     @relation(fields: [senderUserId], references: [id], onDelete: Restrict)
+  parent      Message?     @relation("MessageThread", fields: [parentMessageId], references: [id], onDelete: Restrict)
+  replies     Message[]    @relation("MessageThread")
   // A system message hosting a submission's thread (Slice 5); NULL on comments and
   // on task-level audit messages (e.g. the retire-submission audit, which survives GC).
   submission  Submission?  @relation(fields: [submissionId], references: [id], onDelete: Restrict)
@@ -623,7 +601,6 @@ model Answer {
 /// is captured at upload. Download is ungated in v1.
 model Attachment {
   id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId String         @map("organization_id") @db.Uuid
   messageId      String?        @map("message_id") @db.Uuid
   answerId       String?        @map("answer_id") @db.Uuid
   uploaderUserId String         @map("uploader_user_id") @db.Uuid
@@ -637,14 +614,12 @@ model Attachment {
   retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  message      Message?     @relation(fields: [messageId], references: [id], onDelete: Restrict)
-  answer       Answer?      @relation(fields: [answerId], references: [id], onDelete: Restrict)
-  uploader     AppUser      @relation(fields: [uploaderUserId], references: [id], onDelete: Restrict)
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  answer   Answer?  @relation(fields: [answerId], references: [id], onDelete: Restrict)
+  uploader AppUser  @relation(fields: [uploaderUserId], references: [id], onDelete: Restrict)
 
   @@index([messageId])
   @@index([answerId])
-  @@index([organizationId])
   @@map("attachment")
 }
 
@@ -659,7 +634,6 @@ model Attachment {
 /// durable row is always pulled from here, never from the stream.
 model Notification {
   id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId  String    @map("organization_id") @db.Uuid
   recipientUserId String    @map("recipient_user_id") @db.Uuid
   type            String
   subjectType     String    @map("subject_type")
@@ -669,12 +643,10 @@ model Notification {
   readAt          DateTime? @map("read_at") @db.Timestamptz(6)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  recipient    AppUser      @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+  recipient AppUser @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
 
   @@unique([recipientUserId, type, subjectId, eventSeq])
   @@index([recipientUserId, readAt, createdAt])
-  @@index([organizationId])
   @@map("notification")
 }
 
@@ -682,38 +654,35 @@ model Notification {
 /// for provider credentials — never custodied here, auth is delegated to the
 /// provider. `status` tracks live health; `lifecycle_state` tracks retirement.
 model IntegrationConnection {
-  id                  String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  organizationId      String              @map("organization_id") @db.Uuid
-  provider            IntegrationProvider
-  externalWorkspaceId String              @map("external_workspace_id")
-  displayName         String              @map("display_name")
-  config              Json                @default("{}")
-  credentialsRef      String?             @map("credentials_ref")
-  status              IntegrationStatus   @default(active)
-  lifecycleState      LifecycleState      @default(active) @map("lifecycle_state")
-  retiredAt           DateTime?           @map("retired_at") @db.Timestamptz(6)
+  id                     String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  provider               IntegrationProvider
+  externalWorkspaceId    String              @map("external_workspace_id")
+  displayName            String              @map("display_name")
+  config                 Json                @default("{}")
+  credentialsRef         String?             @map("credentials_ref")
+  status                 IntegrationStatus   @default(active)
+  lifecycleState         LifecycleState      @default(active) @map("lifecycle_state")
+  retiredAt              DateTime?           @map("retired_at") @db.Timestamptz(6)
   // Observability (admin visibility). Gateway fields are written by the worker's
   // IntegrationGatewayService; sync fields by SyncService/DiscordAdapter. The api
   // role only reads these. `lastError` is a short operator-facing reason, never PII.
-  gatewayState           GatewayState @default(down) @map("gateway_state")
-  gatewayLastConnectedAt DateTime?    @map("gateway_last_connected_at") @db.Timestamptz(6)
-  gatewayLastEventAt     DateTime?    @map("gateway_last_event_at") @db.Timestamptz(6)
-  syncState              SyncState    @default(idle) @map("sync_state")
-  lastSyncStartedAt      DateTime?    @map("last_sync_started_at") @db.Timestamptz(6)
-  lastSyncAt             DateTime?    @map("last_sync_at") @db.Timestamptz(6)
-  lastSyncGranted        Int          @default(0) @map("last_sync_granted")
-  lastSyncRevoked        Int          @default(0) @map("last_sync_revoked")
-  lastError              String?      @map("last_error")
-  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  gatewayState           GatewayState        @default(down) @map("gateway_state")
+  gatewayLastConnectedAt DateTime?           @map("gateway_last_connected_at") @db.Timestamptz(6)
+  gatewayLastEventAt     DateTime?           @map("gateway_last_event_at") @db.Timestamptz(6)
+  syncState              SyncState           @default(idle) @map("sync_state")
+  lastSyncStartedAt      DateTime?           @map("last_sync_started_at") @db.Timestamptz(6)
+  lastSyncAt             DateTime?           @map("last_sync_at") @db.Timestamptz(6)
+  lastSyncGranted        Int                 @default(0) @map("last_sync_granted")
+  lastSyncRevoked        Int                 @default(0) @map("last_sync_revoked")
+  lastError              String?             @map("last_error")
+  createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  externalIds    ExternalIdentity[]
-  groupMappings  ExternalGroupMapping[]
-  syncBaselines  SyncBaseline[]
+  externalIds   ExternalIdentity[]
+  groupMappings ExternalGroupMapping[]
+  syncBaselines SyncBaseline[]
 
-  @@unique([organizationId, provider, externalWorkspaceId])
-  @@index([organizationId])
+  @@unique([provider, externalWorkspaceId])
   @@map("integration_connection")
 }
 
@@ -721,16 +690,16 @@ model IntegrationConnection {
 /// an **integration link only** — never an authentication path. `user_identity`
 /// is the sole auth path. On user scrub/GC, these rows are purged first.
 model ExternalIdentity {
-  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId         String    @map("user_id") @db.Uuid
-  connectionId   String    @map("connection_id") @db.Uuid
-  externalUserId String    @map("external_user_id")
-  externalHandle String?   @map("external_handle")
+  id                 String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  connectionId       String    @map("connection_id") @db.Uuid
+  externalUserId     String    @map("external_user_id")
+  externalHandle     String?   @map("external_handle")
   // Discord avatar hash from the OAuth /users/@me response (#52). Rendered via the
   // CDN URL pattern; `a_`-prefixed hashes are animated (we serve the static .png).
-  externalAvatarHash String? @map("external_avatar_hash")
-  linkedAt       DateTime  @default(now()) @map("linked_at") @db.Timestamptz(6)
-  lastSyncedAt   DateTime? @map("last_synced_at") @db.Timestamptz(6)
+  externalAvatarHash String?   @map("external_avatar_hash")
+  linkedAt           DateTime  @default(now()) @map("linked_at") @db.Timestamptz(6)
+  lastSyncedAt       DateTime? @map("last_synced_at") @db.Timestamptz(6)
 
   user       AppUser               @relation(fields: [userId], references: [id], onDelete: Restrict)
   connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
@@ -746,15 +715,15 @@ model ExternalIdentity {
 /// surviving renames. `is_broken` is set when the external group is deleted.
 /// `conflict_winner` is used for cold-baseline conflict resolution (Slice E/#59).
 model ExternalGroupMapping {
-  id              String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  roleId          String              @map("role_id") @db.Uuid
-  connectionId    String              @map("connection_id") @db.Uuid
-  externalGroupId String              @map("external_group_id")
-  syncDirection   SyncDirection       @map("sync_direction")
-  isBroken        Boolean             @default(false) @map("is_broken")
-  conflictWinner  ConflictWinner      @default(patrice) @map("conflict_winner")
-  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  roleId          String         @map("role_id") @db.Uuid
+  connectionId    String         @map("connection_id") @db.Uuid
+  externalGroupId String         @map("external_group_id")
+  syncDirection   SyncDirection  @map("sync_direction")
+  isBroken        Boolean        @default(false) @map("is_broken")
+  conflictWinner  ConflictWinner @default(patrice) @map("conflict_winner")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   role          Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
   connection    IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)

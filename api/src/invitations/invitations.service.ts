@@ -117,7 +117,6 @@ export class InvitationsService {
   /** Create a normal (non-bootstrap) invitation. Returns the plaintext token. */
   async create(args: {
     creatorUserId: string;
-    organizationId: string;
     email?: string | null;
     intendedRoleIds?: string[];
     expiresAt?: Date;
@@ -129,7 +128,6 @@ export class InvitationsService {
     const token = generateInviteToken();
     const invitation = await this.prisma.invitation.create({
       data: {
-        organizationId: args.organizationId,
         tokenHash: hashToken(this.env.TOKEN_PEPPER, token),
         email: args.email ?? null,
         intendedRoleIds: args.intendedRoleIds ?? [],
@@ -140,7 +138,6 @@ export class InvitationsService {
       select: { id: true, intendedRoleIds: true },
     });
     await this.activity.logActivity({
-      organizationId: args.organizationId,
       actorUserId: args.creatorUserId,
       subjectType: 'invitation',
       subjectId: invitation.id,
@@ -167,9 +164,9 @@ export class InvitationsService {
   }
 
   /** List invitations for the org with derived status (admin, invite:create gated). */
-  async list(organizationId: string): Promise<InviteListItem[]> {
+  async list(): Promise<InviteListItem[]> {
     const rows = await this.prisma.invitation.findMany({
-      where: { organizationId },
+      where: {},
       orderBy: { createdAt: 'desc' },
     });
     return rows.map((r) => ({
@@ -188,7 +185,7 @@ export class InvitationsService {
   async revoke(invitationId: string, actorUserId: string): Promise<void> {
     const inv = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
-      select: { id: true, organizationId: true, revokedAt: true },
+      select: { id: true, revokedAt: true },
     });
     if (!inv) throw new NotFoundError('INVITE_NOT_FOUND', 'Invitation not found');
     if (inv.revokedAt) return;
@@ -197,7 +194,6 @@ export class InvitationsService {
       data: { revokedAt: new Date() },
     });
     await this.activity.logActivity({
-      organizationId: inv.organizationId,
       actorUserId,
       subjectType: 'invitation',
       subjectId: inv.id,
@@ -335,7 +331,7 @@ export class InvitationsService {
     // Skipped when no email is supplied (a Discord login without the email scope).
     if (args.email) {
       const existingEmail = await this.prisma.appUser.findFirst({
-        where: { organizationId: inv.organizationId, email: args.email },
+        where: { email: args.email },
         select: { id: true },
       });
       if (existingEmail) {
@@ -360,7 +356,6 @@ export class InvitationsService {
 
       const user = await tx.appUser.create({
         data: {
-          organizationId: inv.organizationId,
           email: args.email,
           displayName: args.displayName,
           createdViaInvitationId: inv.id,
@@ -404,13 +399,9 @@ export class InvitationsService {
 
       // A membership/role change is a config change — bump the org-wide version so
       // the engine re-projects (the new user's roles take effect immediately).
-      await tx.organization.update({
-        where: { id: inv.organizationId },
-        data: { configVersion: { increment: 1 } },
-      });
+      await this.access.bumpConfigVersion(tx);
 
       await this.writeAcceptActivity(tx, {
-        organizationId: inv.organizationId,
         userId: user.id,
         invitationId: inv.id,
         grantedRoleIds: inv.intendedRoleIds,
@@ -437,7 +428,6 @@ export class InvitationsService {
   private async writeAcceptActivity(
     tx: Prisma.TransactionClient,
     args: {
-      organizationId: string;
       userId: string;
       invitationId: string;
       grantedRoleIds: string[];
@@ -447,7 +437,6 @@ export class InvitationsService {
   ): Promise<void> {
     await this.activity.logActivity({
       tx,
-      organizationId: args.organizationId,
       actorUserId: args.userId,
       subjectType: 'user',
       subjectId: args.userId,
@@ -460,7 +449,6 @@ export class InvitationsService {
     });
     await this.activity.logActivity({
       tx,
-      organizationId: args.organizationId,
       actorUserId: args.userId,
       subjectType: 'invitation',
       subjectId: args.invitationId,
@@ -474,7 +462,6 @@ export class InvitationsService {
     if (args.isBootstrap) {
       await this.activity.logActivity({
         tx,
-        organizationId: args.organizationId,
         actorUserId: args.userId,
         subjectType: 'user',
         subjectId: args.userId,

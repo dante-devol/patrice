@@ -1,13 +1,9 @@
-import { Controller, HttpCode, Post, Req } from '@nestjs/common';
-import type { Request } from 'express';
-import { UnauthenticatedError } from '../common/errors';
+import { Controller, HttpCode, Post } from '@nestjs/common';
 import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { GcService } from './gc.service';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 /**
  * GC admin surface (Slice 7.3). Gated by `config:update` — an Effective-Admin global
@@ -19,19 +15,19 @@ interface AuthedRequest extends Request {
 export class GcController {
   constructor(private readonly gc: GcService) {}
 
+  @Contract(ROUTES.gcSweep)
   @Post('sweep')
   @HttpCode(200)
   @Authorize(ACTIONS.configUpdate.action, orgResource)
-  async sweep(@Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
+  async sweep() {
     return this.gc.sweep();
   }
 
+  @Contract(ROUTES.gcDryRun)
   @Post('sweep/dry-run')
   @HttpCode(200)
   @Authorize(ACTIONS.configUpdate.action, orgResource)
-  async dryRun(@Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
+  async dryRun() {
     return this.gc.dryRun();
   }
 }

@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { errorBody, ErrorBody } from './errors';
+import { codeForStatus, ERROR_CODES, ErrorCode } from './error-codes';
+import { DomainError } from '../domain/shared/domain-error';
 
 /**
  * Normalises every error to the `{ error: { code, message, details? } }` envelope.
@@ -36,13 +38,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    // Prisma unique-constraint violations that slip past app-level pre-checks
-    // (e.g. a concurrent duplicate) become a clear 409 rather than a generic 500.
-    const code = (exception as { code?: string }).code;
-    if (code === 'P2002') {
+    if (exception instanceof DomainError) {
       res
-        .status(HttpStatus.CONFLICT)
-        .json(errorBody('ALREADY_EXISTS', 'That value is already in use'));
+        .status(ERROR_CODES[exception.code].status)
+        .json(errorBody(exception.code, exception.message, exception.details));
+      return;
+    }
+
+    // Prisma constraint errors that slip past app-level pre-checks (usually a race
+    // with a concurrent write) become clear 4xx responses rather than a generic 500.
+    const prismaError = PRISMA_ERRORS[(exception as { code?: string }).code ?? ''];
+    if (prismaError) {
+      res.status(prismaError.status).json(errorBody(prismaError.code, prismaError.message));
       return;
     }
 
@@ -53,21 +60,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 }
 
-function codeForStatus(status: number): string {
-  switch (status) {
-    case HttpStatus.UNAUTHORIZED:
-      return 'UNAUTHENTICATED';
-    case HttpStatus.FORBIDDEN:
-      return 'FORBIDDEN';
-    case HttpStatus.NOT_FOUND:
-      return 'NOT_FOUND';
-    case HttpStatus.CONFLICT:
-      return 'CONFLICT';
-    case HttpStatus.GONE:
-      return 'GONE';
-    case HttpStatus.UNPROCESSABLE_ENTITY:
-      return 'VALIDATION_FAILED';
-    default:
-      return 'ERROR';
-  }
-}
+const PRISMA_ERRORS: Record<string, { status: number; code: ErrorCode; message: string }> = {
+  // Unique constraint.
+  P2002: { status: HttpStatus.CONFLICT, code: 'ALREADY_EXISTS', message: 'That value is already in use' },
+  // Foreign-key constraint: a referenced row is gone, or a RESTRICT referrer remains.
+  P2003: {
+    status: HttpStatus.CONFLICT,
+    code: 'REFERENCE_CONFLICT',
+    message: 'Another record still references this one, or a referenced record is gone',
+  },
+  // Required record missing (e.g. an update/delete raced a delete).
+  P2025: { status: HttpStatus.NOT_FOUND, code: 'RECORD_NOT_FOUND', message: 'Record not found' },
+};

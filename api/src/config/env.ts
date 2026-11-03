@@ -45,7 +45,7 @@ export const envSchema = z.object({
   // Upload cap enforced at the attachment boundary (default 25 MiB).
   ATTACHMENT_MAX_BYTES: z.coerce.number().int().positive().default(26_214_400),
   // NB: the Discord OAuth client id/secret are NOT startup config — they live in
-  // `organization.settings` (runtime config, admin-editable; the secret encrypted
+  // `system_settings` + `secret` (runtime config, admin-editable; the secret encrypted
   // with a SESSION_SECRET-derived key). See ADR 0006. Any DISCORD_CLIENT_* env vars
   // a deployment still sets are simply ignored.
   // Batching window: role-change events within this window collapse into one sync

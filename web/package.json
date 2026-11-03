@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "jest",
-    "screenshots": "node tools/screenshot-tasks.mjs"
+    "screenshots": "node tools/screenshot-tasks.mjs",
+    "gen:api": "openapi-typescript ../api/openapi.json -o src/app/core/api/schema.d.ts"
   },
   "dependencies": {
     "@angular/cdk": "^19.2.19",
@@ -40,6 +41,7 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "jest-preset-angular": "^14.6.2",
+    "openapi-typescript": "7.13.0",
     "playwright": "^1.61.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",

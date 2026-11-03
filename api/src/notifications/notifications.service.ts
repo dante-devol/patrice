@@ -62,7 +62,6 @@ export class NotificationsService {
 
     await tx.notification.createMany({
       data: recipients.map((recipientUserId) => ({
-        organizationId: event.organizationId,
         recipientUserId,
         type: event.type,
         subjectType: event.subjectType,

@@ -266,7 +266,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
         },
       };
 
-      const before = await prisma.organization.findFirstOrThrow({
+      const before = await prisma.systemSettings.findFirstOrThrow({
         select: { configVersion: true },
       });
       // Control: the reviewer CAN review a task owned by someone else (the global
@@ -294,7 +294,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
       expect(patch.status).toBe(200);
       expect(patch.body.selfReviewAllowed).toBe(true);
 
-      const after = await prisma.organization.findFirstOrThrow({
+      const after = await prisma.systemSettings.findFirstOrThrow({
         select: { configVersion: true },
       });
       expect(after.configVersion > before.configVersion).toBe(true);

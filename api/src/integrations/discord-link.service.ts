@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ActivitySource, AuthProvider, LifecycleState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
-import { ConflictError, UnprocessableError } from '../common/errors';
+import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { SyncService } from './sync/sync.service';
 import type { DiscordOAuthUser } from '../auth/discord-oauth.service';
 
@@ -30,10 +30,9 @@ export class DiscordLinkService {
   async completeLink(userId: string, discordUser: DiscordOAuthUser): Promise<void> {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },
-      select: { organizationId: true },
+      select: { id: true },
     });
-    if (!user) throw new UnprocessableError('USER_NOT_FOUND', 'User not found');
-    const organizationId = user.organizationId;
+    if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
 
     // 1. Discord sign-in identity. (provider, subject) is globally unique, so a
     //    Discord account already used by *another* Patrice user is rejected.
@@ -62,7 +61,6 @@ export class DiscordLinkService {
         },
       });
       await this.activity.logActivity({
-        organizationId,
         actorUserId: userId,
         subjectType: 'user',
         subjectId: userId,
@@ -110,7 +108,6 @@ export class DiscordLinkService {
       });
 
       await this.activity.logActivity({
-        organizationId,
         actorUserId: userId,
         subjectType: 'external_identity',
         subjectId: identity.id,
@@ -134,11 +131,10 @@ export class DiscordLinkService {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },
       select: {
-        organizationId: true,
         identities: { select: { id: true, provider: true } },
       },
     });
-    if (!user) throw new UnprocessableError('USER_NOT_FOUND', 'User not found');
+    if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
 
     const discordIdentity = user.identities.find((i) => i.provider === AuthProvider.discord);
     const links = await this.prisma.externalIdentity.findMany({
@@ -158,7 +154,6 @@ export class DiscordLinkService {
       );
     }
 
-    const organizationId = user.organizationId;
 
     for (const link of links) {
       // Revoke integration-sourced roles this connection granted the user; the
@@ -173,7 +168,6 @@ export class DiscordLinkService {
           where: { userId_roleId: { userId, roleId: ur.roleId } },
         });
         await this.activity.logActivity({
-          organizationId,
           actorUserId: userId,
           subjectType: 'user_role',
           subjectId: userId,
@@ -189,7 +183,6 @@ export class DiscordLinkService {
       });
       await this.prisma.externalIdentity.delete({ where: { id: link.id } });
       await this.activity.logActivity({
-        organizationId,
         actorUserId: userId,
         subjectType: 'external_identity',
         subjectId: link.id,
@@ -201,7 +194,6 @@ export class DiscordLinkService {
     if (discordIdentity) {
       await this.prisma.userIdentity.delete({ where: { id: discordIdentity.id } });
       await this.activity.logActivity({
-        organizationId,
         actorUserId: userId,
         subjectType: 'user',
         subjectId: userId,

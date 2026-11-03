@@ -1,35 +1,32 @@
-import { Body, Controller, Get, Patch, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { UnauthenticatedError } from '../common/errors';
 import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { ConfigService } from './config.service';
 import { updateConfigSchema, type UpdateConfigDto } from './users.dto';
+import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
-
-/** GET/PATCH the structured organization settings (Slice 2.4). */
+/** GET/PATCH the typed system settings (Slice 2.4). */
 @Controller('config')
 export class ConfigController {
   constructor(private readonly config: ConfigService) {}
 
+  @Contract(ROUTES.getConfig)
   @Get()
   @Authorize(ACTIONS.configUpdate.action, orgResource)
-  async get(@Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.config.get(req.user.organizationId);
+  async get() {
+    return this.config.get();
   }
 
+  @Contract(ROUTES.updateConfig)
   @Patch()
   @Authorize(ACTIONS.configUpdate.action, orgResource)
   async update(
     @Body(new ZodValidationPipe(updateConfigSchema)) body: UpdateConfigDto,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.config.update(req.user.organizationId, req.user.id, body);
+    return this.config.update(user.id, body);
   }
 }

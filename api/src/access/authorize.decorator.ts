@@ -2,7 +2,7 @@ import { SetMetadata } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundError } from '../common/errors';
-import { ResourceRef } from './access.service';
+import { ORGANIZATION_RESOURCE, ResourceRef } from './access.service';
 
 export const AUTHORIZE_META = 'patrice:authorize';
 
@@ -29,11 +29,8 @@ export function Authorize(
   return SetMetadata(AUTHORIZE_META, { action, resolveResource } satisfies AuthorizeMeta);
 }
 
-/** The singleton organization is the resource for global/create actions. */
-export const orgResource: ResourceResolver = async (_req, prisma) => {
-  const org = await prisma.organization.findFirstOrThrow({ select: { id: true } });
-  return { type: 'Organization', id: org.id };
-};
+/** The fixed Organization entity is the resource for global/create actions. */
+export const orgResource: ResourceResolver = async () => ORGANIZATION_RESOURCE;
 
 /**
  * The division named by `:id` is the resource — for `division:update` on a specific

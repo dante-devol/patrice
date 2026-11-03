@@ -83,16 +83,16 @@ export class LookupStore {
     return this.userAvatars().get(id) ?? null;
   }
 
-  /** Resolved division color: stored hex overrides the computed name-hash fallback. */
+  /** Division color, computed from its name (the API stores no colors). */
   divisionColor(id: string): string {
     const d = this.divisionList().find((div) => div.id === id);
-    return d ? (d.color ?? computeDivColor(d.name)) : '#a7aba3';
+    return d ? computeDivColor(d.name) : '#a7aba3';
   }
 
-  /** Resolved team color: stored hex overrides the computed name-hash fallback. */
+  /** Team color, computed from its name (the API stores no colors). */
   teamColor(id: string | null): string {
     if (!id) return '#a7aba3';
     const t = this.teamList().find((tm) => tm.id === id);
-    return t ? (t.color ?? computeTeamColor(t.name)) : '#a7aba3';
+    return t ? computeTeamColor(t.name) : '#a7aba3';
   }
 }

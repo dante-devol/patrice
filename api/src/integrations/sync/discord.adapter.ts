@@ -117,7 +117,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
             },
           });
           await this.activity.logActivity({
-            organizationId: conn.organizationId,
             actorUserId: null,
             subjectType: 'integration_connection',
             subjectId: conn.id,
@@ -198,7 +197,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
       data: { syncState: 'running', lastSyncStartedAt: new Date() },
     });
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId: null,
       subjectType: 'integration_connection',
       subjectId: connectionId,
@@ -298,7 +296,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
     });
 
     await this.activity.logActivity({
-      organizationId: connection.organizationId,
       actorUserId: null,
       subjectType: 'integration_connection',
       subjectId: connectionId,
@@ -415,7 +412,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
     linkedUsers: LinkPair[],
   ): Promise<{ totalGranted: number; totalRevoked: number; outboundError?: string }> {
     const connectionId = connection.id;
-    const orgId = connection.organizationId;
     let outboundError: string | undefined;
     const userIdByExternal = new Map(linkedUsers.map((l) => [l.externalUserId, l.userId]));
     const roleByGroup = new Map(connection.groupMappings.map((m) => [m.externalGroupId, m.roleId]));
@@ -425,7 +421,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
       const mapping = connection.groupMappings.find((m) => m.id === mappingId);
       await this.prisma.externalGroupMapping.update({ where: { id: mappingId }, data: { isBroken: true } });
       await this.activity.logActivity({
-        organizationId: orgId,
         actorUserId: null,
         subjectType: 'external_group_mapping',
         subjectId: mappingId,
@@ -450,7 +445,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
           },
         });
         await this.activity.logActivity({
-          organizationId: orgId,
           actorUserId: null,
           subjectType: 'user_role',
           subjectId: op.userId,
@@ -465,7 +459,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
           where: { userId_roleId: { userId: op.userId, roleId: op.roleId } },
         });
         await this.activity.logActivity({
-          organizationId: orgId,
           actorUserId: null,
           subjectType: 'user_role',
           subjectId: op.userId,
@@ -488,7 +481,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
         const roleId = roleByGroup.get(op.externalGroupId);
         if (!userId || !roleId) continue;
         await this.activity.logActivity({
-          organizationId: orgId,
           actorUserId: null,
           subjectType: 'user_role',
           subjectId: userId,
@@ -510,7 +502,6 @@ export class DiscordAdapter implements IntegrationSyncPort {
           for (const m of affectedMappings) {
             await this.prisma.externalGroupMapping.update({ where: { id: m.id }, data: { isBroken: true } });
             await this.activity.logActivity({
-              organizationId: orgId,
               actorUserId: null,
               subjectType: 'external_group_mapping',
               subjectId: m.id,
@@ -575,10 +566,9 @@ export class DiscordAdapter implements IntegrationSyncPort {
     connection: ConnectionWithMappings,
     reason: OutboundFailReason,
   ): Promise<void> {
-    const adminIds = await this.admin.effectiveAdminIds(connection.organizationId);
+    const adminIds = await this.admin.effectiveAdminIds();
     if (adminIds.length === 0) return;
     await this.notifications.emit(this.prisma, {
-      organizationId: connection.organizationId,
       type: 'integration.push_failed',
       subjectType: 'integration_connection',
       subjectId: connection.id,

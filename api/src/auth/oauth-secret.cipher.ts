@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:cr
 
 /**
  * At-rest encryption for the **app-level Discord OAuth client secret**, which lives
- * in `organization.settings` (runtime config) rather than env (ADR 0006). The key is
+ * in the `secret` table (runtime config) rather than env (ADR 0006). The key is
  * derived from `SESSION_SECRET` via HKDF with a fixed label — the api role already
  * holds `SESSION_SECRET` (it signs sessions + OAuth state), so this needs no new env
  * and no worker round-trip (unlike the bot token's worker-only SecretCipherPort).

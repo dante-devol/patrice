@@ -9,7 +9,6 @@ import type { ExternalRoleOp } from './integration-sync.port';
 describe('DiscordAdapter.applyOutbound', () => {
   const conn = {
     id: 'conn-1',
-    organizationId: 'org-1',
     externalWorkspaceId: 'guild-1',
     config: { botToken: 'Bot.token' },
     credentialsRef: null,

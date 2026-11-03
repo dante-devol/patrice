@@ -13,7 +13,6 @@ import type { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { ENV, Env } from '../config/env';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { UnauthenticatedError } from '../common/errors';
 import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { AuthService } from '../auth/auth.service';
@@ -23,10 +22,9 @@ import { InvitationsService } from './invitations.service';
 import { BootstrapService } from './bootstrap.service';
 import { acceptInviteSchema, createInvitationSchema } from '../auth/auth.dto';
 import type { AcceptInviteDto, CreateInvitationDto } from '../auth/auth.dto';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { Public, CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 @Controller()
 export class InvitationsController {
@@ -38,12 +36,16 @@ export class InvitationsController {
     private readonly auth: AuthService,
   ) {}
 
+  @Public()
+  @Contract(ROUTES.bootstrapStatus)
   @Get('bootstrap')
   async bootstrapStatus() {
     return this.bootstrap.getStatus();
   }
 
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.viewInvite)
   @Get('invite/:token')
   async view(@Param('token') token: string) {
     return this.invitations.view(token);
@@ -52,6 +54,8 @@ export class InvitationsController {
   // Caps invite-token + bootstrap-passcode guessing (per-IP); FCFS consumption and the
   // constant-time passcode compare remain the primary controls.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.acceptInvite)
   @Post('invite/:token/accept')
   @HttpCode(201)
   async accept(
@@ -71,17 +75,16 @@ export class InvitationsController {
     return this.auth.getMe(userId);
   }
 
+  @Contract(ROUTES.createInvitation)
   @Post('invitations')
   @HttpCode(201)
   @Authorize(ACTIONS.inviteCreate.action, orgResource)
   async create(
     @Body(new ZodValidationPipe(createInvitationSchema)) body: CreateInvitationDto,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
     const { id, token } = await this.invitations.create({
-      creatorUserId: req.user.id,
-      organizationId: req.user.organizationId,
+      creatorUserId: user.id,
       email: body.email ?? null,
       intendedRoleIds: body.intendedRoleIds ?? [],
       expiresAt: body.expiresAt,
@@ -91,13 +94,14 @@ export class InvitationsController {
     return { id, token, url };
   }
 
+  @Contract(ROUTES.listInvitations)
   @Get('invitations')
   @Authorize(ACTIONS.inviteCreate.action, orgResource)
-  async list(@Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.invitations.list(req.user.organizationId);
+  async list() {
+    return this.invitations.list();
   }
 
+  @Contract(ROUTES.revokeInvitation)
   @Post('invitations/:id/revoke')
   @HttpCode(204)
   @Authorize(ACTIONS.inviteRetire.action, async (req, prisma) => {
@@ -108,8 +112,8 @@ export class InvitationsController {
     });
     return { type: 'Invitation' as const, id: inv?.id ?? id, attrs: { retired: false } };
   })
-  async revoke(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.invitations.revoke(id, req.user.id);
+  async revoke(@Param('id') id: string, @Req() req: Request,
+    @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.invitations.revoke(id, user.id);
   }
 }

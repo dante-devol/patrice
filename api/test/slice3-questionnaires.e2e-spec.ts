@@ -192,29 +192,25 @@ describe('Slice 3 — Request Templates', () => {
     it('UNIQUE(owner_division_id) prevents a second request template for one division', async () => {
       await expect(
         prisma.requestTemplate.create({
-          data: { organizationId: (await prisma.organization.findFirstOrThrow()).id, ownerDivisionId: writingId },
+          data: { ownerDivisionId: writingId },
         }),
       ).rejects.toThrow();
     });
 
     it('CHECK rejects a row with both owner columns set (two-owner rejection)', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       await expect(
         prisma.$executeRawUnsafe(
-          `INSERT INTO request_template (organization_id, owner_division_id, owner_task_id, updated_at)
-           VALUES ($1::uuid, $2::uuid, gen_random_uuid(), now())`,
-          orgId,
+          `INSERT INTO request_template (owner_division_id, owner_task_id, updated_at)
+           VALUES ($1::uuid, gen_random_uuid(), now())`,
           testingId,
         ),
       ).rejects.toThrow();
     });
 
     it('CHECK rejects a row with neither owner column set', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       await expect(
         prisma.$executeRawUnsafe(
-          `INSERT INTO request_template (organization_id, updated_at) VALUES ($1::uuid, now())`,
-          orgId,
+          `INSERT INTO request_template (updated_at) VALUES (now())`,
         ),
       ).rejects.toThrow();
     });

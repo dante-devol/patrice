@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ActivitySource, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SYSTEM_SUBJECT_ID } from '../settings/settings.service';
 import { ActivityService } from '../activity/activity.service';
 import { GraceService } from '../common/grace.service';
 import { STORAGE_PORT, StoragePort } from '../storage/storage.port';
@@ -65,22 +66,16 @@ export class GcService {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
-  /** The singleton org id + the past-grace cutoff `Date` for collectability. */
-  private async sweepContext(): Promise<{ orgId: string; cutoff: Date }> {
-    const org = await this.prisma.organization.findFirstOrThrow({
-      select: { id: true, settings: true },
-    });
-    const graceMs = GraceService.windowMsFromSettings(org.settings);
-    return { orgId: org.id, cutoff: new Date(Date.now() - graceMs) };
+  /** The past-grace cutoff `Date` for collectability. */
+  private async sweepContext(): Promise<{ cutoff: Date }> {
+    return { cutoff: new Date(Date.now() - (await this.grace.windowMs())) };
   }
 
   /** Retired-past-grace candidates of each lifecycle type, with referrer pre-checks. */
   private async collectable(
-    orgId: string,
     cutoff: Date,
   ): Promise<{ tasks: string[]; divisions: string[]; teams: string[]; roles: string[] }> {
     const where = {
-      organizationId: orgId,
       lifecycleState: 'retired' as const,
       retiredAt: { lt: cutoff },
     };
@@ -123,9 +118,9 @@ export class GcService {
   }
 
   /** Retired-past-grace integration connections with no surviving external_identity or group mappings. */
-  private async collectableConnections(orgId: string, cutoff: Date): Promise<string[]> {
+  private async collectableConnections(cutoff: Date): Promise<string[]> {
     const candidates = await this.prisma.integrationConnection.findMany({
-      where: { organizationId: orgId, lifecycleState: 'retired', retiredAt: { lt: cutoff } },
+      where: { lifecycleState: 'retired', retiredAt: { lt: cutoff } },
       select: { id: true },
     });
     const result: string[] = [];
@@ -168,12 +163,10 @@ export class GcService {
 
   /** Retired-past-grace users, split by whether they bear authored history. */
   private async collectableUsers(
-    orgId: string,
     cutoff: Date,
   ): Promise<{ scrub: string[]; delete: string[] }> {
     const users = await this.prisma.appUser.findMany({
       where: {
-        organizationId: orgId,
         lifecycleState: 'retired',
         retiredAt: { lt: cutoff },
       },
@@ -201,10 +194,10 @@ export class GcService {
 
   /** Report what a sweep would collect — no deletes, no blob removal. */
   async dryRun(): Promise<GcReport> {
-    const { orgId, cutoff } = await this.sweepContext();
-    const c = await this.collectable(orgId, cutoff);
-    const u = await this.collectableUsers(orgId, cutoff);
-    const integrationConnections = await this.collectableConnections(orgId, cutoff);
+    const { cutoff } = await this.sweepContext();
+    const c = await this.collectable(cutoff);
+    const u = await this.collectableUsers(cutoff);
+    const integrationConnections = await this.collectableConnections(cutoff);
     return {
       ...emptyReport(),
       ...c,
@@ -216,14 +209,14 @@ export class GcService {
 
   /** Run the sweep: delete collectable entities, remove blobs, reconcile orphans. */
   async sweep(): Promise<GcReport> {
-    const { orgId, cutoff } = await this.sweepContext();
-    const c = await this.collectable(orgId, cutoff);
+    const { cutoff } = await this.sweepContext();
+    const c = await this.collectable(cutoff);
     const report = emptyReport();
 
     // Tasks first: deleting a retired task frees its references to retired
     // divisions/teams, so those can collect in this same sweep.
     for (const taskId of c.tasks) {
-      const blobKeys = await this.deleteTaskAggregate(orgId, taskId, report);
+      const blobKeys = await this.deleteTaskAggregate(taskId, report);
       if (blobKeys) {
         report.tasks.push(taskId);
         for (const key of blobKeys) {
@@ -236,43 +229,42 @@ export class GcService {
 
     // Recompute division/team/role collectability — the task deletes above may have
     // newly freed some referrers.
-    const fresh = await this.collectable(orgId, cutoff);
+    const fresh = await this.collectable(cutoff);
     for (const divisionId of fresh.divisions) {
-      if (await this.deleteDivision(orgId, divisionId, report)) report.divisions.push(divisionId);
+      if (await this.deleteDivision(divisionId, report)) report.divisions.push(divisionId);
     }
     for (const teamId of fresh.teams) {
-      if (await this.deleteTeam(orgId, teamId, report)) report.teams.push(teamId);
+      if (await this.deleteTeam(teamId, report)) report.teams.push(teamId);
     }
     for (const roleId of fresh.roles) {
-      if (await this.deleteStandaloneRole(orgId, roleId, report)) report.roles.push(roleId);
+      if (await this.deleteStandaloneRole(roleId, report)) report.roles.push(roleId);
     }
 
     // Users last — the task deletes above may have removed the last claimant/message
     // that kept a user history-bearing, so a re-checked history-less user can now
     // fully delete instead of scrub.
-    const freshUsers = await this.collectableUsers(orgId, cutoff);
+    const freshUsers = await this.collectableUsers(cutoff);
     for (const userId of freshUsers.scrub) {
-      if (await this.scrubUser(orgId, userId, report)) report.usersScrubbed.push(userId);
+      if (await this.scrubUser(userId, report)) report.usersScrubbed.push(userId);
     }
     for (const userId of freshUsers.delete) {
-      if (await this.deleteUser(orgId, userId, report)) report.usersDeleted.push(userId);
+      if (await this.deleteUser(userId, report)) report.usersDeleted.push(userId);
     }
 
     // Collect retired-past-grace integration connections (after user GC, which
     // may have freed the last external_identity reference).
-    const freshConnections = await this.collectableConnections(orgId, cutoff);
+    const freshConnections = await this.collectableConnections(cutoff);
     for (const connectionId of freshConnections) {
-      if (await this.deleteIntegrationConnection(orgId, connectionId, report)) {
+      if (await this.deleteIntegrationConnection(connectionId, report)) {
         report.integrationConnections.push(connectionId);
       }
     }
 
-    report.orphanedBlobs = await this.reconcileOrphanedBlobs(orgId);
+    report.orphanedBlobs = await this.reconcileOrphanedBlobs();
     return report;
   }
 
   private async deleteIntegrationConnection(
-    orgId: string,
     connectionId: string,
     report: GcReport,
   ): Promise<boolean> {
@@ -281,7 +273,6 @@ export class GcService {
         await tx.integrationConnection.delete({ where: { id: connectionId } });
         await this.activity.logActivity({
           tx,
-          organizationId: orgId,
           actorUserId: null,
           subjectType: 'integration_connection',
           subjectId: connectionId,
@@ -292,7 +283,7 @@ export class GcService {
       });
       return true;
     } catch (err) {
-      this.handleDeleteFailure(orgId, 'integration_connection', connectionId, err, report);
+      this.handleDeleteFailure('integration_connection', connectionId, err, report);
       return false;
     }
   }
@@ -305,13 +296,12 @@ export class GcService {
    * the user *issued* and null `invitation.email` for invites they *received*.
    */
   private async scrubUser(
-    orgId: string,
     userId: string,
     report: GcReport,
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        await this.revokeIssuedInvitations(tx, orgId, userId);
+        await this.revokeIssuedInvitations(tx, userId);
         await this.nullReceivedInvitationEmails(tx, userId);
         await this.purgeUserSatellites(tx, userId);
         await tx.appUser.update({
@@ -320,7 +310,6 @@ export class GcService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId: orgId,
           actorUserId: null,
           subjectType: 'user',
           subjectId: userId,
@@ -331,27 +320,25 @@ export class GcService {
       });
       return true;
     } catch (err) {
-      this.handleDeleteFailure(orgId, 'user', userId, err, report);
+      this.handleDeleteFailure('user', userId, err, report);
       return false;
     }
   }
 
   /** Full delete of a history-less retired user (no authored content to preserve). */
   private async deleteUser(
-    orgId: string,
     userId: string,
     report: GcReport,
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        await this.revokeIssuedInvitations(tx, orgId, userId);
+        await this.revokeIssuedInvitations(tx, userId);
         await this.nullReceivedInvitationEmails(tx, userId);
         await tx.invitationUse.deleteMany({ where: { createdUserId: userId } });
         await this.purgeUserSatellites(tx, userId);
         await tx.appUser.delete({ where: { id: userId } });
         await this.activity.logActivity({
           tx,
-          organizationId: orgId,
           actorUserId: null,
           subjectType: 'user',
           subjectId: userId,
@@ -362,7 +349,7 @@ export class GcService {
       });
       return true;
     } catch (err) {
-      this.handleDeleteFailure(orgId, 'user', userId, err, report);
+      this.handleDeleteFailure('user', userId, err, report);
       return false;
     }
   }
@@ -397,7 +384,6 @@ export class GcService {
    */
   private async revokeIssuedInvitations(
     tx: Prisma.TransactionClient,
-    orgId: string,
     userId: string,
   ): Promise<void> {
     const issued = await tx.invitation.findMany({
@@ -412,7 +398,6 @@ export class GcService {
     for (const inv of issued) {
       await this.activity.logActivity({
         tx,
-        organizationId: orgId,
         actorUserId: null,
         subjectType: 'invitation',
         subjectId: inv.id,
@@ -447,7 +432,6 @@ export class GcService {
    * post-commit blob removal), or `null` if a RESTRICT backstop blocked the delete.
    */
   private async deleteTaskAggregate(
-    orgId: string,
     taskId: string,
     report: GcReport,
   ): Promise<string[] | null> {
@@ -473,20 +457,19 @@ export class GcService {
         await tx.requestTemplate.deleteMany({ where: { ownerTaskId: taskId } }); // cascades questions
         await tx.task.delete({ where: { id: taskId } });
 
-        await this.logCollected(tx, orgId, 'task', taskId, 'gc.task_collected', {
+        await this.logCollected(tx, 'task', taskId, 'gc.task_collected', {
           taskId,
         });
         return attachments.map((a) => a.storageKey);
       });
       return blobKeys;
     } catch (err) {
-      this.handleDeleteFailure(orgId, 'task', taskId, err, report);
+      this.handleDeleteFailure('task', taskId, err, report);
       return null;
     }
   }
 
   private async deleteDivision(
-    orgId: string,
     divisionId: string,
     report: GcReport,
   ): Promise<boolean> {
@@ -497,19 +480,18 @@ export class GcService {
         await tx.requestTemplate.deleteMany({ where: { ownerDivisionId: divisionId } });
         await tx.role.deleteMany({ where: { divisionId } });
         await tx.division.delete({ where: { id: divisionId } });
-        await this.logCollected(tx, orgId, 'division', divisionId, 'gc.division_collected', {
+        await this.logCollected(tx, 'division', divisionId, 'gc.division_collected', {
           divisionId,
         });
       });
       return true;
     } catch (err) {
-      this.handleDeleteFailure(orgId, 'division', divisionId, err, report);
+      this.handleDeleteFailure('division', divisionId, err, report);
       return false;
     }
   }
 
   private async deleteTeam(
-    orgId: string,
     teamId: string,
     report: GcReport,
   ): Promise<boolean> {
@@ -517,35 +499,33 @@ export class GcService {
       await this.prisma.$transaction(async (tx) => {
         await tx.role.deleteMany({ where: { teamId } });
         await tx.team.delete({ where: { id: teamId } });
-        await this.logCollected(tx, orgId, 'team', teamId, 'gc.team_collected', { teamId });
+        await this.logCollected(tx, 'team', teamId, 'gc.team_collected', { teamId });
       });
       return true;
     } catch (err) {
-      this.handleDeleteFailure(orgId, 'team', teamId, err, report);
+      this.handleDeleteFailure('team', teamId, err, report);
       return false;
     }
   }
 
   private async deleteStandaloneRole(
-    orgId: string,
     roleId: string,
     report: GcReport,
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
         await tx.role.delete({ where: { id: roleId } });
-        await this.logCollected(tx, orgId, 'role', roleId, 'gc.role_collected', { roleId });
+        await this.logCollected(tx, 'role', roleId, 'gc.role_collected', { roleId });
       });
       return true;
     } catch (err) {
-      this.handleDeleteFailure(orgId, 'role', roleId, err, report);
+      this.handleDeleteFailure('role', roleId, err, report);
       return false;
     }
   }
 
   /** Log a `gc.blocked` alert for a RESTRICT backstop hit; rethrow real errors. */
   private handleDeleteFailure(
-    orgId: string,
     entityType: string,
     entityId: string,
     err: unknown,
@@ -564,7 +544,6 @@ export class GcService {
     // Best-effort alert row (outside the rolled-back tx).
     void this.activity
       .logActivity({
-        organizationId: orgId,
         actorUserId: null,
         subjectType: entityType,
         subjectId: entityId,
@@ -578,7 +557,6 @@ export class GcService {
 
   private logCollected(
     tx: Prisma.TransactionClient,
-    orgId: string,
     subjectType: string,
     subjectId: string,
     verb: 'gc.task_collected' | 'gc.role_collected' | 'gc.division_collected' | 'gc.team_collected',
@@ -586,7 +564,6 @@ export class GcService {
   ): Promise<void> {
     return this.activity.logActivity({
       tx,
-      organizationId: orgId,
       actorUserId: null,
       subjectType,
       subjectId,
@@ -601,8 +578,8 @@ export class GcService {
    * `attachment` row is deleted (a crash between the DB delete and the blob delete
    * would otherwise leak storage). Returns the number of blobs removed.
    */
-  async reconcileOrphanedBlobs(orgId: string): Promise<number> {
-    const keys = await this.storage.list(`attachments/${orgId}/`);
+  async reconcileOrphanedBlobs(): Promise<number> {
+    const keys = await this.storage.list('attachments/');
     if (keys.length === 0) return 0;
     const known = new Set(
       (
@@ -621,10 +598,9 @@ export class GcService {
     if (orphans.length > 0) {
       await this.activity
         .logActivity({
-          organizationId: orgId,
           actorUserId: null,
-          subjectType: 'organization',
-          subjectId: orgId,
+          subjectType: 'system',
+          subjectId: SYSTEM_SUBJECT_ID,
           verb: 'gc.blob_reconciled',
           payload: { blobCount: orphans.length },
           source: ActivitySource.system,

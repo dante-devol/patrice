@@ -18,7 +18,6 @@ describe('Slice 7.4 — User scrub-in-place', () => {
   let app: INestApplication;
   let admin: AdminSession;
   let prisma: PrismaClient;
-  let orgId: string;
   let taskId: string;
 
   beforeAll(async () => {
@@ -33,7 +32,6 @@ describe('Slice 7.4 — User scrub-in-place', () => {
       where: { email: 'admin@example.com' },
       include: { userRoles: true },
     });
-    orgId = adminUser.organizationId;
     for (const action of ['task:create']) {
       await auth(http().post('/api/grants')).send({
         roleId: adminUser.userRoles[0].roleId,
@@ -72,7 +70,6 @@ describe('Slice 7.4 — User scrub-in-place', () => {
     // A pending invitation this user issued — must be auto-revoked on scrub.
     const issued = await prisma.invitation.create({
       data: {
-        organizationId: orgId,
         tokenHash: randomUUID(),
         email: 'pending@example.com',
         createdBy: userId,

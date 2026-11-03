@@ -7,11 +7,8 @@ import {
   Patch,
   Post,
   Query,
-  Req,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { UnauthenticatedError } from '../common/errors';
 import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { TeamsService } from './teams.service';
@@ -21,55 +18,54 @@ import {
   type CreateTeamDto,
   type UpdateTeamDto,
 } from './teams.dto';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 @Controller('teams')
 export class TeamsController {
   constructor(private readonly teams: TeamsService) {}
 
+  @Contract(ROUTES.listTeams)
   @Get()
   @Authorize(ACTIONS.teamCreate.action, orgResource)
-  async list(@Query('include') include: string | undefined, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.teams.list(req.user.organizationId, include === 'retired');
+  async list(@Query('include') include: string | undefined) {
+    return this.teams.list(include === 'retired');
   }
 
+  @Contract(ROUTES.createTeam)
   @Post()
   @HttpCode(201)
   @Authorize(ACTIONS.teamCreate.action, orgResource)
   async create(
     @Body(new ZodValidationPipe(createTeamSchema)) body: CreateTeamDto,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.teams.create(req.user.organizationId, req.user.id, body);
+    return this.teams.create(user.id, body);
   }
 
+  @Contract(ROUTES.updateTeam)
   @Patch(':id')
   @Authorize(ACTIONS.teamUpdate.action, orgResource)
   async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateTeamSchema)) body: UpdateTeamDto,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.teams.update(id, req.user.id, body);
+    return this.teams.update(id, user.id, body);
   }
 
+  @Contract(ROUTES.retireTeam)
   @Post(':id/retire')
   @Authorize(ACTIONS.teamRetire.action, orgResource)
-  async retire(@Param('id') id: string, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.teams.retire(id, req.user.id);
+  async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.teams.retire(id, user.id);
   }
 
+  @Contract(ROUTES.reviveTeam)
   @Post(':id/revive')
   @Authorize(ACTIONS.teamRevive.action, orgResource)
-  async revive(@Param('id') id: string, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.teams.revive(id, req.user.id);
+  async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.teams.revive(id, user.id);
   }
 }

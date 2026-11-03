@@ -13,7 +13,6 @@ import type { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthMethod } from '@prisma/client';
 import { ENV, Env } from '../config/env';
-import { UnauthenticatedError } from '../common/errors';
 import { AuthService } from '../auth/auth.service';
 import { SessionService } from '../auth/session.service';
 import { setAuthCookies } from '../auth/cookies';
@@ -21,10 +20,9 @@ import { DiscordOAuthService } from '../auth/discord-oauth.service';
 import { verifyOAuthState } from '../auth/oauth-state';
 import { DiscordLinkService } from '../integrations/discord-link.service';
 import { DiscordAuthService } from './discord-auth.service';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { Public, CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -49,6 +47,8 @@ export class DiscordAuthController {
     return `${this.env.PUBLIC_BASE_URL.replace(/\/$/, '')}${path}`;
   }
 
+  @Public()
+  @Contract(ROUTES.discordLogin)
   @Get('login')
   async login(@Res() res: Response): Promise<void> {
     try {
@@ -58,6 +58,8 @@ export class DiscordAuthController {
     }
   }
 
+  @Public()
+  @Contract(ROUTES.discordRegister)
   @Get('register')
   async register(@Query('invite') invite: string | undefined, @Res() res: Response): Promise<void> {
     if (!invite) {
@@ -72,8 +74,10 @@ export class DiscordAuthController {
   }
 
   /** Authenticated "Connect Discord" — pins the acting user into the signed state. */
+  @Public()
+  @Contract(ROUTES.discordStartLink)
   @Get('link')
-  async startLink(@Req() req: AuthedRequest, @Res() res: Response): Promise<void> {
+  async startLink(@Req() req: Request, @Res() res: Response): Promise<void> {
     if (!req.user) {
       res.redirect(302, this.web('/login'));
       return;
@@ -86,16 +90,18 @@ export class DiscordAuthController {
   }
 
   /** Disconnect the acting user's Discord account (sign-in method + links). */
+  @Contract(ROUTES.discordUnlink)
   @Delete()
   @HttpCode(200)
-  async unlink(@Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.link.unlink(req.user.id);
-    return this.auth.getMe(req.user.id);
+  async unlink(@CurrentUser() user: CurrentUserRef) {
+    await this.link.unlink(user.id);
+    return this.auth.getMe(user.id);
   }
 
   // Token exchange + invite consumption happen here; cap volume per-IP.
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Public()
+  @Contract(ROUTES.discordCallback)
   @Get('callback')
   async callback(
     @Query('code') code: string | undefined,
@@ -138,8 +144,7 @@ export class DiscordAuthController {
       if (payload.intent === 'link' && payload.userId) {
         // The connect must finish under the same session that started it; the Lax
         // session cookie rides this top-level GET, so re-check the live user.
-        const authedReq = req as AuthedRequest;
-        if (!authedReq.user || authedReq.user.id !== payload.userId) {
+        if (!req.user || req.user.id !== payload.userId) {
           res.redirect(302, this.web('/account?error=discord_session'));
           return;
         }

@@ -51,14 +51,7 @@ interface RoleMapping {
               </td>
               <td>
                 @if (r.kind === 'standalone') {
-                  <!-- Standalone roles: editable color picker -->
-                  <div class="row" style="gap:4px;align-items:center;flex-wrap:nowrap">
-                    <input type="color" [value]="r.color ?? '#a7aba3'"
-                           (change)="saveColor(r, $event)" style="width:32px;height:26px;padding:2px;cursor:pointer" />
-                    @if (r.color) {
-                      <button class="secondary" style="padding:2px 6px;font-size:11px" (click)="clearColor(r)" title="Reset to auto">×</button>
-                    }
-                  </div>
+                  <span style="display:inline-block;width:26px;height:20px;border-radius:3px;background:#a7aba3"></span>
                 } @else {
                   <!-- Division/team roles: read-only inherited color swatch -->
                   <span class="inline-block w-6 h-4 rounded"
@@ -192,11 +185,11 @@ export class RolesAdminComponent {
   inheritedColor(r: Role): string {
     if (r.divisionId) {
       const d = this.divisions().find((d) => d.id === r.divisionId);
-      return d ? (d.color ?? computeDivColor(d.name)) : '#a7aba3';
+      return d ? computeDivColor(d.name) : '#a7aba3';
     }
     if (r.teamId) {
       const t = this.teams().find((t) => t.id === r.teamId);
-      return t ? (t.color ?? computeTeamColor(t.name)) : '#a7aba3';
+      return t ? computeTeamColor(t.name) : '#a7aba3';
     }
     return '#a7aba3';
   }
@@ -225,15 +218,6 @@ export class RolesAdminComponent {
     }
   }
 
-  async saveColor(r: Role, ev: Event): Promise<void> {
-    r.color = (ev.target as HTMLInputElement).value;
-    await this.guard(() => this.api.updateRole(r.id, { color: r.color }));
-  }
-
-  async clearColor(r: Role): Promise<void> {
-    r.color = null;
-    await this.guard(() => this.api.updateRole(r.id, { color: null }));
-  }
 
   async retire(r: Role): Promise<void> {
     await this.guard(() => this.api.retireRole(r.id));

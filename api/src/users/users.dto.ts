@@ -15,7 +15,7 @@ export const grantRoleSchema = z
   .strict();
 
 /**
- * PATCH /config — structured `organization.settings` editor. All flags optional;
+ * PATCH /config — typed `system_settings` editor. All flags optional;
  * `.strict()` rejects unknown keys. Defaults live in ConfigService.
  */
 export const updateConfigSchema = z

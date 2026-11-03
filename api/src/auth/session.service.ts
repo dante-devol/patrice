@@ -2,11 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuthMethod, Prisma } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { generateOpaqueToken, hashToken } from '../common/tokens';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_ABSOLUTE_DAYS = 30;
-const DEFAULT_IDLE_DAYS = 7;
 
 export const SESSION_COOKIE = 'patrice_session';
 export const CSRF_COOKIE = 'patrice_csrf';
@@ -15,7 +14,6 @@ export const CSRF_HEADER = 'x-csrf-token';
 export interface ResolvedSession {
   sessionId: string;
   userId: string;
-  organizationId: string;
 }
 
 interface SessionDurations {
@@ -26,7 +24,7 @@ interface SessionDurations {
 /**
  * Opaque session tokens. Only `sha256(pepper + token)` is stored; the plaintext
  * lives solely in the httpOnly cookie. Sessions carry an absolute and a sliding
- * (idle) expiry sourced from `organization.settings` (defaults: 30d / 7d). A
+ * (idle) expiry sourced from `system_settings` (defaults: 30d / 7d). A
  * paired CSRF token (double-submit) is minted alongside each session.
  */
 @Injectable()
@@ -34,23 +32,12 @@ export class SessionService {
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
   ) {}
 
   private async durations(): Promise<SessionDurations> {
-    const org = await this.prisma.organization.findFirstOrThrow({
-      select: { settings: true },
-    });
-    const settings = (org.settings ?? {}) as Record<string, unknown>;
-    return {
-      absoluteDays:
-        typeof settings.sessionAbsoluteDays === 'number'
-          ? settings.sessionAbsoluteDays
-          : DEFAULT_ABSOLUTE_DAYS,
-      idleDays:
-        typeof settings.sessionIdleDays === 'number'
-          ? settings.sessionIdleDays
-          : DEFAULT_IDLE_DAYS,
-    };
+    const s = await this.settings.get();
+    return { absoluteDays: s.sessionAbsoluteDays, idleDays: s.sessionIdleDays };
   }
 
   /** Create a session row and return the plaintext token + CSRF token to set as cookies. */
@@ -92,7 +79,7 @@ export class SessionService {
         revokedAt: true,
         absoluteExpiresAt: true,
         idleExpiresAt: true,
-        user: { select: { organizationId: true, lifecycleState: true } },
+        user: { select: { lifecycleState: true } },
       },
     });
     if (!session || session.revokedAt) return null;
@@ -111,7 +98,6 @@ export class SessionService {
     return {
       sessionId: session.id,
       userId: session.userId,
-      organizationId: session.user.organizationId,
     };
   }
 

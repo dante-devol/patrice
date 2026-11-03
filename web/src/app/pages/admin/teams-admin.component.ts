@@ -25,13 +25,8 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
             <tr [class.row--retired]="t.lifecycleState === 'retired'" [class.row--deactivated]="t.lifecycleState === 'deactivated'">
               <td><input [(ngModel)]="t.name" (blur)="save(t, { name: t.name })" /></td>
               <td>
-                <div class="row" style="gap:4px;align-items:center;flex-wrap:nowrap">
-                  <input type="color" [value]="t.color ?? computeColor(t)"
-                         (change)="saveColor(t, $event)" style="width:32px;height:26px;padding:2px;cursor:pointer" />
-                  @if (t.color) {
-                    <button class="secondary" style="padding:2px 6px;font-size:11px" (click)="clearColor(t)" title="Reset to auto">×</button>
-                  }
-                </div>
+                <span [style.background]="computeColor(t)" title="Computed from the name"
+                      style="display:inline-block;width:26px;height:20px;border-radius:3px"></span>
               </td>
               <td><input type="checkbox" [(ngModel)]="t.restrictClaims"
                          (change)="save(t, { restrictClaims: t.restrictClaims })" /></td>
@@ -60,14 +55,6 @@ export class TeamsAdminComponent {
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
   computeColor(t: Team): string { return computeTeamColor(t.name); }
 
-  async saveColor(t: Team, ev: Event): Promise<void> {
-    t.color = (ev.target as HTMLInputElement).value;
-    await this.save(t, { color: t.color });
-  }
-  async clearColor(t: Team): Promise<void> {
-    t.color = null;
-    await this.save(t, { color: null });
-  }
 
   constructor() {
     void this.refresh();

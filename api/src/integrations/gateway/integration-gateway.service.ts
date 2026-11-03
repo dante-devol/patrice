@@ -21,7 +21,6 @@ const INTENTS = (1 << 0) | (1 << 1);
 
 interface GatewaySession {
   connectionId: string;
-  organizationId: string;
   botToken: string;
   ws: WebSocket | null;
   ctx: GatewayContext;
@@ -75,7 +74,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
     if (!conn || conn.lifecycleState !== 'active') return;
     const botToken = await this.resolveToken(conn);
     if (!botToken) return;
-    this.startSession(connectionId, botToken, conn.organizationId);
+    this.startSession(connectionId, botToken);
   }
 
   closeSessionById(connectionId: string): void {
@@ -108,17 +107,16 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
         this.logger.warn(`No bot token resolved for connection ${conn.id} — skipping`);
         continue;
       }
-      this.startSession(conn.id, botToken, conn.organizationId);
+      this.startSession(conn.id, botToken);
     }
   }
 
-  private startSession(connectionId: string, botToken: string, organizationId: string): void {
+  private startSession(connectionId: string, botToken: string): void {
     if (this.sessions.has(connectionId)) {
       this.closeSessionById(connectionId);
     }
     const session: GatewaySession = {
       connectionId,
-      organizationId,
       botToken,
       ws: null,
       ctx: initialContext(),
@@ -313,7 +311,6 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
     if (!verb) return;
     void this.activity
       .logActivity({
-        organizationId: session.organizationId,
         actorUserId: null,
         subjectType: 'integration_connection',
         subjectId: session.connectionId,

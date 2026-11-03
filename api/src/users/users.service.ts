@@ -2,6 +2,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import { LifecycleState } from '@prisma/client';
 import { CedarEngine } from '../access/cedar/engine';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
@@ -37,17 +38,15 @@ export class UsersService {
     private readonly admin: AdministrabilityService,
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
+    private readonly settings: SettingsService,
     @Optional() private readonly sync: SyncService | null,
   ) {}
 
-  async list(organizationId: string, includeRetired = false): Promise<UserView[]> {
-    const [org, users] = await Promise.all([
-      this.prisma.organization.findUniqueOrThrow({
-        where: { id: organizationId },
-        select: { settings: true },
-      }),
+  async list(includeRetired = false): Promise<UserView[]> {
+    const [{ anonymizeLabel: anonymize }, users] = await Promise.all([
+      this.settings.get(),
       this.prisma.appUser.findMany({
-        where: { organizationId, ...activeFilter(includeRetired) },
+        where: { ...activeFilter(includeRetired) },
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
@@ -66,8 +65,6 @@ export class UsersService {
     ]);
     // anonymizeLabel (Slice 7.4): render a retired (scrubbed) user's stored display
     // name as "Former member" without mutating the tombstone label in the DB.
-    const anonymize =
-      (org.settings as Record<string, unknown>)?.anonymizeLabel === true;
     return users.map((u) => ({
       id: u.id,
       email: u.email,
@@ -84,12 +81,11 @@ export class UsersService {
     }));
   }
 
-  private async loadUser(organizationId: string, id: string) {
+  private async loadUser(id: string) {
     const user = await this.prisma.appUser.findFirst({
-      where: { id, organizationId },
+      where: { id },
       select: {
         id: true,
-        organizationId: true,
         lifecycleState: true,
         retiredAt: true,
       },
@@ -99,19 +95,17 @@ export class UsersService {
   }
 
   async update(
-    organizationId: string,
     id: string,
     actorUserId: string,
     dto: UpdateUserDto,
   ): Promise<{ id: string; displayName: string }> {
-    const user = await this.loadUser(organizationId, id);
+    const user = await this.loadUser(id);
     const updated = await this.prisma.appUser.update({
       where: { id: user.id },
       data: { displayName: dto.displayName, version: { increment: 1 } },
       select: { id: true, displayName: true },
     });
     await this.activity.logActivity({
-      organizationId,
       actorUserId,
       subjectType: 'user',
       subjectId: user.id,
@@ -122,14 +116,12 @@ export class UsersService {
   }
 
   async deactivate(
-    organizationId: string,
     id: string,
     actorUserId: string,
   ): Promise<void> {
-    const user = await this.loadUser(organizationId, id);
+    const user = await this.loadUser(id);
     if (user.lifecycleState === LifecycleState.deactivated) return;
     await this.admin.withAdminFloor(
-      organizationId,
       actorUserId,
       { type: 'user', id: user.id, path: 'user.deactivate' },
       async (tx) => {
@@ -143,24 +135,22 @@ export class UsersService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId,
           actorUserId,
           subjectType: 'user',
           subjectId: user.id,
           verb: 'user.deactivated',
           payload: { userId: user.id },
         });
-        await this.access.bumpConfigVersion(organizationId, tx);
+        await this.access.bumpConfigVersion(tx);
       },
     );
   }
 
   async reactivate(
-    organizationId: string,
     id: string,
     actorUserId: string,
   ): Promise<void> {
-    const user = await this.loadUser(organizationId, id);
+    const user = await this.loadUser(id);
     if (user.lifecycleState === LifecycleState.active) return;
     await this.prisma.$transaction(async (tx) => {
       await tx.appUser.update({
@@ -173,14 +163,13 @@ export class UsersService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'user',
         subjectId: user.id,
         verb: 'user.reactivated',
         payload: { userId: user.id },
       });
-      await this.access.bumpConfigVersion(organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
     });
   }
 
@@ -192,16 +181,14 @@ export class UsersService {
    * happens at scrub time (api/CONTEXT.md "Scrub-in-Place").
    */
   async retire(
-    organizationId: string,
     id: string,
     actorUserId: string,
   ): Promise<void> {
-    const user = await this.loadUser(organizationId, id);
+    const user = await this.loadUser(id);
     if (user.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('ALREADY_RETIRED', 'User is already retired');
     }
     await this.admin.withAdminFloor(
-      organizationId,
       actorUserId,
       { type: 'user', id: user.id, path: 'user.retire' },
       async (tx) => {
@@ -220,14 +207,13 @@ export class UsersService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId,
           actorUserId,
           subjectType: 'user',
           subjectId: user.id,
           verb: 'user.retired',
           payload: { userId: user.id },
         });
-        await this.access.bumpConfigVersion(organizationId, tx);
+        await this.access.bumpConfigVersion(tx);
       },
     );
   }
@@ -238,12 +224,11 @@ export class UsersService {
    * NOT_REVIVABLE`; the GC scrub is irreversible). Sessions stay revoked (re-login).
    */
   async revive(
-    organizationId: string,
     id: string,
     actorUserId: string,
   ): Promise<void> {
-    const user = await this.loadUser(organizationId, id);
-    const graceMs = await this.grace.windowMs(organizationId);
+    const user = await this.loadUser(id);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(user, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
@@ -261,14 +246,13 @@ export class UsersService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'user',
         subjectId: user.id,
         verb: 'user.revived',
         payload: { userId: user.id },
       });
-      await this.access.bumpConfigVersion(organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
     });
   }
 
@@ -299,14 +283,13 @@ export class UsersService {
   }
 
   async grantRole(
-    organizationId: string,
     targetUserId: string,
     roleId: string,
     actorUserId: string,
   ): Promise<void> {
-    const user = await this.loadUser(organizationId, targetUserId);
+    const user = await this.loadUser(targetUserId);
     const role = await this.prisma.role.findFirst({
-      where: { id: roleId, organizationId },
+      where: { id: roleId },
       select: { id: true },
     });
     if (!role) throw new NotFoundError('ROLE_NOT_FOUND', 'Role not found');
@@ -330,14 +313,13 @@ export class UsersService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId,
         actorUserId,
         subjectType: 'user',
         subjectId: user.id,
         verb: 'user_role.granted',
         payload: { userId: user.id, roleId },
       });
-      await this.access.bumpConfigVersion(organizationId, tx);
+      await this.access.bumpConfigVersion(tx);
     });
     // Targeted, debounced reconcile of just this user — pulses the grant to Discord
     // at the Doorbell's ~5s pace rather than waiting for the Reconcile Floor.
@@ -345,12 +327,11 @@ export class UsersService {
   }
 
   async revokeRole(
-    organizationId: string,
     targetUserId: string,
     roleId: string,
     actorUserId: string,
   ): Promise<void> {
-    const user = await this.loadUser(organizationId, targetUserId);
+    const user = await this.loadUser(targetUserId);
     await this.reauthorizeRoleScope(
       actorUserId,
       'user:revoke_role',
@@ -367,7 +348,6 @@ export class UsersService {
     }
 
     await this.admin.withAdminFloor(
-      organizationId,
       actorUserId,
       { type: 'user', id: user.id, path: 'user.revoke_role' },
       async (tx) => {
@@ -376,14 +356,13 @@ export class UsersService {
         });
         await this.activity.logActivity({
           tx,
-          organizationId,
           actorUserId,
           subjectType: 'user',
           subjectId: user.id,
           verb: 'user_role.revoked',
           payload: { userId: user.id, roleId },
         });
-        await this.access.bumpConfigVersion(organizationId, tx);
+        await this.access.bumpConfigVersion(tx);
       },
     );
     // Targeted, debounced reconcile of just this user — pushes the removal to Discord

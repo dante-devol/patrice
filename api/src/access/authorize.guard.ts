@@ -10,10 +10,6 @@ import { DeniedError, UnauthenticatedError } from '../common/errors';
 import { AccessService } from './access.service';
 import { AUTHORIZE_META, AuthorizeMeta } from './authorize.decorator';
 
-export interface AuthenticatedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
-
 /**
  * Route guard that enforces the declared `@Authorize(...)` action via the Cedar
  * engine. Routes without `@Authorize` are not gated here (auth/session concerns
@@ -35,7 +31,7 @@ export class AuthorizeGuard implements CanActivate {
     );
     if (!meta) return true; // route is not access-gated
 
-    const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const req = context.switchToHttp().getRequest<Request>();
     if (!req.user) {
       throw new UnauthenticatedError();
     }

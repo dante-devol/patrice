@@ -13,7 +13,7 @@ export interface RevivableRow {
 /**
  * Whether a retired row is still within its grace window and may be revived.
  * `graceMs` is the window in milliseconds (resolved per-org from
- * `organization.settings.gracePeriodHours`; see {@link GraceService}).
+ * `system_settings.grace_period_hours`; see {@link GraceService}).
  */
 export function isRevivable(row: RevivableRow, graceMs: number): boolean {
   if (row.lifecycleState !== 'retired' || row.retiredAt == null) return false;

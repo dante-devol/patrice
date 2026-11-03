@@ -156,7 +156,6 @@ describe('Slice 6 — Notifications', () => {
     const svc = app.get(NotificationsService);
     const subjectId = (await prisma.task.findFirstOrThrow({ select: { id: true } })).id;
     const event = {
-      organizationId: (await prisma.organization.findFirstOrThrow()).id,
       type: 'task.completed' as const,
       subjectType: 'idem-test',
       subjectId,

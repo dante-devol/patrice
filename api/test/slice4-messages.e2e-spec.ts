@@ -163,25 +163,23 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
     });
 
     it('CHECK rejects an attachment owning both message and answer', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const uploader = (await prisma.appUser.findFirstOrThrow()).id;
       await expect(
         prisma.$executeRawUnsafe(
-          `INSERT INTO attachment (organization_id, message_id, answer_id, uploader_user_id, storage_key, filename, content_type, byte_size)
-           VALUES ($1::uuid, $2::uuid, gen_random_uuid(), $3::uuid, 'k', 'f', 'text/plain', 1)`,
-          orgId, messageId, uploader,
+          `INSERT INTO attachment (message_id, answer_id, uploader_user_id, storage_key, filename, content_type, byte_size)
+           VALUES ($1::uuid, gen_random_uuid(), $2::uuid, 'k', 'f', 'text/plain', 1)`,
+          messageId, uploader,
         ),
       ).rejects.toThrow();
     });
 
     it('CHECK rejects an attachment owning neither', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const uploader = (await prisma.appUser.findFirstOrThrow()).id;
       await expect(
         prisma.$executeRawUnsafe(
-          `INSERT INTO attachment (organization_id, uploader_user_id, storage_key, filename, content_type, byte_size)
-           VALUES ($1::uuid, $2::uuid, 'k', 'f', 'text/plain', 1)`,
-          orgId, uploader,
+          `INSERT INTO attachment (uploader_user_id, storage_key, filename, content_type, byte_size)
+           VALUES ($1::uuid, 'k', 'f', 'text/plain', 1)`,
+          uploader,
         ),
       ).rejects.toThrow();
     });

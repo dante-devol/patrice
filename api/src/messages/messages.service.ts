@@ -91,7 +91,7 @@ export class MessagesService {
   private async loadActiveTask(taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, organizationId: true, lifecycleState: true },
+      select: { id: true, lifecycleState: true },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
     if (task.lifecycleState === LifecycleState.retired) {
@@ -105,7 +105,7 @@ export class MessagesService {
     actorUserId: string,
     dto: CreateMessageDto,
   ): Promise<MessageView> {
-    const task = await this.loadActiveTask(taskId);
+    await this.loadActiveTask(taskId);
 
     let parent: { id: string; submissionId: string | null } | null = null;
     if (dto.parentMessageId) {
@@ -140,7 +140,6 @@ export class MessagesService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: task.organizationId,
         actorUserId,
         subjectType: 'message',
         subjectId: message.id,
@@ -152,7 +151,6 @@ export class MessagesService {
         },
       });
       notified = await this.notifyMessage(tx, {
-        organizationId: task.organizationId,
         taskId,
         messageId: message.id,
         actorUserId,
@@ -177,7 +175,6 @@ export class MessagesService {
   private async notifyMessage(
     tx: Prisma.TransactionClient,
     ctx: {
-      organizationId: string;
       taskId: string;
       messageId: string;
       actorUserId: string;
@@ -185,7 +182,6 @@ export class MessagesService {
     },
   ): Promise<string[]> {
     const base = {
-      organizationId: ctx.organizationId,
       subjectType: 'message',
       subjectId: ctx.messageId,
       senderUserId: ctx.actorUserId,
@@ -287,7 +283,7 @@ export class MessagesService {
   ): Promise<MessageView> {
     const message = await this.prisma.message.findUnique({
       where: { id },
-      select: { id: true, taskId: true, lifecycleState: true, task: { select: { organizationId: true } } },
+      select: { id: true, taskId: true, lifecycleState: true, task: { select: { id: true } } },
     });
     if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
     if (message.lifecycleState === LifecycleState.retired) {
@@ -302,7 +298,6 @@ export class MessagesService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: message.task.organizationId,
         actorUserId,
         subjectType: 'message',
         subjectId: id,
@@ -317,7 +312,7 @@ export class MessagesService {
   async retire(id: string, actorUserId: string): Promise<MessageView> {
     const message = await this.prisma.message.findUnique({
       where: { id },
-      select: { id: true, taskId: true, lifecycleState: true, task: { select: { organizationId: true } } },
+      select: { id: true, taskId: true, lifecycleState: true, task: { select: { id: true } } },
     });
     if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
     if (message.lifecycleState === LifecycleState.retired) {
@@ -336,7 +331,6 @@ export class MessagesService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: message.task.organizationId,
         actorUserId,
         subjectType: 'message',
         subjectId: id,
@@ -360,11 +354,11 @@ export class MessagesService {
         taskId: true,
         lifecycleState: true,
         retiredAt: true,
-        task: { select: { organizationId: true } },
+        task: { select: { id: true } },
       },
     });
     if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-    const graceMs = await this.grace.windowMs(message.task.organizationId);
+    const graceMs = await this.grace.windowMs();
     if (!isRevivable(message, graceMs)) {
       throw new ConflictError(
         'NOT_REVIVABLE',
@@ -384,7 +378,6 @@ export class MessagesService {
       });
       await this.activity.logActivity({
         tx,
-        organizationId: message.task.organizationId,
         actorUserId,
         subjectType: 'message',
         subjectId: id,

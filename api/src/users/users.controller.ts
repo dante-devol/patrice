@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { NotFoundError, UnauthenticatedError } from '../common/errors';
+import { NotFoundError } from '../common/errors';
 import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { CedarEngine } from '../access/cedar/engine';
@@ -24,10 +24,9 @@ import {
   type GrantRoleDto,
   type UpdateUserDto,
 } from './users.dto';
-
-interface AuthedRequest extends Request {
-  user?: { id: string; organizationId: string };
-}
+import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
+import { Contract } from '../contract/contract.decorator';
+import { ROUTES } from '../contract/routes';
 
 /**
  * Resolve the target User as a Cedar resource, carrying the **real** `retired` state so
@@ -78,56 +77,57 @@ function userWithTargetRole(roleId: string) {
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
+  @Contract(ROUTES.listUsers)
   @Get()
   @Authorize(ACTIONS.userUpdate.action, orgResource)
-  async list(@Query('include') include: string | undefined, @Req() req: AuthedRequest) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.users.list(req.user.organizationId, include === 'retired');
+  async list(@Query('include') include: string | undefined) {
+    return this.users.list(include === 'retired');
   }
 
+  @Contract(ROUTES.updateUser)
   @Patch(':id')
   @Authorize(ACTIONS.userUpdate.action, targetUser)
   async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateUserSchema)) body: UpdateUserDto,
-    @Req() req: AuthedRequest,
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    if (!req.user) throw new UnauthenticatedError();
-    return this.users.update(req.user.organizationId, id, req.user.id, body);
+    return this.users.update(id, user.id, body);
   }
 
+  @Contract(ROUTES.deactivateUser)
   @Post(':id/deactivate')
   @HttpCode(204)
   @Authorize(ACTIONS.userDeactivate.action, targetUser)
-  async deactivate(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.users.deactivate(req.user.organizationId, id, req.user.id);
+  async deactivate(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.users.deactivate(id, user.id);
   }
 
+  @Contract(ROUTES.reactivateUser)
   @Post(':id/reactivate')
   @HttpCode(204)
   @Authorize(ACTIONS.userReactivate.action, targetUser)
-  async reactivate(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.users.reactivate(req.user.organizationId, id, req.user.id);
+  async reactivate(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.users.reactivate(id, user.id);
   }
 
+  @Contract(ROUTES.retireUser)
   @Post(':id/retire')
   @HttpCode(204)
   @Authorize(ACTIONS.userRetire.action, targetUser)
-  async retire(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.users.retire(req.user.organizationId, id, req.user.id);
+  async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.users.retire(id, user.id);
   }
 
+  @Contract(ROUTES.reviveUser)
   @Post(':id/revive')
   @HttpCode(204)
   @Authorize(ACTIONS.userRevive.action, reviveUser)
-  async revive(@Param('id') id: string, @Req() req: AuthedRequest): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.users.revive(req.user.organizationId, id, req.user.id);
+  async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.users.revive(id, user.id);
   }
 
+  @Contract(ROUTES.grantUserRole)
   @Post(':id/roles')
   @HttpCode(204)
   // Scope check at the boundary: the actor must hold user:grant_role covering the
@@ -138,12 +138,13 @@ export class UsersController {
   async grantRole(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(grantRoleSchema)) body: GrantRoleDto,
-    @Req() req: AuthedRequest,
+    @Req() req: Request,
+    @CurrentUser() user: CurrentUserRef,
   ): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.users.grantRole(req.user.organizationId, id, body.roleId, req.user.id);
+    await this.users.grantRole(id, body.roleId, user.id);
   }
 
+  @Contract(ROUTES.revokeUserRole)
   @Delete(':id/roles/:roleId')
   @HttpCode(204)
   @Authorize(ACTIONS.userRevokeRole.action, (req) =>
@@ -152,9 +153,9 @@ export class UsersController {
   async revokeRole(
     @Param('id') id: string,
     @Param('roleId') roleId: string,
-    @Req() req: AuthedRequest,
+    @Req() req: Request,
+    @CurrentUser() user: CurrentUserRef,
   ): Promise<void> {
-    if (!req.user) throw new UnauthenticatedError();
-    await this.users.revokeRole(req.user.organizationId, id, roleId, req.user.id);
+    await this.users.revokeRole(id, roleId, user.id);
   }
 }

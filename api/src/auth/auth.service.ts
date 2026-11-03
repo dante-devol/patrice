@@ -3,7 +3,8 @@ import { AuthMethod, AuthProvider } from '@prisma/client';
 import { discordAvatarUrl } from '../common/discord-avatar';
 import { PrismaService } from '../prisma/prisma.service';
 import { DeniedError, UnauthenticatedError } from '../common/errors';
-import { AccessService } from '../access/access.service';
+import { AccessService, ORGANIZATION_RESOURCE } from '../access/access.service';
+import { SettingsService } from '../settings/settings.service';
 import { ACTIONS } from '../access/actions';
 import { PasswordService } from './password';
 
@@ -21,7 +22,6 @@ export interface UserCapabilities {
 
 export interface AuthenticatedUser {
   id: string;
-  organizationId: string;
   email: string | null;
   displayName: string;
   emailVerified: boolean;
@@ -38,7 +38,7 @@ export interface AuthenticatedUser {
 
 /**
  * Email+password authentication. Login verifies the password identity and, when
- * `organization.settings.requireVerifiedEmailToLogIn` is on, rejects unverified
+ * `system_settings.require_verified_email_to_log_in` is on, rejects unverified
  * identities with a *distinct* error so the client can route to "resend verification".
  */
 @Injectable()
@@ -47,6 +47,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
     private readonly access: AccessService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Verify credentials; throws 401 on failure, 403 EMAIL_NOT_VERIFIED when gated. */
@@ -55,7 +56,6 @@ export class AuthService {
       where: { email, lifecycleState: 'active' },
       select: {
         id: true,
-        organizationId: true,
         identities: {
           where: { provider: AuthProvider.password },
           select: { passwordHash: true, verifiedAt: true },
@@ -78,21 +78,12 @@ export class AuthService {
       throw new UnauthenticatedError('INVALID_CREDENTIALS', 'Invalid email or password');
     }
 
-    if (await this.requireVerifiedLogin(user.organizationId)) {
+    if ((await this.settings.get()).requireVerifiedEmailToLogIn) {
       if (!identity.verifiedAt) {
         throw new DeniedError('EMAIL_NOT_VERIFIED', 'Email address is not verified');
       }
     }
     return { userId: user.id };
-  }
-
-  private async requireVerifiedLogin(organizationId: string): Promise<boolean> {
-    const org = await this.prisma.organization.findUniqueOrThrow({
-      where: { id: organizationId },
-      select: { settings: true },
-    });
-    const settings = (org.settings ?? {}) as Record<string, unknown>;
-    return settings.requireVerifiedEmailToLogIn === true;
   }
 
   /** Load the current-user projection for `GET /me`. */
@@ -101,7 +92,6 @@ export class AuthService {
       where: { id: userId },
       select: {
         id: true,
-        organizationId: true,
         email: true,
         displayName: true,
         identities: {
@@ -114,10 +104,7 @@ export class AuthService {
     // Reflect the user's UI-relevant capabilities by asking the access engine the
     // same questions the guards will ask. invite:create is a global action, so the
     // organization is the resource.
-    const orgResource = {
-      type: 'Organization' as const,
-      id: user.organizationId,
-    };
+    const orgResource = ORGANIZATION_RESOURCE;
     const [inviteCreate, manageOrg, avatarLink] = await Promise.all([
       this.access.decide({
         userId: user.id,
@@ -146,7 +133,6 @@ export class AuthService {
 
     return {
       id: user.id,
-      organizationId: user.organizationId,
       email: user.email,
       displayName: user.displayName,
       // An OAuth-only user (no password identity) has nothing to verify — don't nag.

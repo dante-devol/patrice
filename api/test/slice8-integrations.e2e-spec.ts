@@ -369,7 +369,6 @@ describe('Slice 8 — Integrations', () => {
     it('POST /integrations/:id/sync on retired connection → 404', async () => {
       const conn = await prisma.integrationConnection.create({
         data: {
-          organizationId: (await prisma.organization.findFirstOrThrow()).id,
           provider: 'discord',
           externalWorkspaceId: 'retired-guild',
           displayName: 'Gone Guild',
@@ -425,10 +424,8 @@ describe('Slice 8 — Integrations', () => {
     });
 
     it('retired-past-grace connection with no refs is GC-collected', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const conn = await prisma.integrationConnection.create({
         data: {
-          organizationId: orgId,
           provider: 'discord',
           externalWorkspaceId: 'gc-test-guild',
           displayName: 'GC Target',
@@ -448,10 +445,8 @@ describe('Slice 8 — Integrations', () => {
     });
 
     it('dry-run reports collectable connections', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const conn = await prisma.integrationConnection.create({
         data: {
-          organizationId: orgId,
           provider: 'discord',
           externalWorkspaceId: 'dry-run-guild',
           displayName: 'Dry Run Target',
@@ -469,10 +464,8 @@ describe('Slice 8 — Integrations', () => {
     });
 
     it('connection with live external_identity blocked from GC', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const conn = await prisma.integrationConnection.create({
         data: {
-          organizationId: orgId,
           provider: 'discord',
           externalWorkspaceId: 'referenced-guild',
           displayName: 'Referenced Guild',
@@ -515,10 +508,8 @@ describe('Slice 8 — Integrations', () => {
     });
 
     it('login succeeds when connection is broken', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const broken = await prisma.integrationConnection.create({
         data: {
-          organizationId: orgId,
           provider: 'discord',
           externalWorkspaceId: 'broken-guild',
           displayName: 'Broken',
@@ -680,13 +671,11 @@ describe('Slice 8 — Integrations', () => {
     });
 
     it('Native-Authority Carve-Out: cannot map a governance role', async () => {
-      const orgId = (await prisma.organization.findFirstOrThrow()).id;
       const roleRes = await auth(http().post('/api/roles')).send({ name: 'Governance Role' });
       const govRoleId = roleRes.body.id as string;
       // Make it a governance role: a global permit grant on an effective-admin action.
       await prisma.grant.create({
         data: {
-          organizationId: orgId,
           roleId: govRoleId,
           action: 'role:create',
           effect: 'permit',

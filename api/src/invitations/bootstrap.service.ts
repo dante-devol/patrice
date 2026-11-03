@@ -8,13 +8,13 @@ import { createHash } from 'node:crypto';
 import { GrantEffect, RoleKind, ScopeKind } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ADMIN_SEED_ACTIONS } from '../access/actions';
 import { generateInviteToken, generateOpaqueToken, hashToken } from '../common/tokens';
 import { PROCESS_ROLE, isApiRole, type ProcessRoleValue } from '../common/process-role';
 
 const ADMIN_ROLE_NAME = 'Admin';
-const ORG_NAME = 'Patrice';
 const BOOTSTRAP_EXPIRY_MS = 365 * 24 * 60 * 60 * 1000; // long-lived; gated by passcode
 
 export interface BootstrapStatus {
@@ -26,7 +26,7 @@ export interface BootstrapStatus {
 /**
  * Boot-time seeding + bootstrap mode.
  *
- * On boot: ensure the singleton org, the seeded **Admin** role, and its global
+ * On boot: ensure the settings row, the seeded **Admin** role, and its global
  * grants exist (idempotent). Then, if there is **no effective admin**, mint a
  * fresh ephemeral **bootstrap key** (printed to stdout, never persisted) and ensure
  * a single passcode-gated system invitation. A restart while unbootstrapped rotates
@@ -43,33 +43,28 @@ export class BootstrapService implements OnApplicationBootstrap {
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly admin: AdministrabilityService,
+    private readonly settings: SettingsService,
     @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     if (!isApiRole(this.processRole)) return;
-    const org = await this.ensureSeed();
-    await this.refreshBootstrap(org.id);
+    await this.ensureSeed();
+    await this.refreshBootstrap();
   }
 
-  /** Ensure org + Admin role + Admin grants exist. Returns the org. */
-  private async ensureSeed(): Promise<{ id: string }> {
-    return this.prisma.$transaction(async (tx) => {
-      let org = await tx.organization.findFirst({ select: { id: true } });
-      if (!org) {
-        org = await tx.organization.create({
-          data: { name: ORG_NAME, singleton: 0 },
-          select: { id: true },
-        });
-      }
+  /** Ensure the settings row, the Admin role and its grants exist. */
+  private async ensureSeed(): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.settings.ensureRow(tx);
 
       let adminRole = await tx.role.findFirst({
-        where: { organizationId: org.id, kind: RoleKind.standalone, name: ADMIN_ROLE_NAME },
+        where: { kind: RoleKind.standalone, name: ADMIN_ROLE_NAME },
         select: { id: true },
       });
       if (!adminRole) {
         adminRole = await tx.role.create({
-          data: { organizationId: org.id, name: ADMIN_ROLE_NAME, kind: RoleKind.standalone },
+          data: { name: ADMIN_ROLE_NAME, kind: RoleKind.standalone },
           select: { id: true },
         });
       }
@@ -83,7 +78,6 @@ export class BootstrapService implements OnApplicationBootstrap {
       if (missing.length > 0) {
         await tx.grant.createMany({
           data: missing.map((action) => ({
-            organizationId: org!.id,
             roleId: adminRole!.id,
             action,
             effect: GrantEffect.permit,
@@ -91,22 +85,21 @@ export class BootstrapService implements OnApplicationBootstrap {
           })),
         });
       }
-      return { id: org.id };
     });
   }
 
   /** Mint/rotate or close the bootstrap system invite based on effective-admin presence. */
-  private async refreshBootstrap(organizationId: string): Promise<void> {
-    const hasAdmin = await this.admin.effectiveAdminExists(organizationId);
+  private async refreshBootstrap(): Promise<void> {
+    const hasAdmin = await this.admin.effectiveAdminExists();
     if (hasAdmin) {
-      await this.closeBootstrap(organizationId);
+      await this.closeBootstrap();
       this.liveInviteToken = null;
       this.logger.log('Effective admin present — bootstrap mode closed.');
       return;
     }
 
     const adminRole = await this.prisma.role.findFirstOrThrow({
-      where: { organizationId, kind: RoleKind.standalone, name: ADMIN_ROLE_NAME },
+      where: { kind: RoleKind.standalone, name: ADMIN_ROLE_NAME },
       select: { id: true },
     });
 
@@ -115,7 +108,7 @@ export class BootstrapService implements OnApplicationBootstrap {
     const expiresAt = new Date(Date.now() + BOOTSTRAP_EXPIRY_MS);
 
     const existing = await this.prisma.invitation.findFirst({
-      where: { organizationId, createdBy: null, revokedAt: null },
+      where: { createdBy: null, revokedAt: null },
       select: { id: true },
     });
 
@@ -135,7 +128,6 @@ export class BootstrapService implements OnApplicationBootstrap {
       const token = generateInviteToken();
       await this.prisma.invitation.create({
         data: {
-          organizationId,
           tokenHash: hashToken(this.env.TOKEN_PEPPER, token),
           intendedRoleIds: [adminRole.id],
           passcodeHash,
@@ -151,9 +143,9 @@ export class BootstrapService implements OnApplicationBootstrap {
   }
 
   /** Revoke any lingering system invitation. */
-  private async closeBootstrap(organizationId: string): Promise<void> {
+  private async closeBootstrap(): Promise<void> {
     await this.prisma.invitation.updateMany({
-      where: { organizationId, createdBy: null, revokedAt: null },
+      where: { createdBy: null, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
@@ -174,9 +166,7 @@ export class BootstrapService implements OnApplicationBootstrap {
 
   /** Public status for the web Setup page. */
   async getStatus(): Promise<BootstrapStatus> {
-    const org = await this.prisma.organization.findFirst({ select: { id: true } });
-    if (!org) return { open: false, inviteToken: null };
-    const hasAdmin = await this.admin.effectiveAdminExists(org.id);
+    const hasAdmin = await this.admin.effectiveAdminExists();
     return {
       open: !hasAdmin,
       inviteToken: hasAdmin ? null : this.liveInviteToken,

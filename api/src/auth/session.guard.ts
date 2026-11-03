@@ -11,11 +11,6 @@ import { safeEqualHex } from '../common/tokens';
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-interface CookieRequest extends Request {
-  user?: { id: string; organizationId: string };
-  sessionId?: string;
-}
-
 /**
  * Global session resolver. Attaches `req.user` when a valid session cookie is
  * present (identity only — permissions come from the access engine per request).
@@ -30,12 +25,12 @@ export class SessionGuard implements CanActivate {
   constructor(private readonly sessions: SessionService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<CookieRequest>();
+    const req = context.switchToHttp().getRequest<Request>();
     const token = req.cookies?.[SESSION_COOKIE];
     if (token) {
       const resolved = await this.sessions.resolve(token);
       if (resolved) {
-        req.user = { id: resolved.userId, organizationId: resolved.organizationId };
+        req.user = { id: resolved.userId };
         req.sessionId = resolved.sessionId;
 
         if (MUTATING.has(req.method)) {
@@ -46,7 +41,7 @@ export class SessionGuard implements CanActivate {
     return true;
   }
 
-  private enforceCsrf(req: CookieRequest): void {
+  private enforceCsrf(req: Request): void {
     const cookieToken = req.cookies?.[CSRF_COOKIE];
     const headerToken = req.header(CSRF_HEADER);
     const ok =
