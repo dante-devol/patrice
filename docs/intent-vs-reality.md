@@ -4,7 +4,7 @@
 >
 > **The old docs are evidence of intent, not the source of truth.** Where intent and code disagree, neither side wins automatically. Small gaps are classified below. **Wide gaps were taken to the project owner**, and the resulting direction decisions are recorded in §1.
 >
-> Snapshot: `main` at `c322ae2`; decisions taken 2026-11-02.
+> Snapshot: `main` at `c322ae2`; decisions taken 2026-11-02. The implementation plan that follows from them is [redesign-plan.md](redesign-plan.md).
 
 ---
 

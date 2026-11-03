@@ -4,7 +4,7 @@
 >
 > It is based on a full read of `api/` (source, DTOs, migrations, scripts). Code comments were used as evidence of intent. The old design documents were not.
 >
-> Snapshot: `main` at `c322ae2` (November 2026). **Revised 2026-11-02** after comparing against the old design docs ([intent-vs-reality.md](intent-vs-reality.md)). Rows the comparison changed are marked *(revised)*, and owner direction decisions are marked **Decided:**. A requirements session the same day settled further rows (§6 of that document); D12 and G11 were added for decisions it surfaced.
+> Snapshot: `main` at `c322ae2` (November 2026). **Revised 2026-11-02** after comparing against the old design docs ([intent-vs-reality.md](intent-vs-reality.md)). Rows the comparison changed are marked *(revised)*, and owner direction decisions are marked **Decided:**. A requirements session the same day settled further rows (§6 of that document); D12 and G11 were added for decisions it surfaced. The fixes are scheduled in [redesign-plan.md](redesign-plan.md).
 
 ---
 
