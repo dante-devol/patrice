@@ -35,49 +35,70 @@ const NS = CEDAR_NAMESPACE;
 
 /**
  * Owner relation per action for the `own` scope (the "Own Family"). The resource
- * carries an attribute naming its owner; the projector picks the right one. Empty
- * in Slice 1 (no own-scoped actions yet) — populated as task/message/attachment
- * actions arrive (Slices 4–5).
+ * carries an attribute naming its owner; the projector picks the right one.
  */
 const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
-  // Slice 4.1 — requester own-family (own_as_requester).
+  // The requester runs their task.
   'task:update': 'requester',
   'task:retire': 'requester',
   'task:revive': 'requester',
   'task:configure_request_template': 'requester',
-  // Slice 4.2 — the requester manages claims / reassigns the requester.
   'task:manage_claims': 'requester',
   'task:change_requester': 'requester',
-  // Slice 4.3 — sender own-family (own_as_sender) + uploader (own_as_uploader).
-  'message:create': 'sender',
-  'message:update': 'sender',
-  'message:retire': 'sender',
-  'attachment:create': 'uploader',
-  'attachment:retire': 'uploader',
-  'attachment:revive': 'uploader',
-  // Slice 5 — submission lifecycle. submit is the claimant own-family; review /
-  // retire_submission / complete are requester own-family (own_as_requester).
-  'task:submit': 'claimant',
   'task:review': 'requester',
   'task:retire_submission': 'requester',
   'task:complete': 'requester',
+  // Senders and uploaders manage what they posted; attaching goes on your own message.
+  'message:update': 'sender',
+  'message:retire': 'sender',
+  'message:revive': 'sender',
+  'attachment:create': 'sender',
+  'attachment:retire': 'uploader',
+  'attachment:revive': 'uploader',
+  'session:revoke': 'owner',
 };
 
 /**
- * Claim Eligibility AND-Composition (api/CONTEXT.md): the `own_as_claimant` clause
- * the `task:assign` permit carries. A principal may claim iff — for each of division
- * and team — that group does NOT restrict claims, OR the principal is a member of it
- * (its inherent role, surfaced as `memberDivisions`/`memberTeams`). Each side is
- * independently `has`-guarded so the clause type-checks under strict validation and a
- * teamless task (teamRestrictsClaims=false) never dereferences `resource.team`.
+ * Claim Eligibility AND-Composition (api/CONTEXT.md): for each of division and team,
+ * that unit doesn't restrict claims, OR the principal is a member of it. Each side is
+ * `has`-guarded so a teamless task never dereferences `resource.team`.
  */
-const CLAIM_ELIGIBILITY_WHEN =
-  ' when { ' +
+const ELIGIBLE =
   '(!(resource has divisionRestrictsClaims && resource.divisionRestrictsClaims) ' +
   '|| (resource has division && principal.memberDivisions.contains(resource.division))) ' +
   '&& ' +
   '(!(resource has teamRestrictsClaims && resource.teamRestrictsClaims) ' +
-  '|| (resource has team && principal.memberTeams.contains(resource.team))) }';
+  '|| (resource has team && principal.memberTeams.contains(resource.team)))';
+
+/** Holds a seat on the task. */
+const SEATED = 'resource has claimants && resource.claimants.contains(principal)';
+
+/**
+ * Can see the task: requested it, holds a seat on it, or could claim it. A restricted
+ * division therefore hides its tasks from non-members as well as blocking claims.
+ */
+const VISIBLE = `(resource has requester && resource.requester == principal) || (${SEATED}) || (${ELIGIBLE})`;
+
+/** `own` conditions that aren't a plain owner attribute. */
+const OWN_WHEN_BY_ACTION: Readonly<Record<string, string>> = {
+  'task:read': VISIBLE,
+  'message:read': VISIBLE,
+  'submission:read': VISIBLE,
+  'attachment:read': VISIBLE,
+  'message:create': VISIBLE,
+  // Claiming is *becoming* a claimant, so `own` is eligibility, not ownership.
+  'task:assign': ELIGIBLE,
+  'task:leave': SEATED,
+  'task:submit': SEATED,
+};
+
+/** Actions whose `own` scope means "yourself" (the resource is a User). */
+const OWN_SELF_ACTIONS = new Set(['user:read', 'user:update']);
+
+/** Whether `own` scope means something for this action. */
+export function supportsOwnScope(action: string): boolean {
+  return action in OWN_ATTR_BY_ACTION || action in OWN_WHEN_BY_ACTION || OWN_SELF_ACTIONS.has(action);
+}
 
 function roleRef(roleId: string): string {
   return `${NS}::Role::"${roleId}"`;
@@ -114,12 +135,9 @@ function scopeCondition(g: ProjectableGrant): string {
         g.scopeRoleId ?? '',
       )} }`;
     case 'own': {
-      // task:assign is the claimant own-family, but claiming is *becoming* a
-      // claimant — so its `own` clause is the eligibility AND-composition, not a
-      // `resource.claimant == principal` ownership check.
-      if (g.action === 'task:assign') {
-        return CLAIM_ELIGIBILITY_WHEN;
-      }
+      const when = OWN_WHEN_BY_ACTION[g.action];
+      if (when) return ` when { ${when} }`;
+      if (OWN_SELF_ACTIONS.has(g.action)) return ' when { resource == principal }';
       const attr = OWN_ATTR_BY_ACTION[g.action];
       if (!attr) {
         throw new Error(
@@ -144,30 +162,29 @@ export function grantToPolicy(g: ProjectableGrant): string {
 }
 
 export interface StaticPolicyOptions {
-  /** When false, the self-review forbid is present (Slice 5; no-op in Slice 1). */
+  /** When false, the self-review forbid is present. */
   selfReviewAllowed: boolean;
   /** Action strings present in the registry — gates conditional policies. */
   registeredActions: readonly string[];
+  /** Task-access actions the `requireDiscordLink` gate covers. */
+  discordGatedActions: readonly string[];
 }
 
-/** The static + conditional-static policies (independent of grant rows). */
+/**
+ * The static policies (independent of grant rows). Lifecycle ("is it retired?") is
+ * not here: aggregates refuse operations on retired entities, and Cedar decides *who*.
+ */
 export function staticPolicies(opts: StaticPolicyOptions): string[] {
   const policies: string[] = [];
 
-  // Retired-as-Hard-Deny: deny any action on a retired target. `has` guards the
-  // heterogeneous resource model. deny-overrides-permit makes this load-bearing.
+  // Baseline self-access: a user may always see and update themselves, whatever
+  // their roles, so a retired or empty role can never lock anyone out of their account.
   policies.push(
-    `@id("static_retired_hard_deny")\n` +
-      `forbid(principal, action, resource) when { resource has retired && resource.retired };`,
-  );
-
-  // Baseline Self-Access: a user may always update themselves, independent of any
-  // role — a retired/inert role can never lock a user out of their own account.
-  policies.push(
-    `@id("static_baseline_self_access")\n` +
-      `permit(principal, action == ${actionRef(
-        'user:update',
-      )}, resource) when { principal == resource };`,
+    `@id("static_baseline_self_access")
+` +
+      `permit(principal, action in [${actionRef('user:update')}, ${actionRef(
+        'user:read',
+      )}], resource) when { principal == resource };`,
   );
 
   // Baseline own-session control: a user may always end their own sessions (logout,
@@ -181,16 +198,28 @@ export function staticPolicies(opts: StaticPolicyOptions): string[] {
       )}, resource) when { resource has owner && resource.owner == principal };`,
   );
 
-  // Self-review forbid (Slice 5): when self-review is disabled, a requester may not
-  // review a submission they authored. The `task:review` resource carries `claimant`
-  // (the reviewed submission's author), so the forbid fires exactly when the reviewer
-  // is that claimant — never blocking review of *other* claimants' submissions.
+  // Self-review forbid: when self-review is disabled, a requester may not review a
+  // submission they authored. The `task:review` resource carries `claimant` (the
+  // reviewed submission's author), so the forbid fires only on their own work.
   if (!opts.selfReviewAllowed && opts.registeredActions.includes('task:review')) {
     policies.push(
-      `@id("static_self_review_forbid")\n` +
+      `@id("static_self_review_forbid")
+` +
         `forbid(principal, action == ${actionRef(
           'task:review',
         )}, resource) when { resource has claimant && resource.claimant == principal };`,
+    );
+  }
+
+  // requireDiscordLink: a principal the gate applies to (setting on, not linked to
+  // every active Discord connection, not exempt) can't touch tasks. The principal
+  // entity carries the computed `discordGated` flag (see AccessService).
+  if (opts.discordGatedActions.length > 0) {
+    policies.push(
+      `@id("static_discord_gate")
+` +
+        `forbid(principal, action in [${opts.discordGatedActions.map(actionRef).join(', ')}], resource) ` +
+        `when { principal has discordGated && principal.discordGated };`,
     );
   }
 

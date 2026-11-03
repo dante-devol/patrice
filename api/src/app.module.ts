@@ -19,6 +19,7 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { RolesModule } from './roles/roles.module';
 import { DivisionsModule } from './divisions/divisions.module';
 import { TeamsModule } from './teams/teams.module';
+import { MembershipModule } from './membership/membership.module';
 import { GrantsModule } from './grants/grants.module';
 import { UsersModule } from './users/users.module';
 import { RequestTemplatesModule } from './request-templates/request-templates.module';
@@ -59,6 +60,7 @@ import { ContractCheckInterceptor } from './contract/contract-check.interceptor'
     RolesModule,
     DivisionsModule,
     TeamsModule,
+    MembershipModule,
     GrantsModule,
     UsersModule,
     RequestTemplatesModule,

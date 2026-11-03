@@ -159,7 +159,7 @@ export class ApiService {
   listTeams(includeRetired = false): Promise<Team[]> {
     return firstValueFrom(this.http.get<Team[]>('/api/teams' + retiredQuery(includeRetired)));
   }
-  createTeam(body: { name: string; restrictClaims?: boolean }): Promise<Team> {
+  createTeam(body: { name: string; divisionId: string; restrictClaims?: boolean }): Promise<Team> {
     return firstValueFrom(this.http.post<Team>('/api/teams', body));
   }
   updateTeam(id: string, body: Partial<Team>): Promise<Team> {

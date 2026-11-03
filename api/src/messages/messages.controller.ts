@@ -11,9 +11,8 @@ import {
 import { ZodValidationPipe } from '../common/zod.pipe';
 import {
   Authorize,
-  messageCreateResource,
   messageResource,
-  messageReviveResource,
+  taskResource,
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { MessagesService } from './messages.service';
@@ -40,6 +39,7 @@ export class MessagesController {
 
   @Contract(ROUTES.listMessages)
   @Get('tasks/:id/messages')
+  @Authorize(ACTIONS.messageRead.action, taskResource)
   async list(
     @Param('id') taskId: string,
     @Query(new ZodValidationPipe(listMessagesQuerySchema)) query: ListMessagesQuery,
@@ -51,7 +51,7 @@ export class MessagesController {
   @Contract(ROUTES.createMessage)
   @Post('tasks/:id/messages')
   @HttpCode(201)
-  @Authorize(ACTIONS.messageCreate.action, messageCreateResource)
+  @Authorize(ACTIONS.messageCreate.action, taskResource)
   async create(
     @Param('id') taskId: string,
     @Body(new ZodValidationPipe(createMessageSchema)) body: CreateMessageDto,
@@ -82,7 +82,7 @@ export class MessagesController {
   @Contract(ROUTES.reviveMessage)
   @Post('messages/:id/revive')
   @HttpCode(200)
-  @Authorize(ACTIONS.messageRevive.action, messageReviveResource)
+  @Authorize(ACTIONS.messageRevive.action, messageResource)
   async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.messages.revive(id, user.id);
   }

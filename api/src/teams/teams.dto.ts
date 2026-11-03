@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
 /**
- * Team DTOs. PATCH accepts `name` and `restrict_claims` only (Slice 2 PATCH
- * convention); `.strict()` rejects anything else with 422.
+ * Team DTOs. A team belongs to one division, chosen at creation and fixed after.
+ * PATCH accepts `name` and `restrictClaims` only; `.strict()` rejects anything else.
  */
 const name = z.string().trim().min(1, 'Team name is required').max(120);
 
 export const createTeamSchema = z
   .object({
+    divisionId: z.string().uuid(),
     name,
     restrictClaims: z.boolean().optional(),
   })

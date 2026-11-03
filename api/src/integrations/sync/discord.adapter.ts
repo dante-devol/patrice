@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ActivitySource, IntegrationStatus, LifecycleState, UserRoleSource } from '@prisma/client';
+import { ActivitySource, IntegrationStatus, LifecycleState, Prisma, UserRoleSource } from '@prisma/client';
+import { ConflictError } from '../../common/errors';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ActivityService } from '../../activity/activity.service';
 import { ENV, Env } from '../../config/env';
@@ -435,38 +436,42 @@ export class DiscordAdapter implements IntegrationSyncPort {
     let totalGranted = 0;
     let totalRevoked = 0;
     for (const op of result.paOps) {
-      if (op.kind === 'grant') {
-        await this.prisma.userRole.create({
-          data: {
-            userId: op.userId,
-            roleId: op.roleId,
-            source: UserRoleSource.integration,
-            sourceConnectionId: connectionId,
-          },
-        });
+      // Discord can't take away (or, via a role carrying forbids, block) the last
+      // admin: each op runs under the admin floor, and a refused op is skipped.
+      const applied = await this.underAdminFloor(op.userId, async (tx) => {
+        if (op.kind === 'grant') {
+          await tx.userRole.create({
+            data: {
+              userId: op.userId,
+              roleId: op.roleId,
+              source: UserRoleSource.integration,
+              sourceConnectionId: connectionId,
+            },
+          });
+        } else {
+          await tx.userRole.delete({
+            where: { userId_roleId: { userId: op.userId, roleId: op.roleId } },
+          });
+        }
         await this.activity.logActivity({
+          tx,
           actorUserId: null,
           subjectType: 'user_role',
           subjectId: op.userId,
-          verb: 'user_role.granted',
-          payload: { userId: op.userId, roleId: op.roleId },
+          ...(op.kind === 'grant'
+            ? { verb: 'user_role.granted' as const, payload: { userId: op.userId, roleId: op.roleId } }
+            : {
+                verb: 'integration.removed' as const,
+                payload: { connectionId, userId: op.userId, roleId: op.roleId },
+              }),
           source: ActivitySource.integration,
           sourceConnectionId: connectionId,
         });
+      });
+      if (!applied) continue;
+      if (op.kind === 'grant') {
         totalGranted++;
       } else {
-        await this.prisma.userRole.delete({
-          where: { userId_roleId: { userId: op.userId, roleId: op.roleId } },
-        });
-        await this.activity.logActivity({
-          actorUserId: null,
-          subjectType: 'user_role',
-          subjectId: op.userId,
-          verb: 'integration.removed',
-          payload: { connectionId, userId: op.userId, roleId: op.roleId },
-          source: ActivitySource.integration,
-          sourceConnectionId: connectionId,
-        });
         totalRevoked++;
       }
     }
@@ -562,6 +567,26 @@ export class DiscordAdapter implements IntegrationSyncPort {
    * (the api owns the stream; durability never rides it — the admin's next reconcile
    * picks it up). The bell humanizes `reason` — admins never see an HTTP status.
    */
+  /**
+   * Run `mutate` under the admin floor. Returns false (and leaves the change undone)
+   * when it would leave no effective admin; the refusal is already audited.
+   */
+  private async underAdminFloor(
+    userId: string,
+    mutate: (tx: Prisma.TransactionClient) => Promise<void>,
+  ): Promise<boolean> {
+    try {
+      await this.admin.withAdminFloor(null, { type: 'user', id: userId, path: 'integration.sync' }, mutate);
+      return true;
+    } catch (e) {
+      if (e instanceof ConflictError) {
+        this.logger.warn(`Sync op for user ${userId} refused: it would remove the last administrator`);
+        return false;
+      }
+      throw e;
+    }
+  }
+
   private async alertAdminsOfPushFailure(
     connection: ConnectionWithMappings,
     reason: OutboundFailReason,

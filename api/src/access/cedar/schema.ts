@@ -33,56 +33,50 @@ function actionDecls(): string {
 export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
   entity Division {
     // Self-reference so a 'specific_division'/'own_division' scope on a
-    // division-targeted action (division:update) can match resource.division.
+    // division-targeted action (division:update, task:create) can match.
     division?: Division,
-    restrictClaims?: Bool,
-    retired?: Bool
+    restrictClaims?: Bool
   };
   entity Team {
-    restrictClaims?: Bool,
-    retired?: Bool
+    // Self-reference, plus the team's division so division scopes cover its teams.
+    team?: Team,
+    division?: Division,
+    restrictClaims?: Bool
   };
   entity Role {
-    retired?: Bool
+    targetRole?: Role
   };
   entity User in [Role] {
     memberDivisions: Set<Division>,
     memberTeams: Set<Team>,
     targetRole?: Role,
-    retired?: Bool
+    discordGated?: Bool
   };
-  entity Organization {
-    retired?: Bool
-  };
-  entity Invitation {
-    retired?: Bool
-  };
+  entity Organization;
+  entity Invitation;
   entity Session {
-    owner?: User,
-    retired?: Bool
+    owner?: User
   };
   entity Task {
     division?: Division,
     team?: Team,
     requester?: User,
+    // Everyone holding a seat (own scope for leave/submit, visibility).
+    claimants?: Set<User>,
+    // The reviewed submission's author (the self-review forbid).
     claimant?: User,
-    // Claim Eligibility AND-Composition (Slice 4.2): the restrict flags the
-    // task:assign @ own_as_claimant template reads alongside principal membership.
     divisionRestrictsClaims?: Bool,
-    teamRestrictsClaims?: Bool,
-    retired?: Bool
+    teamRestrictsClaims?: Bool
   };
   entity Message {
     division?: Division,
     team?: Team,
-    sender?: User,
-    retired?: Bool
+    sender?: User
   };
   entity Attachment {
     division?: Division,
     team?: Team,
-    uploader?: User,
-    retired?: Bool
+    uploader?: User
   };
 ${actionDecls()}
 }`;

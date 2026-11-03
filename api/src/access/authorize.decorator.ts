@@ -1,12 +1,12 @@
 import { SetMetadata } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotFoundError } from '../common/errors';
 import { ORGANIZATION_RESOURCE, ResourceRef } from './access.service';
+import { EntityLoader } from './entity-loader';
 
 export const AUTHORIZE_META = 'patrice:authorize';
 
-/** Resolve the target resource for a request (params/body → Cedar resource). */
+/** Resolve the target resource for a request. Reads validated path params only. */
 export type ResourceResolver = (
   req: Request,
   prisma: PrismaService,
@@ -18,416 +18,52 @@ export interface AuthorizeMeta {
 }
 
 /**
- * Declare the `resource:verb` action a mutating route requires, and how to load
- * its target resource. The AuthorizeGuard evaluates this against the Cedar engine
- * and returns 403 on deny (docs/slices/01 "Authorize guard").
+ * Declare the `resource:verb` action a route requires and how to load its target.
+ * The AuthorizeGuard evaluates it with Cedar and returns 403 on deny. Every resolver
+ * below delegates to the {@link EntityLoader}, the one place Cedar resources are built.
  */
-export function Authorize(
-  action: string,
-  resolveResource: ResourceResolver,
-): MethodDecorator {
+export function Authorize(action: string, resolveResource: ResourceResolver): MethodDecorator {
   return SetMetadata(AUTHORIZE_META, { action, resolveResource } satisfies AuthorizeMeta);
 }
 
-/** The fixed Organization entity is the resource for global/create actions. */
-export const orgResource: ResourceResolver = async () => ORGANIZATION_RESOURCE;
+const param = (req: Request, name = 'id'): string => String((req.params as Record<string, string>)[name]);
 
-/**
- * The division named by `:id` is the resource — for `division:update` on a specific
- * division (e.g. its default request template, Slice 3). Carries a `division` self-ref
- * so `specific_division`/`own_division` scopes match, and `retired` so the
- * Retired-as-Hard-Deny blocks edits to a retired division. 404 if it doesn't exist.
- */
-export const divisionResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const division = await prisma.division.findUnique({
-    where: { id },
-    select: { id: true, lifecycleState: true },
-  });
-  if (!division) {
-    throw new NotFoundError('DIVISION_NOT_FOUND', 'Division not found');
-  }
-  return {
-    type: 'Division',
-    id: division.id,
-    attrs: {
-      division: { __entity: { type: 'Patrice::Division', id: division.id } },
-      retired: division.lifecycleState === 'retired',
-    },
-  };
-};
+/** The fixed Organization entity: the resource for org-wide actions. */
+export const orgResource: ResourceResolver = () => ORGANIZATION_RESOURCE;
 
-const divisionEntity = (id: string) => ({
-  __entity: { type: 'Patrice::Division', id },
-});
-const teamEntity = (id: string) => ({ __entity: { type: 'Patrice::Team', id } });
-const userEntity = (id: string) => ({ __entity: { type: 'Patrice::User', id } });
-
-/**
- * A **prospective** task is the resource for `task:create` — there is no row yet, so
- * the division/team come from the request body and the requester is the actor. This
- * lets `specific_division`/`own_division`/`own` (own_as_requester) create grants match
- * before the task exists. The guard runs before body validation, so fields are read
- * defensively; a missing division simply fails to match a scoped grant (→ 403).
- */
-export const taskCreateResource: ResourceResolver = async (req) => {
+/** `:id` is a task. */
+export const taskResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).task(param(req));
+/** `:id` is a submission; the resource is its task, with the submission's author. */
+export const submissionResource: ResourceResolver = (req, prisma) =>
+  new EntityLoader(prisma).submissionTask(param(req));
+/** `:id` is a message. */
+export const messageResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).message(param(req));
+/** `:id` is an attachment; the resource is the attachment itself. */
+export const attachmentResource: ResourceResolver = (req, prisma) =>
+  new EntityLoader(prisma).attachment(param(req));
+/** `:id` is an attachment; the resource is its task (for `attachment:read`). */
+export const attachmentTaskResource: ResourceResolver = (req, prisma) =>
+  new EntityLoader(prisma).attachmentTask(param(req));
+/** `:id` is a division. */
+export const divisionResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).division(param(req));
+/** `:id` is a team. */
+export const teamResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).team(param(req));
+/** `:id` is a user. */
+export const userResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).user(param(req));
+/** `:id` is a user and `:roleId` (or body `roleId`) the role being given or taken. */
+export const userWithRoleResource: ResourceResolver = (req, prisma) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
-  const user = (req as Request & { user?: { id: string } }).user;
-  const attrs: Record<string, unknown> = {};
-  if (typeof body.divisionId === 'string') attrs.division = divisionEntity(body.divisionId);
-  if (typeof body.teamId === 'string') attrs.team = teamEntity(body.teamId);
-  if (user) attrs.requester = userEntity(user.id);
-  return { type: 'Task', id: 'new', attrs };
+  const roleId = (req.params as Record<string, string>).roleId ?? (typeof body.roleId === 'string' ? body.roleId : '');
+  return new EntityLoader(prisma).user(param(req), roleId);
 };
-
+/** `:id` is an invitation. */
+export const invitationResource: ResourceResolver = (req, prisma) =>
+  new EntityLoader(prisma).invitation(param(req));
+/** `:id` is a session. */
+export const sessionResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).session(param(req));
 /**
- * The task named by `:id` is the resource — for `task:update`/`task:retire` and the
- * own-family (`own_as_requester`) scopes. Carries division/team (specific/own group
- * scopes), requester (own), and retired (Retired-as-Hard-Deny). 404 if it's missing.
+ * Stands for "every session of user `:id`", for listing a user's sessions. Same rule
+ * as revoking one: yourself always, anyone else with a grant.
  */
-export const taskResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const task = await prisma.task.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      divisionId: true,
-      teamId: true,
-      requesterUserId: true,
-      lifecycleState: true,
-      division: { select: { restrictClaims: true } },
-      team: { select: { restrictClaims: true } },
-    },
-  });
-  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
-  return {
-    type: 'Task',
-    id: task.id,
-    attrs: {
-      division: divisionEntity(task.divisionId),
-      // Restrict flags drive Claim Eligibility AND-Composition (task:assign).
-      // teamRestrictsClaims is always present (false on a teamless task) so the
-      // eligibility clause short-circuits without dereferencing resource.team.
-      divisionRestrictsClaims: task.division.restrictClaims,
-      teamRestrictsClaims: task.team?.restrictClaims ?? false,
-      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
-      requester: userEntity(task.requesterUserId),
-      retired: task.lifecycleState === 'retired',
-    },
-  };
-};
-
-/**
- * The task named by `:id` is the resource for `task:revive` — like {@link taskResource}
- * but **without** the `retired` attribute. Revive is the one action that legitimately
- * targets a retired task, so it must not trip the Retired-as-Hard-Deny forbid (which
- * fires `when resource has retired && resource.retired`). Scope attrs (division/team,
- * requester for own_as_requester) are still carried so scoped revive grants match.
- */
-export const taskReviveResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const task = await prisma.task.findUnique({
-    where: { id },
-    select: { id: true, divisionId: true, teamId: true, requesterUserId: true },
-  });
-  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
-  return {
-    type: 'Task',
-    id: task.id,
-    attrs: {
-      division: divisionEntity(task.divisionId),
-      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
-      requester: userEntity(task.requesterUserId),
-    },
-  };
-};
-
-/**
- * The task named by `:id` is the resource for `task:submit` — the actor is the
- * `own_as_claimant` owner, so `claimant` is set to the actor **only when they hold an
- * active slot** on the task. A non-claimant (or a claimant who has left) yields no
- * `claimant` attr → the `own` submit grant can't match → Cedar 403. Carries
- * division/team/retired like {@link taskResource}. 404 if the task is missing.
- */
-export const taskSubmitResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const task = await prisma.task.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      divisionId: true,
-      teamId: true,
-      lifecycleState: true,
-    },
-  });
-  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
-  const user = (req as Request & { user?: { id: string } }).user;
-  const slot = user
-    ? await prisma.taskClaimant.findUnique({
-        where: { taskId_userId: { taskId: id, userId: user.id } },
-        select: { leftAt: true },
-      })
-    : null;
-  const isActiveClaimant = !!slot && slot.leftAt === null;
-  return {
-    type: 'Task',
-    id: task.id,
-    attrs: {
-      division: divisionEntity(task.divisionId),
-      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
-      ...(isActiveClaimant && user ? { claimant: userEntity(user.id) } : {}),
-      retired: task.lifecycleState === 'retired',
-    },
-  };
-};
-
-/**
- * The submission named by `:id` resolves to its task as the resource — for
- * `task:review` and `task:retire_submission` (own_as_requester). Carries `requester`
- * (the own-family owner), `claimant` (the reviewed submission's author — drives the
- * self-review forbid), division/team, and `retired` (Retired-as-Hard-Deny over a
- * retired *task*; a retired submission is guarded in the service). 404 if missing.
- */
-export const submissionResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const submission = await prisma.submission.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      claimantUserId: true,
-      task: {
-        select: {
-          id: true,
-          divisionId: true,
-          teamId: true,
-          requesterUserId: true,
-          lifecycleState: true,
-        },
-      },
-    },
-  });
-  if (!submission) {
-    throw new NotFoundError('SUBMISSION_NOT_FOUND', 'Submission not found');
-  }
-  const task = submission.task;
-  return {
-    type: 'Task',
-    id: task.id,
-    attrs: {
-      division: divisionEntity(task.divisionId),
-      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
-      requester: userEntity(task.requesterUserId),
-      claimant: userEntity(submission.claimantUserId),
-      retired: task.lifecycleState === 'retired',
-    },
-  };
-};
-
-/**
- * A **prospective** message is the resource for `message:create` — the task named by
- * `:id` supplies division/team (specific/own group scopes) and the actor is the
- * sender (own_as_sender). 404 if the task is missing.
- */
-export const messageCreateResource: ResourceResolver = async (req, prisma) => {
-  const taskId = (req.params as Record<string, string>).id;
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    select: { id: true, divisionId: true, teamId: true },
-  });
-  if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
-  const user = (req as Request & { user?: { id: string } }).user;
-  return {
-    type: 'Message',
-    id: 'new',
-    attrs: {
-      division: divisionEntity(task.divisionId),
-      ...(task.teamId ? { team: teamEntity(task.teamId) } : {}),
-      ...(user ? { sender: userEntity(user.id) } : {}),
-    },
-  };
-};
-
-/**
- * The message named by `:id` is the resource — for `message:update`/`message:retire`
- * (own_as_sender). Carries its task's division/team, the sender (own), and retired.
- */
-export const messageResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const message = await prisma.message.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      senderUserId: true,
-      lifecycleState: true,
-      task: { select: { divisionId: true, teamId: true } },
-    },
-  });
-  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-  return {
-    type: 'Message',
-    id: message.id,
-    attrs: {
-      division: divisionEntity(message.task.divisionId),
-      ...(message.task.teamId ? { team: teamEntity(message.task.teamId) } : {}),
-      ...(message.senderUserId ? { sender: userEntity(message.senderUserId) } : {}),
-      retired: message.lifecycleState === 'retired',
-    },
-  };
-};
-
-/**
- * The message named by `:id` is the resource for `message:revive` — like
- * {@link messageResource} but **without** the `retired` attribute, so reviving a
- * retired message doesn't trip the Retired-as-Hard-Deny forbid. Carries its task's
- * division/team and the sender (own_as_sender) for scoped revive grants.
- */
-export const messageReviveResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const message = await prisma.message.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      senderUserId: true,
-      task: { select: { divisionId: true, teamId: true } },
-    },
-  });
-  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-  return {
-    type: 'Message',
-    id: message.id,
-    attrs: {
-      division: divisionEntity(message.task.divisionId),
-      ...(message.task.teamId ? { team: teamEntity(message.task.teamId) } : {}),
-      ...(message.senderUserId ? { sender: userEntity(message.senderUserId) } : {}),
-    },
-  };
-};
-
-/**
- * A **prospective** attachment is the resource for `attachment:create` — the target
- * message (the `:id` path param, available before multipart parsing) supplies its
- * task's division/team and the actor is the uploader (own_as_uploader). 404 if the
- * message is missing.
- */
-export const attachmentCreateResource: ResourceResolver = async (req, prisma) => {
-  const messageId = (req.params as Record<string, string>).id ?? '';
-  const message = messageId
-    ? await prisma.message.findUnique({
-        where: { id: messageId },
-        select: { id: true, task: { select: { divisionId: true, teamId: true } } },
-      })
-    : null;
-  if (!message) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-  const user = (req as Request & { user?: { id: string } }).user;
-  return {
-    type: 'Attachment',
-    id: 'new',
-    attrs: {
-      division: divisionEntity(message.task.divisionId),
-      ...(message.task.teamId ? { team: teamEntity(message.task.teamId) } : {}),
-      ...(user ? { uploader: userEntity(user.id) } : {}),
-    },
-  };
-};
-
-/**
- * Load an attachment's task-scope (division/team) + uploader, resolving through
- * whichever parent it has — a message, or an answer → submission → task. Shared by
- * the retire/revive resolvers below. Returns null if the attachment is missing.
- */
-async function loadAttachmentScope(
-  id: string,
-  prisma: PrismaService,
-): Promise<{
-  id: string;
-  uploaderUserId: string;
-  divisionId: string;
-  teamId: string | null;
-  retired: boolean;
-} | null> {
-  const att = await prisma.attachment.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      uploaderUserId: true,
-      lifecycleState: true,
-      message: { select: { task: { select: { divisionId: true, teamId: true } } } },
-      answer: {
-        select: { submission: { select: { task: { select: { divisionId: true, teamId: true } } } } },
-      },
-    },
-  });
-  if (!att) return null;
-  const task = att.message?.task ?? att.answer?.submission.task ?? null;
-  if (!task) return null;
-  return {
-    id: att.id,
-    uploaderUserId: att.uploaderUserId,
-    divisionId: task.divisionId,
-    teamId: task.teamId,
-    retired: att.lifecycleState === 'retired',
-  };
-}
-
-/**
- * The attachment named by `:id` is the resource for `attachment:retire` — carries its
- * task's division/team (specific/own group), the uploader (own_as_uploader), and
- * `retired` (Retired-as-Hard-Deny). 404 if missing.
- */
-export const attachmentResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const att = await loadAttachmentScope(id, prisma);
-  if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
-  return {
-    type: 'Attachment',
-    id: att.id,
-    attrs: {
-      division: divisionEntity(att.divisionId),
-      ...(att.teamId ? { team: teamEntity(att.teamId) } : {}),
-      uploader: userEntity(att.uploaderUserId),
-      retired: att.retired,
-    },
-  };
-};
-
-/**
- * The attachment named by `:id` is the resource for `attachment:revive` — like
- * {@link attachmentResource} but **without** `retired`, so reviving a retired
- * attachment doesn't trip the Retired-as-Hard-Deny forbid.
- */
-export const attachmentReviveResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const att = await loadAttachmentScope(id, prisma);
-  if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
-  return {
-    type: 'Attachment',
-    id: att.id,
-    attrs: {
-      division: divisionEntity(att.divisionId),
-      ...(att.teamId ? { team: teamEntity(att.teamId) } : {}),
-      uploader: userEntity(att.uploaderUserId),
-    },
-  };
-};
-
-/**
- * The session named by `:id`, with its owner, for `session:revoke`. The baseline
- * policy lets anyone revoke their own; others need a grant. 404 if it doesn't exist.
- */
-export const sessionResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const session = await prisma.session.findUnique({ where: { id }, select: { id: true, userId: true } });
-  if (!session) throw new NotFoundError('SESSION_NOT_FOUND', 'Session not found');
-  return { type: 'Session', id: session.id, attrs: { owner: userEntity(session.userId) } };
-};
-
-/**
- * Stands for "every session of user `:id`", for an admin listing a user's sessions.
- * Same rule as revoking one: yourself always, anyone else with a grant.
- */
-export const userSessionsResource: ResourceResolver = async (req, prisma) => {
-  const id = (req.params as Record<string, string>).id;
-  const user = await prisma.appUser.findUnique({ where: { id }, select: { id: true } });
-  if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
-  return { type: 'Session', id: `sessions-of:${user.id}`, attrs: { owner: userEntity(user.id) } };
-};
+export const userSessionsResource: ResourceResolver = (req, prisma) =>
+  new EntityLoader(prisma).sessionsOf(param(req));

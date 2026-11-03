@@ -34,10 +34,9 @@ describe('Slice 2.1 — Roles CRUD + Revive', () => {
 
   let roleId: string;
 
-  it('creates a standalone role; it appears in GET /roles', async () => {
+  it('creates a role; it appears in GET /roles', async () => {
     const res = await auth(http().post('/api/roles')).send({ name: 'WritingLead' });
     expect(res.status).toBe(201);
-    expect(res.body.kind).toBe('standalone');
     expect(res.body.lifecycleState).toBe('active');
     roleId = res.body.id;
 

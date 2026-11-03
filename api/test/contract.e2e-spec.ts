@@ -89,6 +89,7 @@ describe('Contract registry', () => {
           issues.push(`status ${c.status} != ${h.status}`);
         }
         if (c.action !== h.action) issues.push(`action ${c.action} != ${h.action}`);
+        if (c.authorizedInService && h.action) issues.push('authorizedInService but also gated at the edge');
         if ((c.public ?? false) !== h.isPublic) issues.push(`public ${c.public} != ${h.isPublic}`);
         return issues.map((i) => `${h.name}: ${i}`);
       });

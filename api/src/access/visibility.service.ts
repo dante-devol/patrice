@@ -1,0 +1,69 @@
+import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+
+/**
+ * Turns a user's grants for a task-read action into a database predicate, so a task
+ * list fetches (roughly) only rows the user may see. It is a pre-filter, not the
+ * decision: callers still ask Cedar about every returned row, which is what makes
+ * forbids and the Discord gate apply. The predicate must therefore never exclude a
+ * task Cedar would allow; it may include extras.
+ */
+@Injectable()
+export class VisibilityService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /** `null` when the user may see everything (a global permit), else a where clause. */
+  async taskWhere(userId: string, action: string): Promise<Prisma.TaskWhereInput | null> {
+    const [grants, memberships] = await Promise.all([
+      this.prisma.grant.findMany({
+        where: {
+          action,
+          effect: 'permit',
+          lifecycleState: 'active',
+          role: { lifecycleState: 'active', userRoles: { some: { userId } } },
+        },
+        select: { scopeKind: true, scopeDivisionId: true, scopeTeamId: true },
+      }),
+      this.prisma.membership.findMany({ where: { userId }, select: { divisionId: true, teamId: true } }),
+    ]);
+    if (grants.some((g) => g.scopeKind === 'global')) return null;
+
+    const myDivisions = memberships.flatMap((m) => (m.divisionId ? [m.divisionId] : []));
+    const myTeams = memberships.flatMap((m) => (m.teamId ? [m.teamId] : []));
+    const or: Prisma.TaskWhereInput[] = [];
+    for (const g of grants) {
+      switch (g.scopeKind) {
+        case 'specific_division':
+          if (g.scopeDivisionId) or.push({ divisionId: g.scopeDivisionId });
+          break;
+        case 'specific_team':
+          if (g.scopeTeamId) or.push({ teamId: g.scopeTeamId });
+          break;
+        case 'own_division':
+          or.push({ divisionId: { in: myDivisions } });
+          break;
+        case 'own_team':
+          or.push({ teamId: { in: myTeams } });
+          break;
+        case 'own':
+          // Requested it, holds a seat, or could claim it (restrictions respected).
+          or.push(
+            { requesterUserId: userId },
+            { claimants: { some: { userId, leftAt: null } } },
+            {
+              AND: [
+                { OR: [{ division: { restrictClaims: false } }, { divisionId: { in: myDivisions } }] },
+                { OR: [{ teamId: null }, { team: { restrictClaims: false } }, { teamId: { in: myTeams } }] },
+              ],
+            },
+          );
+          break;
+        default:
+          break;
+      }
+    }
+    // No grant at all: nothing is visible.
+    return or.length > 0 ? { OR: or } : { id: { in: [] } };
+  }
+}

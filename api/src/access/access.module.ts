@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { AccessService } from './access.service';
 import { AdministrabilityService } from './administrability.service';
 import { AuthorizeGuard } from './authorize.guard';
+import { VisibilityService } from './visibility.service';
 import { CedarEngine } from './cedar/engine';
 
 /**
@@ -11,7 +12,7 @@ import { CedarEngine } from './cedar/engine';
  */
 @Global()
 @Module({
-  providers: [CedarEngine, AccessService, AdministrabilityService, AuthorizeGuard],
-  exports: [CedarEngine, AccessService, AdministrabilityService, AuthorizeGuard],
+  providers: [CedarEngine, AccessService, AdministrabilityService, AuthorizeGuard, VisibilityService],
+  exports: [CedarEngine, AccessService, AdministrabilityService, AuthorizeGuard, VisibilityService],
 })
 export class AccessModule {}

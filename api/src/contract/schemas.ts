@@ -49,11 +49,6 @@ export const Ok = z.object({ ok: z.literal(true) }).strict().openapi('Ok');
 
 // ---- Identity ---------------------------------------------------------------
 
-export const UserCapabilities = z
-  .object({ inviteCreate: z.boolean(), manageOrg: z.boolean() })
-  .strict()
-  .openapi('UserCapabilities');
-
 export const CurrentUser = z
   .object({
     id,
@@ -64,7 +59,8 @@ export const CurrentUser = z
     hasDiscordLink: z.boolean(),
     discordHandle: z.string().nullable(),
     avatarUrl: z.string().nullable(),
-    capabilities: UserCapabilities,
+    allowedActions: z.array(z.string()),
+    taskAccessBlockedByDiscord: z.boolean(),
   })
   .strict()
   .openapi('CurrentUser');
@@ -149,9 +145,6 @@ export const Role = z
   .object({
     id,
     name: z.string(),
-    kind: z.enum(['standalone', 'division', 'team']),
-    divisionId: id.nullable(),
-    teamId: id.nullable(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
@@ -171,7 +164,6 @@ export const Division = z
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
-    inherentRoleId: id,
   })
   .strict()
   .openapi('Division');
@@ -179,15 +171,20 @@ export const Division = z
 export const Team = z
   .object({
     id,
+    divisionId: id,
     name: z.string(),
     restrictClaims: z.boolean(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
-    inherentRoleId: id,
   })
   .strict()
   .openapi('Team');
+
+export const Member = z
+  .object({ userId: id, source: z.enum(['patrice', 'integration']), createdAt: timestamp })
+  .strict()
+  .openapi('Member');
 
 export const Grant = z
   .object({
@@ -273,6 +270,7 @@ export const Task = z
     createdAt: timestamp,
     updatedAt: timestamp,
     claimantUserIds: z.array(id),
+    allowedActions: z.array(z.string()).optional(),
   })
   .strict()
   .openapi('Task');

@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
-import { Task, TaskFilters, TaskStatus, OrgSettings, IntegrationConnection } from '../../core/api.types';
+import { Task, TaskFilters, TaskStatus } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from './user-avatar.component';
 import { isMultiClaim, relativeTime, stampClass, stampStatus } from './task-presentation';
@@ -67,7 +67,7 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
               </label>
               <label class="block">
                 <span class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Division</span>
-                <select [(ngModel)]="newTask.divisionId" class="field mt-1">
+                <select [(ngModel)]="newTask.divisionId" (ngModelChange)="newTask.teamId = ''" class="field mt-1">
                   <option [ngValue]="''">Select a division…</option>
                   @for (d of lookup.divisionList(); track d.id) { <option [ngValue]="d.id">{{ d.name }}</option> }
                 </select>
@@ -76,7 +76,10 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
                 <span class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Team (optional)</span>
                 <select [(ngModel)]="newTask.teamId" class="field mt-1">
                   <option [ngValue]="''">No team</option>
-                  @for (t of lookup.teamList(); track t.id) { <option [ngValue]="t.id">{{ t.name }}</option> }
+                  <!-- A task's team must belong to its division. -->
+                  @for (t of lookup.teamList(); track t.id) {
+                    @if (t.divisionId === newTask.divisionId) { <option [ngValue]="t.id">{{ t.name }}</option> }
+                  }
                 </select>
               </label>
             </div>
@@ -197,8 +200,6 @@ export class TaskListComponent {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthStore);
   readonly lookup = inject(LookupStore);
-  readonly settings = signal<OrgSettings | null>(null);
-  readonly discordConnectionId = signal<string | null>(null);
 
   readonly statuses = STATUSES;
   readonly tasks = signal<Task[]>([]);
@@ -215,27 +216,13 @@ export class TaskListComponent {
   filters: TaskFilters = {};
   newTask = { name: '', description: '', divisionId: '', teamId: '' };
 
-  readonly discordGated = computed(
-    () =>
-      this.settings()?.requireDiscordLink === true &&
-      this.auth.user()?.hasDiscordLink === false,
-  );
+  /** The API enforces requireDiscordLink; this only explains the empty board. */
+  readonly discordGated = this.auth.taskAccessBlockedByDiscord;
 
   constructor() {
     // Refresh (not ensureLoaded) so a division/team added elsewhere this session shows up
     // in the facets + create-form options without a hard reload.
     void this.lookup.refresh().then(() => this.reload());
-    void this.loadGateState();
-  }
-
-  private async loadGateState(): Promise<void> {
-    const [cfg, connections] = await Promise.all([
-      this.api.getConfig().catch(() => null),
-      this.api.listIntegrations().catch(() => []),
-    ]);
-    this.settings.set(cfg);
-    const active = connections.find((c: IntegrationConnection) => c.provider === 'discord' && c.lifecycleState === 'active');
-    this.discordConnectionId.set(active?.id ?? null);
   }
 
   linkDiscord(): void {

@@ -14,9 +14,7 @@ import { ZodValidationPipe } from '../common/zod.pipe';
 import { NotFoundError } from '../common/errors';
 import {
   Authorize,
-  taskCreateResource,
   taskResource,
-  taskReviveResource,
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { TasksService } from './tasks.service';
@@ -57,15 +55,15 @@ export class TasksController {
   @Get()
   async list(
     @Query(new ZodValidationPipe(listTasksQuerySchema)) query: ListTasksQuery,
-    
+    @CurrentUser() user: CurrentUserRef,
   ) {
-    return this.tasks.list(query);
+    // Visibility is decided per task (task:read) inside the service.
+    return this.tasks.list(query, user.id);
   }
 
   @Contract(ROUTES.createTask)
   @Post()
   @HttpCode(201)
-  @Authorize(ACTIONS.taskCreate.action, taskCreateResource)
   async create(
     @Body(new ZodValidationPipe(createTaskSchema)) body: CreateTaskDto,
     @CurrentUser() user: CurrentUserRef,
@@ -75,8 +73,9 @@ export class TasksController {
 
   @Contract(ROUTES.getTask)
   @Get(':id')
-  async get(@Param('id') id: string) {
-    return this.tasks.get(id);
+  @Authorize(ACTIONS.taskRead.action, taskResource)
+  async get(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.tasks.get(id, user.id);
   }
 
   @Contract(ROUTES.updateTask)
@@ -100,7 +99,7 @@ export class TasksController {
   @Contract(ROUTES.reviveTask)
   @Post(':id/revive')
   @HttpCode(200)
-  @Authorize(ACTIONS.taskRevive.action, taskReviveResource)
+  @Authorize(ACTIONS.taskRevive.action, taskResource)
   async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.tasks.revive(id, user.id);
   }
@@ -116,7 +115,7 @@ export class TasksController {
   @Contract(ROUTES.leaveTask)
   @Post(':id/leave')
   @HttpCode(200)
-  @Authorize(ACTIONS.taskAssign.action, taskResource)
+  @Authorize(ACTIONS.taskLeave.action, taskResource)
   async leave(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.tasks.leave(id, user.id);
   }
@@ -167,6 +166,7 @@ export class TasksController {
 
   @Contract(ROUTES.getTaskTemplate)
   @Get(':id/request-template')
+  @Authorize(ACTIONS.taskRead.action, taskResource)
   async getRequestTemplate(@Param('id') id: string) {
     const rt = await this.requestTemplates.getForTask(id);
     if (!rt) {

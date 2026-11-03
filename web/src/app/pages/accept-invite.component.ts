@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../core/api.service';
 import { AuthStore } from '../core/auth.store';
-import { InviteView, IntegrationConnection, OrgSettings } from '../core/api.types';
+import { InviteView } from '../core/api.types';
 import { errorMessage } from '../core/errors';
 
 type Step = 'register' | 'link-discord' | 'done';
@@ -63,7 +63,7 @@ type Step = 'register' | 'link-discord' | 'done';
         }
       } @else if (step() === 'link-discord') {
         <h2>Link your Discord account</h2>
-        @if (settings()?.requireDiscordLink) {
+        @if (required()) {
           <p>
             This organisation requires a linked Discord account before you can access tasks.
             Link now, or skip and link later from your profile — you won't be able to view
@@ -81,7 +81,7 @@ type Step = 'register' | 'link-discord' | 'done';
             Link Discord account
           </button>
           <button class="secondary" (click)="skipDiscordLink()">
-            {{ settings()?.requireDiscordLink ? 'Skip for now' : 'Skip' }}
+            {{ required() ? 'Skip for now' : 'Skip' }}
           </button>
         </div>
       }
@@ -99,7 +99,8 @@ export class AcceptInviteComponent {
   readonly loading = signal(true);
   readonly invite = signal<InviteView | null>(null);
   readonly step = signal<Step>('register');
-  readonly settings = signal<OrgSettings | null>(null);
+  /** requireDiscordLink blocks the new user's task access until they link. */
+  readonly required = signal(false);
 
   passcode = '';
   displayName = '';
@@ -136,16 +137,10 @@ export class AcceptInviteComponent {
       });
       this.auth.setUser(user);
 
-      const [connections, cfg] = await Promise.all([
-        this.api.listIntegrations().catch(() => [] as IntegrationConnection[]),
-        this.api.getConfig().catch(() => null),
-      ]);
-      const activeConnection = connections.find(
-        (c: IntegrationConnection) => c.provider === 'discord' && c.lifecycleState === 'active',
-      );
-
-      if (activeConnection && !user.hasDiscordLink) {
-        this.settings.set(cfg);
+      // Admin-only reads (settings, integrations) aren't available to a new member, so
+      // offer the link step only when /me says the gate is blocking task access.
+      if (user.taskAccessBlockedByDiscord) {
+        this.required.set(true);
         this.step.set('link-discord');
       } else {
         void this.router.navigate(['/home']);

@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { LifecycleState, Prisma, QuestionType, StatusCache } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccessService } from '../access/access.service';
+import { ACTIONS } from '../access/actions';
+import { EntityLoader, taskRef } from '../access/entity-loader';
+import { VisibilityService } from '../access/visibility.service';
 import { ActivityService } from '../activity/activity.service';
 import { MessagesService } from '../messages/messages.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -32,7 +36,37 @@ export interface TaskView {
   createdAt: Date;
   updatedAt: Date;
   claimantUserIds: string[];
+  /** What the caller may do to this task (on reads only). */
+  allowedActions?: string[];
 }
+
+/** The actions reported in a task's `allowedActions`. */
+export const TASK_VIEW_ACTIONS: readonly string[] = [
+  ACTIONS.taskUpdate.action,
+  ACTIONS.taskRetire.action,
+  ACTIONS.taskRevive.action,
+  ACTIONS.taskAssign.action,
+  ACTIONS.taskLeave.action,
+  ACTIONS.taskSubmit.action,
+  ACTIONS.taskReview.action,
+  ACTIONS.taskRetireSubmission.action,
+  ACTIONS.taskComplete.action,
+  ACTIONS.taskManageClaims.action,
+  ACTIONS.taskChangeRequester.action,
+  ACTIONS.taskConfigureRequestTemplate.action,
+  ACTIONS.messageCreate.action,
+  ACTIONS.messageRead.action,
+  ACTIONS.submissionRead.action,
+];
+
+/** The include every task read needs: seated claimants plus claim restrictions. */
+const TASK_READ_INCLUDE = {
+  claimants: { where: { leftAt: null }, select: { userId: true } },
+  division: { select: { restrictClaims: true } },
+  team: { select: { restrictClaims: true } },
+} as const;
+
+type TaskReadRow = Prisma.TaskGetPayload<{ include: typeof TASK_READ_INCLUDE }>;
 
 export interface TaskListResult {
   items: TaskView[];
@@ -56,7 +90,22 @@ export class TasksService {
     private readonly notifications: NotificationsService,
     private readonly status: TaskStatusService,
     private readonly grace: GraceService,
+    private readonly access: AccessService,
+    private readonly visibility: VisibilityService,
   ) {}
+
+  /** Attach each task's `allowedActions` for `userId`, in one batch of decisions. */
+  private async withAllowed(userId: string, rows: TaskReadRow[]): Promise<TaskView[]> {
+    const checks = rows.flatMap((r) => {
+      const resource = taskRef(r);
+      return TASK_VIEW_ACTIONS.map((action) => ({ action, resource }));
+    });
+    const allowed = await this.access.decideMany(userId, checks);
+    return rows.map((r, i) => ({
+      ...this.toView(r),
+      allowedActions: TASK_VIEW_ACTIONS.filter((_, j) => allowed[i * TASK_VIEW_ACTIONS.length + j]),
+    }));
+  }
 
   private toView(t: {
     id: string;
@@ -92,13 +141,10 @@ export class TasksService {
     };
   }
 
-  async get(id: string): Promise<TaskView> {
-    const task = await this.prisma.task.findUnique({
-      where: { id },
-      include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
-    });
+  async get(id: string, userId: string): Promise<TaskView> {
+    const task = await this.prisma.task.findUnique({ where: { id }, include: TASK_READ_INCLUDE });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
-    return this.toView(task);
+    return (await this.withAllowed(userId, [task]))[0];
   }
 
   /**
@@ -118,6 +164,12 @@ export class TasksService {
     if (!division) {
       throw new NotFoundError('DIVISION_NOT_FOUND', 'Division not found');
     }
+    // `task:create` targets the division the task is created in.
+    await this.access.assert(
+      actorUserId,
+      ACTIONS.taskCreate.action,
+      await new EntityLoader(this.prisma).division(division.id),
+    );
     if (division.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('DIVISION_RETIRED', 'Division is retired');
     }
@@ -125,11 +177,14 @@ export class TasksService {
     if (dto.teamId) {
       const team = await this.prisma.team.findFirst({
         where: { id: dto.teamId },
-        select: { id: true, lifecycleState: true },
+        select: { id: true, lifecycleState: true, divisionId: true },
       });
       if (!team) throw new NotFoundError('TEAM_NOT_FOUND', 'Team not found');
       if (team.lifecycleState === LifecycleState.retired) {
         throw new ConflictError('TEAM_RETIRED', 'Team is retired');
+      }
+      if (team.divisionId !== division.id) {
+        throw new UnprocessableError('TEAM_NOT_IN_DIVISION', "The team belongs to a different division");
       }
     }
 
@@ -204,12 +259,16 @@ export class TasksService {
     return this.toView(created);
   }
 
-  /** Faceted + keyset list (newest-first by UUIDv7 PK; `after` is the last seen id). */
-  async list(
-    query: ListTasksQuery,
-  ): Promise<TaskListResult> {
+  /**
+   * Faceted + keyset list of the tasks the user may see (newest-first by UUIDv7 PK;
+   * `after` is the last seen id). A grant-derived predicate narrows the query; Cedar
+   * then decides `task:read` on each row, so forbids and the Discord gate apply.
+   */
+  async list(query: ListTasksQuery, userId: string): Promise<TaskListResult> {
+    const visible = await this.visibility.taskWhere(userId, ACTIONS.taskRead.action);
     const where: Prisma.TaskWhereInput = {
       ...activeFilter(query.include === 'retired'),
+      ...(visible ? { AND: [visible] } : {}),
     };
     if (query.division) where.divisionId = { in: query.division };
     if (query.team) where.teamId = { in: query.team };
@@ -222,20 +281,27 @@ export class TasksService {
       };
     }
     // Newer UUIDv7 ids sort greater; newest-first ⇒ desc, cursor ⇒ id < after.
-    if (query.after) where.id = { lt: query.after };
-
-    const rows = await this.prisma.task.findMany({
-      where,
-      orderBy: { id: 'desc' },
-      take: query.limit + 1,
-      include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
-    });
-
-    const hasMore = rows.length > query.limit;
-    const items = hasMore ? rows.slice(0, query.limit) : rows;
+    let after = query.after;
+    const items: TaskReadRow[] = [];
+    let exhausted = false;
+    // Cedar may drop rows the predicate let through; keep reading until the page is
+    // full. Bounded so a user who can see almost nothing can't scan the whole table.
+    for (let round = 0; round < 5 && items.length <= query.limit && !exhausted; round++) {
+      const batch = await this.prisma.task.findMany({
+        where: { ...where, ...(after ? { id: { lt: after } } : {}) },
+        orderBy: { id: 'desc' },
+        take: query.limit + 1,
+        include: TASK_READ_INCLUDE,
+      });
+      exhausted = batch.length <= query.limit;
+      if (batch.length > 0) after = batch[batch.length - 1].id;
+      items.push(...(await this.access.filterAllowed(userId, ACTIONS.taskRead.action, batch, taskRef)));
+    }
+    const hasMore = items.length > query.limit || !exhausted;
+    const page = items.slice(0, query.limit);
     return {
-      items: items.map((r) => this.toView(r)),
-      nextCursor: hasMore ? items[items.length - 1].id : null,
+      items: await this.withAllowed(userId, page),
+      nextCursor: hasMore && page.length > 0 ? page[page.length - 1].id : null,
     };
   }
 
@@ -246,9 +312,12 @@ export class TasksService {
   ): Promise<TaskView> {
     const task = await this.prisma.task.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, lifecycleState: true },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+    if (task.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('TASK_RETIRED', 'Task is retired');
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const row = await tx.task.update({

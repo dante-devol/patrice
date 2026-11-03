@@ -7,6 +7,9 @@ import { activeFilter } from '../common/lifecycle';
 import { DomainError } from '../domain/shared/domain-error';
 import { Division } from '../domain/division/division';
 import { UnitOfWork, UnitOfWorkContext } from '../infrastructure/unit-of-work';
+import { AccessService } from '../access/access.service';
+import { ACTIONS } from '../access/actions';
+import { divisionRef } from '../access/entity-loader';
 import { CreateDivisionDto, UpdateDivisionDto } from './divisions.dto';
 
 export interface DivisionView {
@@ -18,7 +21,6 @@ export interface DivisionView {
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
-  inherentRoleId: string;
 }
 
 function toView(d: Division): DivisionView {
@@ -29,7 +31,6 @@ function toView(d: Division): DivisionView {
     lifecycleState: d.lifecycle.state,
     retiredAt: d.lifecycle.retiredAt,
     version: d.version,
-    inherentRoleId: d.inherentRoleId,
   };
 }
 
@@ -44,15 +45,17 @@ export class DivisionsService {
     private readonly prisma: PrismaService,
     private readonly uow: UnitOfWork,
     private readonly grace: GraceService,
+    private readonly access: AccessService,
   ) {}
 
-  async list(includeRetired = false): Promise<DivisionView[]> {
+  /** The divisions the user may see (`division:read`). */
+  async list(userId: string, includeRetired = false): Promise<DivisionView[]> {
     const rows = await this.prisma.division.findMany({
       where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
-      include: { inherentRole: true },
     });
-    return rows.map((r) => ({
+    const visible = await this.access.filterAllowed(userId, ACTIONS.divisionRead.action, rows, divisionRef);
+    return visible.map((r) => ({
       id: r.id,
       name: r.name,
       defaultOpenings: r.defaultOpenings,
@@ -61,7 +64,6 @@ export class DivisionsService {
       lifecycleState: r.lifecycleState,
       retiredAt: r.retiredAt,
       version: r.version,
-      inherentRoleId: r.inherentRole!.id,
     }));
   }
 

@@ -28,9 +28,9 @@ export class DivisionsController {
 
   @Contract(ROUTES.listDivisions)
   @Get()
-  @Authorize(ACTIONS.divisionCreate.action, orgResource)
-  async list(@Query('include') include: string | undefined) {
-    return this.divisions.list(include === 'retired');
+  async list(@Query('include') include: string | undefined, @CurrentUser() user: CurrentUserRef) {
+    // Lists show what the caller may read; the service filters per row.
+    return this.divisions.list(user.id, include === 'retired');
   }
 
   @Contract(ROUTES.createDivision)
@@ -60,14 +60,14 @@ export class DivisionsController {
 
   @Contract(ROUTES.retireDivision)
   @Post(':id/retire')
-  @Authorize(ACTIONS.divisionRetire.action, orgResource)
+  @Authorize(ACTIONS.divisionRetire.action, divisionResource)
   async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.divisions.retire(id, user.id);
   }
 
   @Contract(ROUTES.reviveDivision)
   @Post(':id/revive')
-  @Authorize(ACTIONS.divisionRevive.action, orgResource)
+  @Authorize(ACTIONS.divisionRevive.action, divisionResource)
   async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.divisions.revive(id, user.id);
   }

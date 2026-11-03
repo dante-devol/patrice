@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { LifecycleState, RoleKind } from '@prisma/client';
+import { LifecycleState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
-import { ConflictError, NotFoundError, ValidationError } from '../common/errors';
+import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
+import { ACTIONS } from '../access/actions';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateRoleDto, UpdateRoleDto } from './roles.dto';
@@ -12,9 +13,6 @@ import { CreateRoleDto, UpdateRoleDto } from './roles.dto';
 export interface RoleView {
   id: string;
   name: string;
-  kind: RoleKind;
-  divisionId: string | null;
-  teamId: string | null;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
@@ -45,11 +43,17 @@ export class RolesService {
     return r;
   }
 
-  async list(includeRetired = false): Promise<RoleView[]> {
-    return this.prisma.role.findMany({
+  /** The roles the user may see (`role:read`). */
+  async list(userId: string, includeRetired = false): Promise<RoleView[]> {
+    const rows = await this.prisma.role.findMany({
       where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
     });
+    return this.access.filterAllowed(userId, ACTIONS.roleRead.action, rows, (r) => ({
+      type: 'Role',
+      id: r.id,
+      attrs: { targetRole: { __entity: { type: 'Patrice::Role', id: r.id } } },
+    }));
   }
 
   async create(
@@ -57,10 +61,7 @@ export class RolesService {
     dto: CreateRoleDto,
   ): Promise<RoleView> {
     const role = await this.prisma.role.create({
-      data: {
-        name: dto.name,
-        kind: RoleKind.standalone,
-      },
+      data: { name: dto.name },
     });
     await this.activity.logActivity({
       actorUserId,
@@ -75,15 +76,9 @@ export class RolesService {
   }
 
   /** Load a standalone role or throw (404 missing, 422 if inherent). */
-  private async loadStandalone(id: string): Promise<RoleView> {
+  private async load(id: string): Promise<RoleView> {
     const role = await this.prisma.role.findUnique({ where: { id } });
     if (!role) throw new NotFoundError('ROLE_NOT_FOUND', 'Role not found');
-    if (role.kind !== RoleKind.standalone) {
-      throw new ValidationError(
-        'Inherent roles are managed through their division or team',
-        [{ field: 'id', message: 'Not a standalone role' }],
-      );
-    }
     return role;
   }
 
@@ -92,7 +87,10 @@ export class RolesService {
     actorUserId: string,
     dto: UpdateRoleDto,
   ): Promise<RoleView> {
-    const role = await this.loadStandalone(id);
+    const role = await this.load(id);
+    if (role.lifecycleState === LifecycleState.retired) {
+      throw new UnprocessableError('ROLE_RETIRED', 'Role is retired');
+    }
     const updated = await this.prisma.role.update({
       where: { id: role.id },
       data: { name: dto.name, version: { increment: 1 } },
@@ -108,7 +106,7 @@ export class RolesService {
   }
 
   async retire(id: string, actorUserId: string): Promise<RoleView> {
-    const role = await this.loadStandalone(id);
+    const role = await this.load(id);
     if (role.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('ALREADY_RETIRED', 'Role is already retired');
     }
@@ -142,7 +140,7 @@ export class RolesService {
   }
 
   async revive(id: string, actorUserId: string): Promise<RoleView> {
-    const role = await this.loadStandalone(id);
+    const role = await this.load(id);
     const graceMs = await this.grace.windowMs();
     if (!isRevivable(role, graceMs)) {
       throw new ConflictError(

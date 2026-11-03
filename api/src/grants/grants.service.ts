@@ -7,7 +7,7 @@ import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { CedarEngine } from '../access/cedar/engine';
 import { ActivityService } from '../activity/activity.service';
-import { ALL_ACTION_STRINGS, RESOURCE_TYPE_BY_ACTION } from '../access/actions';
+import { ALL_ACTION_STRINGS, RESOURCE_TYPE_BY_ACTION, TASK_FAMILY_ACTIONS } from '../access/actions';
 import {
   ProjectableGrant,
   grantToPolicy,
@@ -18,7 +18,7 @@ import {
 const GROUP_SCOPABLE = new Set(['Task', 'Message', 'Attachment', 'Division']);
 /** Resource types whose entities carry a `targetRole` (role-scope). */
 const ROLE_SCOPABLE = new Set(['User']);
-import { ConflictError, NotFoundError, ValidationError } from '../common/errors';
+import { ConflictError, NotFoundError, UnprocessableError, ValidationError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateGrantDto, UpdateGrantDto } from './grants.dto';
@@ -155,7 +155,7 @@ export class GrantsService {
     candidate: ProjectableGrant,
     excludeGrantId?: string,
   ): Promise<void> {
-    const { selfReviewAllowed } = await this.settings.get();
+    const { selfReviewAllowed, requireDiscordLink } = await this.settings.get();
 
     const active = await this.prisma.grant.findMany({
       where: {
@@ -183,6 +183,7 @@ export class GrantsService {
       const statics = staticPolicies({
         selfReviewAllowed,
         registeredActions: ALL_ACTION_STRINGS,
+        discordGatedActions: requireDiscordLink ? TASK_FAMILY_ACTIONS : [],
       });
       policiesText = [...statics, ...grantPolicies].join('\n\n');
     } catch (e) {
@@ -212,6 +213,10 @@ export class GrantsService {
         { field: 'roleId', message: 'Role not found' },
       ]);
     }
+    // Retired things accept no new references.
+    if (role.lifecycleState === 'retired') {
+      throw new UnprocessableError('ROLE_RETIRED', 'Role is retired');
+    }
   }
 
   async create(
@@ -233,30 +238,35 @@ export class GrantsService {
     };
     await this.validateActivation(candidate);
 
-    const grant = await this.prisma.$transaction(async (tx) => {
-      const g = await tx.grant.create({
-        data: {
-          roleId: dto.roleId,
-          action: dto.action,
-          effect: dto.effect as GrantEffect,
-          scopeKind: dto.scopeKind as ScopeKind,
-          scopeDivisionId: dto.scopeDivisionId ?? null,
-          scopeTeamId: dto.scopeTeamId ?? null,
-          scopeRoleId: dto.scopeRoleId ?? null,
-        },
-        select: this.viewSelect(),
-      });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'grant',
-        subjectId: g.id,
-        verb: 'grant.created',
-        payload: { grantId: g.id, roleId: g.roleId },
-      });
-      await this.access.bumpConfigVersion(tx);
-      return g;
-    });
+    // A new grant can take authority away (a forbid), so it runs under the admin floor.
+    const grant = await this.admin.withAdminFloor(
+      actorUserId,
+      { type: 'grant', id: dto.roleId, path: 'grant.create' },
+      async (tx) => {
+        const g = await tx.grant.create({
+          data: {
+            roleId: dto.roleId,
+            action: dto.action,
+            effect: dto.effect as GrantEffect,
+            scopeKind: dto.scopeKind as ScopeKind,
+            scopeDivisionId: dto.scopeDivisionId ?? null,
+            scopeTeamId: dto.scopeTeamId ?? null,
+            scopeRoleId: dto.scopeRoleId ?? null,
+          },
+          select: this.viewSelect(),
+        });
+        await this.activity.logActivity({
+          tx,
+          actorUserId,
+          subjectType: 'grant',
+          subjectId: g.id,
+          verb: 'grant.created',
+          payload: { grantId: g.id, roleId: g.roleId },
+        });
+        await this.access.bumpConfigVersion(tx);
+        return g;
+      },
+    );
     return grant;
   }
 

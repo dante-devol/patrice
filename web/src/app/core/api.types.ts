@@ -28,7 +28,6 @@ export type SyncState = Schemas['SyncState'];
 export type ErrorCode = Schemas['ErrorCode'];
 
 export type ApiError = Schemas['ErrorBody'];
-export type UserCapabilities = Schemas['UserCapabilities'];
 export type CurrentUser = Schemas['CurrentUser'];
 export type BootstrapStatus = Schemas['BootstrapStatus'];
 export type InviteView = Schemas['InviteView'];

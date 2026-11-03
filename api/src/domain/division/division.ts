@@ -14,11 +14,6 @@ export interface DivisionState extends DivisionSettings {
   name: string;
   lifecycle: Lifecycle;
   version: number;
-  /**
-   * The division's inherent role. It shares the division's name and lifecycle, so it
-   * lives inside this consistency boundary until membership replaces inherent roles.
-   */
-  inherentRoleId: string;
 }
 
 export const MAX_DIVISION_NAME = 120;
@@ -29,7 +24,6 @@ export class Division extends AggregateRoot {
   private _name: string;
   private _settings: DivisionSettings;
   private _lifecycle: Lifecycle;
-  readonly inherentRoleId: string;
 
   private constructor(s: DivisionState) {
     super(s.id, s.version);
@@ -40,7 +34,6 @@ export class Division extends AggregateRoot {
       restrictClaims: s.restrictClaims,
     };
     this._lifecycle = s.lifecycle;
-    this.inherentRoleId = s.inherentRoleId;
   }
 
   static create(name: string, settings: Partial<DivisionSettings> = {}): Division {
@@ -52,19 +45,12 @@ export class Division extends AggregateRoot {
       restrictClaims: settings.restrictClaims ?? false,
       lifecycle: Lifecycle.active(),
       version: 0,
-      inherentRoleId: uuidv7(),
     });
     d.raise({
       type: 'division.created',
       subjectType: 'division',
       subjectId: d.id,
       payload: { divisionId: d.id },
-    });
-    d.raise({
-      type: 'role.created',
-      subjectType: 'role',
-      subjectId: d.inherentRoleId,
-      payload: { roleId: d.inherentRoleId },
     });
     return d;
   }
@@ -84,8 +70,9 @@ export class Division extends AggregateRoot {
     return this._lifecycle;
   }
 
-  /** Edits are allowed on a retired division (the access layer blocks them today). */
+  /** A retired division can't be edited; revive it first. */
   update(changes: { name?: string } & Partial<DivisionSettings>): void {
+    if (this._lifecycle.isRetired) throw new DomainError('DIVISION_RETIRED', 'Division is retired');
     if (changes.name !== undefined) this._name = Division.validName(changes.name);
     this._settings = {
       defaultOpenings:
@@ -103,7 +90,10 @@ export class Division extends AggregateRoot {
     });
   }
 
-  /** Retiring cascades to the inherent role, which changes the projected policy set. */
+  /**
+   * Retiring blocks new tasks in the division; existing tasks finish their lifecycle,
+   * which is what lets the division reach zero references and be collected.
+   */
   retire(now: Date): void {
     this._lifecycle = this._lifecycle.retire(now, 'Division');
     this.raiseLifecycle('retired');
@@ -120,14 +110,6 @@ export class Division extends AggregateRoot {
       subjectType: 'division',
       subjectId: this.id,
       payload: { divisionId: this.id },
-      policyChanged: true,
-    });
-    this.raise({
-      type: `role.${kind}`,
-      subjectType: 'role',
-      subjectId: this.inherentRoleId,
-      payload: { roleId: this.inherentRoleId },
-      policyChanged: true,
     });
   }
 

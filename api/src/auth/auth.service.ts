@@ -9,16 +9,18 @@ import { ACTIONS } from '../access/actions';
 import { PasswordService } from './password';
 
 /**
- * Reflected capabilities for UX (web "Permission Reflection"). These are hints the
- * client uses to show/hide controls — the API still re-authorizes every action, so
- * a stale or spoofed capability changes nothing server-side.
+ * The org-wide actions reported in `/me`'s `allowedActions`. These are hints the
+ * client uses to show or hide controls; the API re-authorizes every action, so a
+ * stale or spoofed list changes nothing server-side.
  */
-export interface UserCapabilities {
-  /** May create invitations (also gates the invitations management page). */
-  inviteCreate: boolean;
-  /** May author org config — gates the admin area (roles/divisions/teams/matrix). */
-  manageOrg: boolean;
-}
+export const ORG_VIEW_ACTIONS: readonly string[] = [
+  ACTIONS.inviteCreate.action,
+  ACTIONS.configUpdate.action,
+  ACTIONS.grantCreate.action,
+  ACTIONS.roleCreate.action,
+  ACTIONS.divisionCreate.action,
+  ACTIONS.integrationCreate.action,
+];
 
 export interface AuthenticatedUser {
   id: string;
@@ -33,7 +35,10 @@ export interface AuthenticatedUser {
   discordHandle: string | null;
   /** Discord avatar CDN URL when linked + an avatar hash is known (#52). */
   avatarUrl: string | null;
-  capabilities: UserCapabilities;
+  /** Org-wide actions the user may perform (see ORG_VIEW_ACTIONS). */
+  allowedActions: string[];
+  /** True when `requireDiscordLink` currently blocks this user's task access. */
+  taskAccessBlockedByDiscord: boolean;
 }
 
 /**
@@ -101,21 +106,12 @@ export class AuthService {
     });
     if (!user) throw new UnauthenticatedError();
 
-    // Reflect the user's UI-relevant capabilities by asking the access engine the
-    // same questions the guards will ask. invite:create is a global action, so the
-    // organization is the resource.
-    const orgResource = ORGANIZATION_RESOURCE;
-    const [inviteCreate, manageOrg, avatarLink] = await Promise.all([
-      this.access.decide({
-        userId: user.id,
-        action: ACTIONS.inviteCreate.action,
-        resource: orgResource,
-      }),
-      this.access.decide({
-        userId: user.id,
-        action: ACTIONS.grantCreate.action,
-        resource: orgResource,
-      }),
+    // The org-wide actions the client shows controls for, asked the same way the
+    // guards will ask. Per-entity rights come with each entity (`allowedActions`).
+    const [allowedActions, gate, avatarLink] = await Promise.all([
+      this.access.allowedActions(user.id, ORGANIZATION_RESOURCE, ORG_VIEW_ACTIONS),
+      // The principal carries the requireDiscordLink gate as a computed flag.
+      this.access.buildPrincipal(user.id),
       // Most recently synced active link (carries handle + avatar hash, #52).
       this.prisma.externalIdentity.findFirst({
         where: {
@@ -141,7 +137,8 @@ export class AuthService {
       hasDiscordLink: avatarLink != null,
       discordHandle: avatarLink?.externalHandle ?? null,
       avatarUrl: discordAvatarUrl(avatarLink?.externalUserId, avatarLink?.externalAvatarHash),
-      capabilities: { inviteCreate, manageOrg },
+      allowedActions,
+      taskAccessBlockedByDiscord: gate.entities[0].attrs.discordGated === true,
     };
   }
 

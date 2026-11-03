@@ -35,12 +35,6 @@ enum AuthMethod {
   discord
 }
 
-enum RoleKind {
-  standalone
-  division
-  team
-}
-
 enum GrantEffect {
   permit
   forbid
@@ -167,8 +161,13 @@ model SystemSettings {
   gracePeriodHours            Int      @default(24) @map("grace_period_hours")
   requireDiscordLink          Boolean  @default(false) @map("require_discord_link")
   discordClientId             String?  @map("discord_client_id")
+  /// The seeded Member role, pre-assigned on new invitations (null if deleted).
+  memberRoleId                String?  @map("member_role_id") @db.Uuid
+  memberRoleSeeded            Boolean  @default(false) @map("member_role_seeded")
   createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberRole Role? @relation(fields: [memberRoleId], references: [id], onDelete: SetNull)
 
   @@map("system_settings")
 }
@@ -196,17 +195,20 @@ model Division {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  // The atomically-created inherent role (kind='division'); UNIQUE role.division_id.
-  inherentRole    Role?
   // The division's default request template (0..1); UNIQUE request_template.owner_division_id.
   requestTemplate RequestTemplate?
   tasks           Task[]
+  teams           Team[]
+  memberships     Membership[]
 
   @@map("division")
 }
 
+/// A team belongs to exactly one division. Team membership doesn't imply division
+/// membership: both are explicit `membership` rows.
 model Team {
   id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  divisionId     String         @map("division_id") @db.Uuid
   name           String
   restrictClaims Boolean        @default(false) @map("restrict_claims")
   lifecycleState LifecycleState @default(active) @map("lifecycle_state")
@@ -215,9 +217,11 @@ model Team {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  inherentRole Role?
-  tasks        Task[]
+  division    Division     @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  tasks       Task[]
+  memberships Membership[]
 
+  @@index([divisionId])
   @@map("team")
 }
 
@@ -246,6 +250,7 @@ model AppUser {
   notifications      Notification[]
   externalIdentities ExternalIdentity[]
   oauthFlows         OAuthFlow[]
+  memberships        Membership[]
 
   @@unique([email])
   @@map("app_user")
@@ -358,9 +363,6 @@ model OAuthFlow {
 model Role {
   id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
   name           String
-  kind           RoleKind
-  divisionId     String?        @unique @map("division_id") @db.Uuid
-  teamId         String?        @unique @map("team_id") @db.Uuid
   lifecycleState LifecycleState @default(active) @map("lifecycle_state")
   retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
   version        Int            @default(0)
@@ -370,11 +372,31 @@ model Role {
   userRoles     UserRole[]
   grants        Grant[]
   groupMappings ExternalGroupMapping[]
-  // Inherent-role back-relations: an inherent role points at its division/team.
-  division      Division?              @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  team          Team?                  @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  memberRoleOf  SystemSettings[]
 
   @@map("role")
+}
+
+/// A user belongs to exactly one of a division or a team (CHECK-enforced). Membership
+/// grants no authority by itself: it feeds the `own_division` / `own_team` scopes and
+/// claim restrictions. `source` records whether Patrice or an integration made it.
+model Membership {
+  id                 String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId             String         @map("user_id") @db.Uuid
+  divisionId         String?        @map("division_id") @db.Uuid
+  teamId             String?        @map("team_id") @db.Uuid
+  source             UserRoleSource @default(patrice)
+  sourceConnectionId String?        @map("source_connection_id") @db.Uuid
+  grantedBy          String?        @map("granted_by") @db.Uuid
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user     AppUser   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  division Division? @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  team     Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([divisionId])
+  @@index([teamId])
+  @@map("membership")
 }
 
 model UserRole {

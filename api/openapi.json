@@ -3,7 +3,7 @@
   "info": {
     "title": "Patrice API",
     "version": "0.1.0",
-    "description": "Error codes and their HTTP statuses:\n\n- `UNAUTHENTICATED` (401): No valid session\n- `INVALID_CREDENTIALS` (401): Email or password is wrong\n- `DISCORD_NO_ACCOUNT` (401): No Patrice account is linked to this Discord account\n- `FORBIDDEN` (403): The access engine denied the action\n- `CSRF_FAILED` (403): Missing or invalid CSRF token\n- `EMAIL_NOT_VERIFIED` (403): Login requires a verified email address\n- `INVALID_PASSCODE` (403): The invitation passcode is wrong\n- `EMAIL_MISMATCH` (403): The email does not match the invitation\n- `ROLE_NOT_GRANTABLE` (403): The inviter may not grant this role\n- `NOT_FOUND` (404): Not found\n- `RECORD_NOT_FOUND` (404): The record was removed while the request ran\n- `ATTACHMENT_NOT_FOUND` (404): Attachment not found\n- `CLAIMANT_NOT_FOUND` (404): That user does not hold a seat on this task\n- `CONNECTION_NOT_FOUND` (404): Integration connection not found\n- `DIVISION_NOT_FOUND` (404): Division not found\n- `GRANT_NOT_FOUND` (404): Grant not found\n- `INVITE_NOT_FOUND` (404): Invitation not found\n- `MAPPING_NOT_FOUND` (404): Group mapping not found\n- `MESSAGE_NOT_FOUND` (404): Message not found\n- `PARENT_NOT_FOUND` (404): The parent message was not found\n- `REQUEST_TEMPLATE_NOT_FOUND` (404): Request template not found\n- `ROLE_NOT_FOUND` (404): Role not found\n- `SESSION_NOT_FOUND` (404): Session not found\n- `SUBMISSION_NOT_FOUND` (404): Submission not found\n- `TASK_NOT_FOUND` (404): Task not found\n- `TEAM_NOT_FOUND` (404): Team not found\n- `USER_NOT_FOUND` (404): User not found\n- `CONFLICT` (409): Conflict\n- `ALREADY_EXISTS` (409): That value is already in use\n- `REFERENCE_CONFLICT` (409): Another record still references this one, or a referenced record is gone\n- `STALE_VERSION` (409): The record changed since it was read; reload and retry\n- `ALREADY_CLAIMED` (409): You already hold a seat on this task\n- `ALREADY_RETIRED` (409): Already retired\n- `ALREADY_SUBMITTED` (409): A submission is already awaiting review\n- `CLAIMS_CLOSED` (409): The task is not accepting claims\n- `DISCORD_ALREADY_LINKED` (409): This Discord account belongs to another user\n- `IDENTITY_TAKEN` (409): That sign-in account already belongs to another user\n- `PROVIDER_ALREADY_CONNECTED` (409): A different account from this provider is already connected\n- `DIVISION_RETIRED` (409): Division is retired\n- `DUPLICATE_CONNECTION` (409): That workspace is already connected\n- `DUPLICATE_MAPPING` (409): That mapping already exists\n- `EMAIL_TAKEN` (409): That email address is already in use\n- `INVALID_OPENINGS` (409): Openings cannot go below the active claimant count\n- `INVALID_TRANSITION` (409): The submission is not in a state that allows this\n- `INVITE_RACE_LOST` (409): The invitation was used concurrently\n- `LAST_ADMIN` (409): Refused: this would remove the last administrator\n- `LAST_AUTH_METHOD` (409): Refused: this would remove your only sign-in method\n- `MESSAGE_RETIRED` (409): Message is retired\n- `NOT_A_MEMBER` (409): The user does not hold that role\n- `NOT_CLAIMED` (409): You do not hold a seat on this task\n- `NOT_REVIVABLE` (409): Not retired, or past the grace period\n- `NO_OPENINGS` (409): Every seat on the task is taken\n- `OPENINGS_LOCKED` (409): Openings are locked for this division\n- `REQUEST_TEMPLATE_LOCKED` (409): The request template is locked by a submission\n- `STALE_SUBMISSION` (409): The submission changed since it was read\n- `SUBMISSION_RETIRED` (409): Submission is retired\n- `TASK_RETIRED` (409): Task is retired\n- `TEAM_RETIRED` (409): Team is retired\n- `USER_RETIRED` (409): User is retired\n- `GONE` (410): No longer available\n- `INVITE_UNAVAILABLE` (410): The invitation is expired, revoked or used up\n- `TOKEN_INVALID` (410): The link is invalid, expired or already used\n- `VALIDATION_FAILED` (422): The request body or parameters failed validation\n- `UNPROCESSABLE` (422): Unprocessable entity\n- `DISCORD_NOT_CONFIGURED` (422): Discord sign-in is not configured\n- `FILE_TOO_LARGE` (422): The upload exceeds the size limit\n- `INVALID_SUBMISSION` (422): The answers do not satisfy the request template\n- `NO_DEFAULT_REQUEST_TEMPLATE` (422): The division has no request template\n- `GOVERNANCE_ROLE_NOT_MAPPABLE` (422): A role holding governance grants cannot be mapped to an external group\n- `NO_FILE` (422): No file was uploaded\n- `NOT_LINKED` (422): The account is not linked\n- `REPLY_TO_REPLY` (422): Threads are one level deep\n- `ROLE_RETIRED` (422): Role is retired\n- `WRONG_PASSWORD` (422): The current password is wrong\n- `TOO_MANY_REQUESTS` (429): Rate limit exceeded\n- `INTERNAL` (500): Internal server error\n- `ERROR` (500): Unclassified error\n- `QUEUE_UNAVAILABLE` (503): Background jobs are unavailable; try again later"
+    "description": "Error codes and their HTTP statuses:\n\n- `UNAUTHENTICATED` (401): No valid session\n- `INVALID_CREDENTIALS` (401): Email or password is wrong\n- `DISCORD_NO_ACCOUNT` (401): No Patrice account is linked to this Discord account\n- `FORBIDDEN` (403): The access engine denied the action\n- `CSRF_FAILED` (403): Missing or invalid CSRF token\n- `EMAIL_NOT_VERIFIED` (403): Login requires a verified email address\n- `INVALID_PASSCODE` (403): The invitation passcode is wrong\n- `EMAIL_MISMATCH` (403): The email does not match the invitation\n- `ROLE_NOT_GRANTABLE` (403): The inviter may not grant this role\n- `NOT_FOUND` (404): Not found\n- `RECORD_NOT_FOUND` (404): The record was removed while the request ran\n- `ATTACHMENT_NOT_FOUND` (404): Attachment not found\n- `CLAIMANT_NOT_FOUND` (404): That user does not hold a seat on this task\n- `CONNECTION_NOT_FOUND` (404): Integration connection not found\n- `DIVISION_NOT_FOUND` (404): Division not found\n- `GRANT_NOT_FOUND` (404): Grant not found\n- `INVITE_NOT_FOUND` (404): Invitation not found\n- `MAPPING_NOT_FOUND` (404): Group mapping not found\n- `MESSAGE_NOT_FOUND` (404): Message not found\n- `PARENT_NOT_FOUND` (404): The parent message was not found\n- `REQUEST_TEMPLATE_NOT_FOUND` (404): Request template not found\n- `ROLE_NOT_FOUND` (404): Role not found\n- `SESSION_NOT_FOUND` (404): Session not found\n- `SUBMISSION_NOT_FOUND` (404): Submission not found\n- `TASK_NOT_FOUND` (404): Task not found\n- `TEAM_NOT_FOUND` (404): Team not found\n- `USER_NOT_FOUND` (404): User not found\n- `CONFLICT` (409): Conflict\n- `ALREADY_EXISTS` (409): That value is already in use\n- `REFERENCE_CONFLICT` (409): Another record still references this one, or a referenced record is gone\n- `STALE_VERSION` (409): The record changed since it was read; reload and retry\n- `ALREADY_CLAIMED` (409): You already hold a seat on this task\n- `ALREADY_RETIRED` (409): Already retired\n- `ALREADY_SUBMITTED` (409): A submission is already awaiting review\n- `CLAIMS_CLOSED` (409): The task is not accepting claims\n- `DISCORD_ALREADY_LINKED` (409): This Discord account belongs to another user\n- `IDENTITY_TAKEN` (409): That sign-in account already belongs to another user\n- `PROVIDER_ALREADY_CONNECTED` (409): A different account from this provider is already connected\n- `DIVISION_RETIRED` (409): Division is retired\n- `DUPLICATE_CONNECTION` (409): That workspace is already connected\n- `DUPLICATE_MAPPING` (409): That mapping already exists\n- `EMAIL_TAKEN` (409): That email address is already in use\n- `INVALID_OPENINGS` (409): Openings cannot go below the active claimant count\n- `INVALID_TRANSITION` (409): The submission is not in a state that allows this\n- `INVITE_RACE_LOST` (409): The invitation was used concurrently\n- `LAST_ADMIN` (409): Refused: this would remove the last administrator\n- `LAST_AUTH_METHOD` (409): Refused: this would remove your only sign-in method\n- `MESSAGE_RETIRED` (409): Message is retired\n- `NOT_A_MEMBER` (409): The user does not hold that role\n- `NOT_CLAIMED` (409): You do not hold a seat on this task\n- `NOT_REVIVABLE` (409): Not retired, or past the grace period\n- `NO_OPENINGS` (409): Every seat on the task is taken\n- `OPENINGS_LOCKED` (409): Openings are locked for this division\n- `REQUEST_TEMPLATE_LOCKED` (409): The request template is locked by a submission\n- `STALE_SUBMISSION` (409): The submission changed since it was read\n- `SUBMISSION_RETIRED` (409): Submission is retired\n- `TASK_RETIRED` (409): Task is retired\n- `TEAM_RETIRED` (409): Team is retired\n- `USER_RETIRED` (409): User is retired\n- `GONE` (410): No longer available\n- `INVITE_UNAVAILABLE` (410): The invitation is expired, revoked or used up\n- `TOKEN_INVALID` (410): The link is invalid, expired or already used\n- `VALIDATION_FAILED` (422): The request body or parameters failed validation\n- `UNPROCESSABLE` (422): Unprocessable entity\n- `DISCORD_NOT_CONFIGURED` (422): Discord sign-in is not configured\n- `FILE_TOO_LARGE` (422): The upload exceeds the size limit\n- `INVALID_SUBMISSION` (422): The answers do not satisfy the request template\n- `NO_DEFAULT_REQUEST_TEMPLATE` (422): The division has no request template\n- `GOVERNANCE_ROLE_NOT_MAPPABLE` (422): A role holding governance grants cannot be mapped to an external group\n- `NO_FILE` (422): No file was uploaded\n- `TEAM_NOT_IN_DIVISION` (422): The team belongs to a different division than the task\n- `NOT_LINKED` (422): The account is not linked\n- `REPLY_TO_REPLY` (422): Threads are one level deep\n- `ROLE_RETIRED` (422): Role is retired\n- `WRONG_PASSWORD` (422): The current password is wrong\n- `TOO_MANY_REQUESTS` (429): Rate limit exceeded\n- `INTERNAL` (500): Internal server error\n- `ERROR` (500): Unclassified error\n- `QUEUE_UNAVAILABLE` (503): Background jobs are unavailable; try again later"
   },
   "servers": [
     {
@@ -93,6 +93,7 @@
           "NO_DEFAULT_REQUEST_TEMPLATE",
           "GOVERNANCE_ROLE_NOT_MAPPABLE",
           "NO_FILE",
+          "TEAM_NOT_IN_DIVISION",
           "NOT_LINKED",
           "REPLY_TO_REPLY",
           "ROLE_RETIRED",
@@ -152,22 +153,6 @@
           "discord"
         ]
       },
-      "UserCapabilities": {
-        "type": "object",
-        "properties": {
-          "inviteCreate": {
-            "type": "boolean"
-          },
-          "manageOrg": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "inviteCreate",
-          "manageOrg"
-        ],
-        "additionalProperties": false
-      },
       "CurrentUser": {
         "type": "object",
         "properties": {
@@ -208,8 +193,14 @@
               "null"
             ]
           },
-          "capabilities": {
-            "$ref": "#/components/schemas/UserCapabilities"
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "taskAccessBlockedByDiscord": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -221,7 +212,8 @@
           "hasDiscordLink",
           "discordHandle",
           "avatarUrl",
-          "capabilities"
+          "allowedActions",
+          "taskAccessBlockedByDiscord"
         ],
         "additionalProperties": false
       },
@@ -516,28 +508,6 @@
           "name": {
             "type": "string"
           },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "standalone",
-              "division",
-              "team"
-            ]
-          },
-          "divisionId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
-          "teamId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
           "lifecycleState": {
             "$ref": "#/components/schemas/Lifecycle"
           },
@@ -563,9 +533,6 @@
         "required": [
           "id",
           "name",
-          "kind",
-          "divisionId",
-          "teamId",
           "lifecycleState",
           "retiredAt",
           "version",
@@ -706,10 +673,6 @@
           },
           "version": {
             "type": "integer"
-          },
-          "inherentRoleId": {
-            "type": "string",
-            "format": "uuid"
           }
         },
         "required": [
@@ -720,8 +683,7 @@
           "restrictClaims",
           "lifecycleState",
           "retiredAt",
-          "version",
-          "inherentRoleId"
+          "version"
         ],
         "additionalProperties": false
       },
@@ -874,10 +836,40 @@
         ],
         "additionalProperties": false
       },
+      "Member": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "patrice",
+              "integration"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "userId",
+          "source",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "Team": {
         "type": "object",
         "properties": {
           "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "divisionId": {
             "type": "string",
             "format": "uuid"
           },
@@ -899,20 +891,16 @@
           },
           "version": {
             "type": "integer"
-          },
-          "inherentRoleId": {
-            "type": "string",
-            "format": "uuid"
           }
         },
         "required": [
           "id",
+          "divisionId",
           "name",
           "restrictClaims",
           "lifecycleState",
           "retiredAt",
-          "version",
-          "inherentRoleId"
+          "version"
         ],
         "additionalProperties": false
       },
@@ -996,6 +984,12 @@
             "items": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         },
@@ -3092,7 +3086,6 @@
           "users"
         ],
         "summary": "List users",
-        "description": "Gated by the `user:update` action.",
         "security": [
           {
             "session": []
@@ -3612,7 +3605,6 @@
           "access"
         ],
         "summary": "List roles",
-        "description": "Gated by the `role:create` action.",
         "security": [
           {
             "session": []
@@ -4269,7 +4261,6 @@
           "org"
         ],
         "summary": "List divisions",
-        "description": "Gated by the `division:create` action.",
         "security": [
           {
             "session": []
@@ -4561,6 +4552,7 @@
           "org"
         ],
         "summary": "A division's request template",
+        "description": "Gated by the `request_template:read` action.",
         "security": [
           {
             "session": []
@@ -5024,6 +5016,336 @@
         }
       }
     },
+    "/divisions/{id}/members": {
+      "get": {
+        "operationId": "listDivisionMembers",
+        "tags": [
+          "org"
+        ],
+        "summary": "A division's members",
+        "description": "Gated by the `division:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A division's members",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Member"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addDivisionMember",
+        "tags": [
+          "org"
+        ],
+        "summary": "Add a member to a division",
+        "description": "Gated by the `division:manage_members` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "userId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Add a member to a division",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Member"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/divisions/{id}/members/{userId}": {
+      "delete": {
+        "operationId": "removeDivisionMember",
+        "tags": [
+          "org"
+        ],
+        "summary": "Remove a member from a division",
+        "description": "Gated by the `division:manage_members` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams/{id}/members": {
+      "get": {
+        "operationId": "listTeamMembers",
+        "tags": [
+          "org"
+        ],
+        "summary": "A team's members",
+        "description": "Gated by the `team:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A team's members",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Member"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addTeamMember",
+        "tags": [
+          "org"
+        ],
+        "summary": "Add a member to a team",
+        "description": "Gated by the `team:manage_members` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "userId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Add a member to a team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Member"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams/{id}/members/{userId}": {
+      "delete": {
+        "operationId": "removeTeamMember",
+        "tags": [
+          "org"
+        ],
+        "summary": "Remove a member from a team",
+        "description": "Gated by the `team:manage_members` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/teams": {
       "get": {
         "operationId": "listTeams",
@@ -5031,7 +5353,6 @@
           "org"
         ],
         "summary": "List teams",
-        "description": "Gated by the `team:create` action.",
         "security": [
           {
             "session": []
@@ -5082,7 +5403,6 @@
           "org"
         ],
         "summary": "Create a team",
-        "description": "Gated by the `team:create` action.",
         "security": [
           {
             "session": []
@@ -5094,6 +5414,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "divisionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -5104,6 +5428,7 @@
                   }
                 },
                 "required": [
+                  "divisionId",
                   "name"
                 ],
                 "additionalProperties": false
@@ -5410,7 +5735,6 @@
           "tasks"
         ],
         "summary": "Create a task",
-        "description": "Gated by the `task:create` action.",
         "security": [
           {
             "session": []
@@ -5480,6 +5804,7 @@
           "tasks"
         ],
         "summary": "A task",
+        "description": "Gated by the `task:read` action.",
         "security": [
           {
             "session": []
@@ -5733,7 +6058,7 @@
           "tasks"
         ],
         "summary": "Give up your seat on a task",
-        "description": "Gated by the `task:assign` action.",
+        "description": "Gated by the `task:leave` action.",
         "security": [
           {
             "session": []
@@ -6015,6 +6340,7 @@
           "tasks"
         ],
         "summary": "A task's request template",
+        "description": "Gated by the `task:read` action.",
         "security": [
           {
             "session": []
@@ -6589,6 +6915,7 @@
           "submissions"
         ],
         "summary": "A task's submissions",
+        "description": "Gated by the `submission:read` action.",
         "security": [
           {
             "session": []
@@ -6638,6 +6965,7 @@
           "submissions"
         ],
         "summary": "A submission",
+        "description": "Gated by the `submission:read` action.",
         "security": [
           {
             "session": []
@@ -6825,6 +7153,7 @@
           "messages"
         ],
         "summary": "A task's thread",
+        "description": "Gated by the `message:read` action.",
         "security": [
           {
             "session": []
@@ -7280,6 +7609,7 @@
           "messages"
         ],
         "summary": "Download an attachment",
+        "description": "Gated by the `attachment:read` action.",
         "security": [
           {
             "session": []

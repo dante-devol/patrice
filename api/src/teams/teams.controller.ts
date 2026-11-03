@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { Authorize, orgResource } from '../access/authorize.decorator';
+import { Authorize, teamResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { TeamsService } from './teams.service';
 import {
@@ -28,15 +28,14 @@ export class TeamsController {
 
   @Contract(ROUTES.listTeams)
   @Get()
-  @Authorize(ACTIONS.teamCreate.action, orgResource)
-  async list(@Query('include') include: string | undefined) {
-    return this.teams.list(include === 'retired');
+  async list(@Query('include') include: string | undefined, @CurrentUser() user: CurrentUserRef) {
+    // Lists show what the caller may read; the service filters per row.
+    return this.teams.list(user.id, include === 'retired');
   }
 
   @Contract(ROUTES.createTeam)
   @Post()
   @HttpCode(201)
-  @Authorize(ACTIONS.teamCreate.action, orgResource)
   async create(
     @Body(new ZodValidationPipe(createTeamSchema)) body: CreateTeamDto,
     @CurrentUser() user: CurrentUserRef,
@@ -46,7 +45,7 @@ export class TeamsController {
 
   @Contract(ROUTES.updateTeam)
   @Patch(':id')
-  @Authorize(ACTIONS.teamUpdate.action, orgResource)
+  @Authorize(ACTIONS.teamUpdate.action, teamResource)
   async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateTeamSchema)) body: UpdateTeamDto,
@@ -57,14 +56,14 @@ export class TeamsController {
 
   @Contract(ROUTES.retireTeam)
   @Post(':id/retire')
-  @Authorize(ACTIONS.teamRetire.action, orgResource)
+  @Authorize(ACTIONS.teamRetire.action, teamResource)
   async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.teams.retire(id, user.id);
   }
 
   @Contract(ROUTES.reviveTeam)
   @Post(':id/revive')
-  @Authorize(ACTIONS.teamRevive.action, orgResource)
+  @Authorize(ACTIONS.teamRevive.action, teamResource)
   async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.teams.revive(id, user.id);
   }

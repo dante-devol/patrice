@@ -13,9 +13,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import {
   Authorize,
-  attachmentCreateResource,
+  attachmentTaskResource,
+  messageResource,
   attachmentResource,
-  attachmentReviveResource,
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { AttachmentsService } from './attachments.service';
@@ -40,7 +40,7 @@ export class AttachmentsController {
   @Contract(ROUTES.uploadAttachment)
   @Post('messages/:id/attachments')
   @HttpCode(201)
-  @Authorize(ACTIONS.attachmentCreate.action, attachmentCreateResource)
+  @Authorize(ACTIONS.attachmentCreate.action, messageResource)
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MULTIPART_HARD_LIMIT } }),
   )
@@ -63,13 +63,14 @@ export class AttachmentsController {
   @Contract(ROUTES.reviveAttachment)
   @Post('attachments/:id/revive')
   @HttpCode(200)
-  @Authorize(ACTIONS.attachmentRevive.action, attachmentReviveResource)
+  @Authorize(ACTIONS.attachmentRevive.action, attachmentResource)
   async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
     return this.attachments.revive(id, user.id);
   }
 
   @Contract(ROUTES.downloadAttachment)
   @Get('attachments/:id')
+  @Authorize(ACTIONS.attachmentRead.action, attachmentTaskResource)
   async download(
     @Param('id') id: string,
     @Req() req: Request,

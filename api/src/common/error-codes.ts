@@ -86,6 +86,7 @@ export const ERROR_CODES = {
   NO_DEFAULT_REQUEST_TEMPLATE: { status: 422, description: 'The division has no request template' },
   GOVERNANCE_ROLE_NOT_MAPPABLE: { status: 422, description: 'A role holding governance grants cannot be mapped to an external group' },
   NO_FILE: { status: 422, description: 'No file was uploaded' },
+  TEAM_NOT_IN_DIVISION: { status: 422, description: "The team belongs to a different division than the task" },
   NOT_LINKED: { status: 422, description: 'The account is not linked' },
   REPLY_TO_REPLY: { status: 422, description: 'Threads are one level deep' },
   ROLE_RETIRED: { status: 422, description: 'Role is retired' },

@@ -9,7 +9,7 @@ import {
 import { ZodValidationPipe } from '../common/zod.pipe';
 import {
   Authorize,
-  taskSubmitResource,
+  taskResource,
 } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { SubmissionsService } from './submissions.service';
@@ -30,7 +30,7 @@ export class SubmissionsController {
   @Contract(ROUTES.submit)
   @Post()
   @HttpCode(201)
-  @Authorize(ACTIONS.taskSubmit.action, taskSubmitResource)
+  @Authorize(ACTIONS.taskSubmit.action, taskResource)
   async submit(
     @Param('id') taskId: string,
     @Body(new ZodValidationPipe(submitSchema)) body: SubmitDto,
@@ -41,6 +41,7 @@ export class SubmissionsController {
 
   @Contract(ROUTES.listSubmissions)
   @Get()
+  @Authorize(ACTIONS.submissionRead.action, taskResource)
   async list(@Param('id') taskId: string) {
     return this.submissions.listForTask(taskId);
   }

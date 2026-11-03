@@ -1,11 +1,11 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-import { Team } from '../../core/api.types';
+import { Division, Team } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { teamColor as computeTeamColor } from '../tasks/task-presentation';
 
-/** Teams editor (Slice 2.2): name, restrict-claims. */
+/** Teams editor: name, restrict-claims. Every team belongs to a division. */
 @Component({
   selector: 'teams-admin',
   standalone: true,
@@ -15,7 +15,11 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
       <h2>Teams</h2>
       <div class="row">
         <input [(ngModel)]="newName" placeholder="New team name" />
-        <button [disabled]="busy() || !newName.trim()" (click)="create()">Create team</button>
+        <select [(ngModel)]="newDivisionId" aria-label="Division">
+          <option value="" disabled>Division…</option>
+          @for (d of divisions(); track d.id) { <option [value]="d.id">{{ d.name }}</option> }
+        </select>
+        <button [disabled]="busy() || !newName.trim() || !newDivisionId" (click)="create()">Create team</button>
       </div>
       @if (error()) { <p class="error">{{ error() }}</p> }
       <table>
@@ -48,9 +52,11 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
 export class TeamsAdminComponent {
   readonly api = inject(ApiService);
   readonly teams = signal<Team[]>([]);
+  readonly divisions = signal<Division[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   newName = '';
+  newDivisionId = '';
 
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
   computeColor(t: Team): string { return computeTeamColor(t.name); }
@@ -62,7 +68,9 @@ export class TeamsAdminComponent {
 
   private async refresh(): Promise<void> {
     try {
-      this.teams.set(await this.api.listTeams(true));
+      const [teams, divisions] = await Promise.all([this.api.listTeams(true), this.api.listDivisions()]);
+      this.teams.set(teams);
+      this.divisions.set(divisions);
     } catch (e) {
       this.error.set(errorMessage(e));
     }
@@ -72,7 +80,7 @@ export class TeamsAdminComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.api.createTeam({ name: this.newName.trim() });
+      await this.api.createTeam({ name: this.newName.trim(), divisionId: this.newDivisionId });
       this.newName = '';
       await this.refresh();
     } catch (e) {

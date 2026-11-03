@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import * as cedar from '@cedar-policy/cedar-wasm/nodejs';
 import { CEDAR_NAMESPACE, CEDAR_SCHEMA_TEXT } from './schema';
 
@@ -59,14 +60,32 @@ export class CedarEngine {
     return (ans.validationErrors ?? []).map((e) => e.error.message);
   }
 
+  /** Policy-set texts already parsed into the engine, by content hash. */
+  private readonly preparsed = new Set<string>();
+
+  /** The id of `policiesText` parsed once into the engine (later calls reuse it). */
+  private preparsedId(policiesText: string): string {
+    const id = createHash('sha256').update(policiesText).digest('hex');
+    if (!this.preparsed.has(id)) {
+      const ans = cedar.preparsePolicySet(id, { staticPolicies: policiesText });
+      if (ans.type !== 'success') {
+        throw new Error(`Cedar policy set failed to parse: ${ans.errors.map((e) => e.message).join('; ')}`);
+      }
+      // Policy sets change only on config edits; keep a handful of recent ones.
+      if (this.preparsed.size >= 32) this.preparsed.clear();
+      this.preparsed.add(id);
+    }
+    return id;
+  }
+
   /** Authorize a single request. Returns true iff the decision is `allow`. */
   authorize(req: AuthorizeRequest): boolean {
-    const answer = cedar.isAuthorized({
+    const answer = cedar.statefulIsAuthorized({
       principal: { type: req.principal.type, id: req.principal.id },
       action: { type: req.action.type, id: req.action.id },
       resource: { type: req.resource.type, id: req.resource.id },
       context: (req.context ?? {}) as unknown as cedar.Context,
-      policies: { staticPolicies: req.policiesText },
+      preparsedPolicySetId: this.preparsedId(req.policiesText),
       entities: req.entities.map((e) => ({
         uid: e.uid,
         attrs: e.attrs as Record<string, cedar.CedarValueJson>,

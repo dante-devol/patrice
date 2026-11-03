@@ -88,7 +88,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     expect(res.status).toBe(200);
     expect(res.body.email).toBe('admin@example.com');
     expect(res.body.emailVerified).toBe(true); // bootstrap auto-verifies
-    expect(res.body.capabilities.inviteCreate).toBe(true); // reflected capability
+    expect(res.body.allowedActions).toContain('invite:create'); // reflected capability
   });
 
   it('GET /bootstrap now reports closed (effective admin exists)', async () => {
@@ -154,7 +154,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     expect(right.status).toBe(201);
   });
 
-  it('a base user (no grants) is denied POST /invitations → 403', async () => {
+  it('a base user (default Member role) is denied POST /invitations → 403', async () => {
     const created = await http()
       .post('/api/invitations')
       .set('Cookie', adminCookies)
@@ -177,7 +177,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
 
     // The reflected capability matches the engine: base user cannot create invites.
     const baseMe = await http().get('/api/me').set('Cookie', baseCookies);
-    expect(baseMe.body.capabilities.inviteCreate).toBe(false);
+    expect(baseMe.body.allowedActions).not.toContain('invite:create');
 
     const denied = await http()
       .post('/api/invitations')

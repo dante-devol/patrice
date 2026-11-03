@@ -86,31 +86,21 @@ export class GcService {
       await this.prisma.task.findMany({ where, select: { id: true } })
     ).map((t) => t.id);
 
-    // Divisions: collectable once no task references them and their inherent role is
-    // itself unreferenced (no membership / grant).
+    // Divisions: collectable once no task or team references them. Memberships go
+    // with the division.
     const divisions: string[] = [];
-    for (const d of await this.prisma.division.findMany({
-      where,
-      select: { id: true, inherentRole: { select: { id: true } } },
-    })) {
-      if (await this.divisionCollectable(d.id, d.inherentRole?.id)) divisions.push(d.id);
+    for (const d of await this.prisma.division.findMany({ where, select: { id: true } })) {
+      if (await this.divisionCollectable(d.id)) divisions.push(d.id);
     }
 
     const teams: string[] = [];
-    for (const t of await this.prisma.team.findMany({
-      where,
-      select: { id: true, inherentRole: { select: { id: true } } },
-    })) {
-      if (await this.teamCollectable(t.id, t.inherentRole?.id)) teams.push(t.id);
+    for (const t of await this.prisma.team.findMany({ where, select: { id: true } })) {
+      if (await this.teamCollectable(t.id)) teams.push(t.id);
     }
 
-    // Roles: only **standalone** roles GC individually; inherent roles are collected
-    // with their division/team. Collectable once no membership / grant references it.
+    // Roles: collectable once no holder, grant or mapping references them.
     const roles: string[] = [];
-    for (const r of await this.prisma.role.findMany({
-      where: { ...where, kind: 'standalone' },
-      select: { id: true },
-    })) {
+    for (const r of await this.prisma.role.findMany({ where, select: { id: true } })) {
       if (await this.roleUnreferenced(r.id)) roles.push(r.id);
     }
 
@@ -143,22 +133,16 @@ export class GcService {
     return memberships === 0 && grants === 0 && mappings === 0;
   }
 
-  private async divisionCollectable(
-    divisionId: string,
-    inherentRoleId: string | undefined,
-  ): Promise<boolean> {
-    const tasks = await this.prisma.task.count({ where: { divisionId } });
-    if (tasks > 0) return false;
-    return inherentRoleId ? this.roleUnreferenced(inherentRoleId) : true;
+  private async divisionCollectable(divisionId: string): Promise<boolean> {
+    const [tasks, teams] = await Promise.all([
+      this.prisma.task.count({ where: { divisionId } }),
+      this.prisma.team.count({ where: { divisionId } }),
+    ]);
+    return tasks === 0 && teams === 0;
   }
 
-  private async teamCollectable(
-    teamId: string,
-    inherentRoleId: string | undefined,
-  ): Promise<boolean> {
-    const tasks = await this.prisma.task.count({ where: { teamId } });
-    if (tasks > 0) return false;
-    return inherentRoleId ? this.roleUnreferenced(inherentRoleId) : true;
+  private async teamCollectable(teamId: string): Promise<boolean> {
+    return (await this.prisma.task.count({ where: { teamId } })) === 0;
   }
 
   /** Retired-past-grace users, split by whether they bear authored history. */
@@ -364,6 +348,7 @@ export class GcService {
     await tx.authToken.deleteMany({ where: { userId } });
     await tx.notification.deleteMany({ where: { recipientUserId: userId } });
     await tx.userRole.deleteMany({ where: { userId } });
+    await tx.membership.deleteMany({ where: { userId } });
     // Slice 8: purge integration account links (external_identity rows name user as PII).
     const identities = await tx.externalIdentity.findMany({
       where: { userId },
@@ -475,10 +460,9 @@ export class GcService {
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        // Owned children first (request template + inherent role), then the division —
-        // each FK is RESTRICT, so order matters.
+        // Owned children first (the request template), then the division. Memberships
+        // cascade with it.
         await tx.requestTemplate.deleteMany({ where: { ownerDivisionId: divisionId } });
-        await tx.role.deleteMany({ where: { divisionId } });
         await tx.division.delete({ where: { id: divisionId } });
         await this.logCollected(tx, 'division', divisionId, 'gc.division_collected', {
           divisionId,
@@ -497,7 +481,6 @@ export class GcService {
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        await tx.role.deleteMany({ where: { teamId } });
         await tx.team.delete({ where: { id: teamId } });
         await this.logCollected(tx, 'team', teamId, 'gc.team_collected', { teamId });
       });

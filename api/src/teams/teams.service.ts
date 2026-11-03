@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { LifecycleState, Prisma, RoleKind } from '@prisma/client';
+import { LifecycleState, Team } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
+import { ACTIONS } from '../access/actions';
+import { EntityLoader, teamRef } from '../access/entity-loader';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
@@ -10,18 +12,27 @@ import { CreateTeamDto, UpdateTeamDto } from './teams.dto';
 
 export interface TeamView {
   id: string;
+  divisionId: string;
   name: string;
   restrictClaims: boolean;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
-  inherentRoleId: string;
 }
 
+const toView = (t: Team): TeamView => ({
+  id: t.id,
+  divisionId: t.divisionId,
+  name: t.name,
+  restrictClaims: t.restrictClaims,
+  lifecycleState: t.lifecycleState,
+  retiredAt: t.retiredAt,
+  version: t.version,
+});
+
 /**
- * Teams (Slice 2.2). Same inherent-role auto-creation + lifecycle-cascade contract
- * as divisions (`kind='team'`, UNIQUE `role.team_id` backstop), minus the openings
- * settings which live only on divisions.
+ * Teams. A team belongs to one division; membership is managed separately (see
+ * MembershipService) and grants no authority by itself.
  */
 @Injectable()
 export class TeamsService {
@@ -32,107 +43,64 @@ export class TeamsService {
     private readonly grace: GraceService,
   ) {}
 
-  async list(includeRetired = false): Promise<TeamView[]> {
+  /** The teams the user may see (`team:read`). */
+  async list(userId: string, includeRetired = false): Promise<TeamView[]> {
     const rows = await this.prisma.team.findMany({
       where: { ...activeFilter(includeRetired) },
       orderBy: { createdAt: 'asc' },
-      include: { inherentRole: true },
     });
-    return rows.map((r) => this.toView(r));
+    return (await this.access.filterAllowed(userId, ACTIONS.teamRead.action, rows, teamRef)).map(toView);
   }
 
-  private toView(
-    r: Prisma.TeamGetPayload<{ include: { inherentRole: true } }>,
-  ): TeamView {
-    return {
-      id: r.id,
-      name: r.name,
-      restrictClaims: r.restrictClaims,
-      lifecycleState: r.lifecycleState,
-      retiredAt: r.retiredAt,
-      version: r.version,
-      inherentRoleId: r.inherentRole!.id,
-    };
-  }
-
-  async create(
-    actorUserId: string,
-    dto: CreateTeamDto,
-  ): Promise<TeamView> {
-    const row = await this.prisma.$transaction(async (tx) => {
-      const team = await tx.team.create({
-        data: {
-          name: dto.name,
-          restrictClaims: dto.restrictClaims ?? false,
-        },
-      });
-      const role = await tx.role.create({
-        data: {
-          name: team.name,
-          kind: RoleKind.team,
-          teamId: team.id,
-        },
-        select: { id: true },
+  /** `team:create` targets the team's division, so a division admin can be scoped to it. */
+  async create(actorUserId: string, dto: CreateTeamDto): Promise<TeamView> {
+    const division = await this.prisma.division.findUnique({ where: { id: dto.divisionId } });
+    if (!division) throw new NotFoundError('DIVISION_NOT_FOUND', 'Division not found');
+    await this.access.assert(
+      actorUserId,
+      ACTIONS.teamCreate.action,
+      await new EntityLoader(this.prisma).division(division.id),
+    );
+    if (division.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('DIVISION_RETIRED', 'Division is retired');
+    }
+    const team = await this.prisma.$transaction(async (tx) => {
+      const t = await tx.team.create({
+        data: { divisionId: dto.divisionId, name: dto.name, restrictClaims: dto.restrictClaims ?? false },
       });
       await this.activity.logActivity({
         tx,
         actorUserId,
         subjectType: 'team',
-        subjectId: team.id,
+        subjectId: t.id,
         verb: 'team.created',
-        payload: { teamId: team.id },
+        payload: { teamId: t.id },
       });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'role',
-        subjectId: role.id,
-        verb: 'role.created',
-        payload: { roleId: role.id },
-      });
-      return tx.team.findUniqueOrThrow({
-        where: { id: team.id },
-        include: { inherentRole: true },
-      });
+      return t;
     });
-    return this.toView(row);
+    return toView(team);
   }
 
-  private async load(id: string) {
-    const team = await this.prisma.team.findUnique({
-      where: { id },
-      include: { inherentRole: true },
-    });
-    if (!team || !team.inherentRole) {
-      throw new NotFoundError('TEAM_NOT_FOUND', 'Team not found');
-    }
+  private async load(id: string): Promise<Team> {
+    const team = await this.prisma.team.findUnique({ where: { id } });
+    if (!team) throw new NotFoundError('TEAM_NOT_FOUND', 'Team not found');
     return team;
   }
 
-  async update(
-    id: string,
-    actorUserId: string,
-    dto: UpdateTeamDto,
-  ): Promise<TeamView> {
+  async update(id: string, actorUserId: string, dto: UpdateTeamDto): Promise<TeamView> {
     const team = await this.load(id);
+    if (team.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('TEAM_RETIRED', 'Team is retired');
+    }
     const row = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.team.update({
         where: { id: team.id },
         data: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
-          ...(dto.restrictClaims !== undefined
-            ? { restrictClaims: dto.restrictClaims }
-            : {}),
+          ...(dto.restrictClaims !== undefined ? { restrictClaims: dto.restrictClaims } : {}),
           version: { increment: 1 },
         },
-        include: { inherentRole: true },
       });
-      if (dto.name !== undefined) {
-        await tx.role.update({
-          where: { id: team.inherentRole!.id },
-          data: { name: dto.name, version: { increment: 1 } },
-        });
-      }
       await this.activity.logActivity({
         tx,
         actorUserId,
@@ -143,7 +111,7 @@ export class TeamsService {
       });
       return updated;
     });
-    return this.toView(row);
+    return toView(row);
   }
 
   async retire(id: string, actorUserId: string): Promise<TeamView> {
@@ -151,71 +119,24 @@ export class TeamsService {
     if (team.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('ALREADY_RETIRED', 'Team is already retired');
     }
-    const now = new Date();
-    const row = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.team.update({
-        where: { id: team.id },
-        data: {
-          lifecycleState: LifecycleState.retired,
-          retiredAt: now,
-          version: { increment: 1 },
-        },
-        include: { inherentRole: true },
-      });
-      await tx.role.update({
-        where: { id: team.inherentRole!.id },
-        data: {
-          lifecycleState: LifecycleState.retired,
-          retiredAt: now,
-          version: { increment: 1 },
-        },
-      });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'team',
-        subjectId: team.id,
-        verb: 'team.retired',
-        payload: { teamId: team.id },
-      });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'role',
-        subjectId: team.inherentRole!.id,
-        verb: 'role.retired',
-        payload: { roleId: team.inherentRole!.id },
-      });
-      await this.access.bumpConfigVersion(tx);
-      return updated;
-    });
-    return this.toView(row);
+    return this.setLifecycle(team, actorUserId, 'retired');
   }
 
   async revive(id: string, actorUserId: string): Promise<TeamView> {
     const team = await this.load(id);
-    const graceMs = await this.grace.windowMs();
-    if (!isRevivable(team, graceMs)) {
-      throw new ConflictError(
-        'NOT_REVIVABLE',
-        'Team is not retired or its grace period has elapsed',
-      );
+    if (!isRevivable(team, await this.grace.windowMs())) {
+      throw new ConflictError('NOT_REVIVABLE', 'Team is not retired or its grace period has elapsed');
     }
+    return this.setLifecycle(team, actorUserId, 'revived');
+  }
+
+  private async setLifecycle(team: Team, actorUserId: string, kind: 'retired' | 'revived'): Promise<TeamView> {
     const row = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.team.update({
         where: { id: team.id },
         data: {
-          lifecycleState: LifecycleState.active,
-          retiredAt: null,
-          version: { increment: 1 },
-        },
-        include: { inherentRole: true },
-      });
-      await tx.role.update({
-        where: { id: team.inherentRole!.id },
-        data: {
-          lifecycleState: LifecycleState.active,
-          retiredAt: null,
+          lifecycleState: kind === 'retired' ? LifecycleState.retired : LifecycleState.active,
+          retiredAt: kind === 'retired' ? new Date() : null,
           version: { increment: 1 },
         },
       });
@@ -224,20 +145,11 @@ export class TeamsService {
         actorUserId,
         subjectType: 'team',
         subjectId: team.id,
-        verb: 'team.revived',
+        verb: kind === 'retired' ? 'team.retired' : 'team.revived',
         payload: { teamId: team.id },
       });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'role',
-        subjectId: team.inherentRole!.id,
-        verb: 'role.revived',
-        payload: { roleId: team.inherentRole!.id },
-      });
-      await this.access.bumpConfigVersion(tx);
       return updated;
     });
-    return this.toView(row);
+    return toView(row);
   }
 }

@@ -17,13 +17,21 @@ export class AuthStore {
   readonly loaded = this._loaded.asReadonly();
   readonly isAuthenticated = computed(() => this._user() !== null);
 
-  /** Reflected capability for `invite:create`, sourced from the API. UX hint only —
-   *  the API is the authority and may still 403. */
-  readonly canInvite = computed(() => this._user()?.capabilities?.inviteCreate === true);
+  /** Whether `/me` reports the org-wide `action` as allowed. UX hint only — the API
+   *  is the authority and may still 403. */
+  can(action: string): boolean {
+    return this._user()?.allowedActions.includes(action) === true;
+  }
 
-  /** Reflected capability gating the admin area (org configuration). UX hint only. */
-  readonly canManageOrg = computed(
-    () => this._user()?.capabilities?.manageOrg === true,
+  /** Reflected `invite:create`. */
+  readonly canInvite = computed(() => this.can('invite:create'));
+
+  /** Reflected authority gating the admin area (org configuration). */
+  readonly canManageOrg = computed(() => this.can('config:update'));
+
+  /** True while `requireDiscordLink` blocks this user's task access. */
+  readonly taskAccessBlockedByDiscord = computed(
+    () => this._user()?.taskAccessBlockedByDiscord === true,
   );
 
   /** Load /me once (e.g. on app start / guard). Swallows 401 into a null user. */

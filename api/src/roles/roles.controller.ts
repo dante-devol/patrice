@@ -33,9 +33,9 @@ export class RolesController {
 
   @Contract(ROUTES.listRoles)
   @Get()
-  @Authorize(ACTIONS.roleCreate.action, orgResource)
-  async list(@Query('include') include: string | undefined) {
-    return this.roles.list(include === 'retired');
+  async list(@Query('include') include: string | undefined, @CurrentUser() user: CurrentUserRef) {
+    // Lists show what the caller may read; the service filters per row.
+    return this.roles.list(user.id, include === 'retired');
   }
 
   @Contract(ROUTES.createRole)

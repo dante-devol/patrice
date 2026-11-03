@@ -10,8 +10,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 2.2 — Divisions + Teams with inherent-role auto-creation (issue #9). */
-describe('Slice 2.2 — Divisions + Teams', () => {
+/** Divisions and teams, and membership in them (separate from roles). */
+describe('Divisions, teams and membership', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;
@@ -36,45 +36,60 @@ describe('Slice 2.2 — Divisions + Teams', () => {
     r.set('Cookie', admin.cookies).set('x-csrf-token', admin.csrf);
 
   let writingId: string;
-  let writingRoleId: string;
   let usaTeamId: string;
+  let memberId: string;
 
-  it('creating a division auto-creates its inherent role (kind=division, same name)', async () => {
+  it('creating a division creates no role: membership is separate from authority', async () => {
+    const rolesBefore = await prisma.role.count();
     const res = await auth(http().post('/api/divisions')).send({
       name: 'Writing',
       defaultOpenings: 3,
     });
     expect(res.status).toBe(201);
     writingId = res.body.id;
-    writingRoleId = res.body.inherentRoleId;
     expect(res.body.defaultOpenings).toBe(3);
-
-    const role = await prisma.role.findUnique({ where: { id: writingRoleId } });
-    expect(role?.kind).toBe('division');
-    expect(role?.divisionId).toBe(writingId);
-    expect(role?.name).toBe('Writing');
+    expect(await prisma.role.count()).toBe(rolesBefore);
   });
 
-  it('creating a team auto-creates its inherent role (kind=team)', async () => {
-    const res = await auth(http().post('/api/teams')).send({ name: 'USA' });
+  it('a team belongs to a division', async () => {
+    const missing = await auth(http().post('/api/teams')).send({ name: 'USA' });
+    expect(missing.status).toBe(422);
+    const res = await auth(http().post('/api/teams')).send({ name: 'USA', divisionId: writingId });
     expect(res.status).toBe(201);
+    expect(res.body.divisionId).toBe(writingId);
     usaTeamId = res.body.id;
-    const role = await prisma.role.findUnique({
-      where: { id: res.body.inherentRoleId },
-    });
-    expect(role?.kind).toBe('team');
-    expect(role?.teamId).toBe(usaTeamId);
   });
 
-  it('PATCH renames the division and its inherent role in lock-step', async () => {
+  it('PATCH edits the division', async () => {
     const res = await auth(http().patch(`/api/divisions/${writingId}`)).send({
       name: 'Writing & Editing',
       openingsLocked: true,
     });
     expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Writing & Editing');
     expect(res.body.openingsLocked).toBe(true);
-    const role = await prisma.role.findUnique({ where: { id: writingRoleId } });
-    expect(role?.name).toBe('Writing & Editing');
+  });
+
+  it('members are added and removed explicitly, and grant nothing by themselves', async () => {
+    const user = await prisma.appUser.create({ data: { email: 'm@example.com', displayName: 'M' } });
+    memberId = user.id;
+    const add = await auth(http().post(`/api/divisions/${writingId}/members`)).send({ userId: memberId });
+    expect(add.status).toBe(200);
+    expect(add.body.map((m: { userId: string }) => m.userId)).toEqual([memberId]);
+    // Idempotent.
+    await auth(http().post(`/api/divisions/${writingId}/members`)).send({ userId: memberId });
+    expect(await prisma.membership.count({ where: { divisionId: writingId } })).toBe(1);
+    expect(await prisma.userRole.count({ where: { userId: memberId } })).toBe(0);
+
+    // Team membership doesn't imply division membership, and vice versa.
+    await auth(http().post(`/api/teams/${usaTeamId}/members`)).send({ userId: memberId });
+    const teamMembers = await auth(http().get(`/api/teams/${usaTeamId}/members`));
+    expect(teamMembers.body).toHaveLength(1);
+
+    const del = await auth(http().delete(`/api/divisions/${writingId}/members/${memberId}`));
+    expect(del.status).toBe(204);
+    expect(await prisma.membership.count({ where: { divisionId: writingId } })).toBe(0);
+    expect(await prisma.membership.count({ where: { teamId: usaTeamId } })).toBe(1);
   });
 
   it('PATCH with a stale version → 409 STALE_VERSION and no change', async () => {
@@ -114,26 +129,20 @@ describe('Slice 2.2 — Divisions + Teams', () => {
     expect(res.status).toBe(422);
   });
 
-  it('retiring a division retires its inherent role in the same transaction', async () => {
+  it('a retired division refuses edits and new members, and revives within grace', async () => {
     const res = await auth(http().post(`/api/divisions/${writingId}/retire`));
     expect(res.status).toBe(201);
     expect(res.body.lifecycleState).toBe('retired');
-    const role = await prisma.role.findUnique({ where: { id: writingRoleId } });
-    expect(role?.lifecycleState).toBe('retired');
-  });
 
-  it('reviving the division within grace revives both it and its inherent role', async () => {
-    const res = await auth(http().post(`/api/divisions/${writingId}/revive`));
-    expect(res.status).toBe(201);
-    expect(res.body.lifecycleState).toBe('active');
-    const role = await prisma.role.findUnique({ where: { id: writingRoleId } });
-    expect(role?.lifecycleState).toBe('active');
-    expect(role?.retiredAt).toBeNull();
-  });
+    const edit = await auth(http().patch(`/api/divisions/${writingId}`)).send({ name: 'X' });
+    expect(edit.status).toBe(409);
+    expect(edit.body.error.code).toBe('DIVISION_RETIRED');
+    const add = await auth(http().post(`/api/divisions/${writingId}/members`)).send({ userId: memberId });
+    expect(add.status).toBe(409);
 
-  it('the inherent role cannot be lifecycle-edited directly via /roles → 422', async () => {
-    const res = await auth(http().post(`/api/roles/${writingRoleId}/retire`));
-    expect(res.status).toBe(422);
+    const revive = await auth(http().post(`/api/divisions/${writingId}/revive`));
+    expect(revive.status).toBe(201);
+    expect(revive.body.lifecycleState).toBe('active');
   });
 
   it('restrict_claims is persisted on both division and team', async () => {

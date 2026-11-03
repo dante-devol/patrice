@@ -23,6 +23,7 @@ export class RequestTemplatesController {
 
   @Contract(ROUTES.getDivisionTemplate)
   @Get(':id/request-template')
+  @Authorize(ACTIONS.requestTemplateRead.action, divisionResource)
   async get(@Param('id') id: string) {
     const rt = await this.requestTemplates.getForDivision(id);
     if (!rt) {

@@ -107,7 +107,6 @@ describe('Slice 7.3 — GC sweep', () => {
     const taskId = (
       await auth(http().post('/api/tasks')).send({ name: 'Live', divisionId: divId })
     ).body.id;
-    const inherentRole = await prisma.role.findFirstOrThrow({ where: { divisionId: divId } });
 
     await auth(http().post(`/api/divisions/${divId}/retire`));
 
@@ -116,14 +115,12 @@ describe('Slice 7.3 — GC sweep', () => {
     expect(sweep1.body.divisions).not.toContain(divId);
     expect(await prisma.division.findUnique({ where: { id: divId } })).not.toBeNull();
 
-    // Dereference it (retire + GC the task), then the next sweep collects the division
-    // and its inherent role together.
+    // Dereference it (retire + GC the task), then the next sweep collects the division.
     await auth(http().post(`/api/tasks/${taskId}/retire`));
     const sweep2 = await auth(http().post('/api/gc/sweep'));
     expect(sweep2.body.tasks).toContain(taskId);
     expect(sweep2.body.divisions).toContain(divId);
     expect(await prisma.division.findUnique({ where: { id: divId } })).toBeNull();
-    expect(await prisma.role.findUnique({ where: { id: inherentRole.id } })).toBeNull();
   });
 
   it('reconciles an orphaned blob (row gone, blob left behind)', async () => {

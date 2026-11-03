@@ -82,9 +82,10 @@ describe('Slice 7.1 — Revive endpoints', () => {
     expect(retire.status).toBe(201);
     expect(retire.body.lifecycleState).toBe('retired');
 
-    // While retired, a mutation on the task is hard-denied (403) by Cedar.
+    // While retired, the task refuses mutations (the domain's rule, not policy).
     const denied = await auth(http().post(`/api/tasks/${taskId}/retire`));
-    expect(denied.status).toBe(403);
+    expect(denied.status).toBe(409);
+    expect(denied.body.error.code).toBe('ALREADY_RETIRED');
 
     const revive = await auth(http().post(`/api/tasks/${taskId}/revive`));
     expect(revive.status).toBe(200);

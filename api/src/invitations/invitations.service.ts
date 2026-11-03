@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuthProvider, Prisma } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { AccessService } from '../access/access.service';
 import { ACTIONS } from '../access/actions';
 import { CedarEngine } from '../access/cedar/engine';
@@ -69,6 +70,7 @@ export class InvitationsService {
     private readonly activity: ActivityService,
     private readonly passwords: PasswordService,
     private readonly verification: VerificationService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Peppered, like every other stored secret (see BootstrapService). */
@@ -98,7 +100,6 @@ export class InvitationsService {
           type: 'User',
           id: 'prospective-invitee',
           attrs: {
-            retired: false,
             targetRole: {
               __entity: { type: CedarEngine.qualify('Role'), id: roleId },
             },
@@ -114,6 +115,18 @@ export class InvitationsService {
     }
   }
 
+  /** The Member role, if it still exists and the creator may grant it. */
+  private async defaultRoles(creatorUserId: string): Promise<string[]> {
+    const { memberRoleId } = await this.settings.get();
+    if (!memberRoleId) return [];
+    try {
+      await this.assertRolesGrantable(creatorUserId, [memberRoleId]);
+      return [memberRoleId];
+    } catch {
+      return [];
+    }
+  }
+
   /** Create a normal (non-bootstrap) invitation. Returns the plaintext token. */
   async create(args: {
     creatorUserId: string;
@@ -121,16 +134,18 @@ export class InvitationsService {
     intendedRoleIds?: string[];
     expiresAt?: Date;
   }): Promise<{ id: string; token: string }> {
+    // Omitted roles default to the seeded Member role, when the creator may grant it.
+    const intendedRoleIds = args.intendedRoleIds ?? (await this.defaultRoles(args.creatorUserId));
     // Privilege bound at creation — the creator may only pre-assign roles they could
     // grant directly (re-validated again at redemption below).
-    await this.assertRolesGrantable(args.creatorUserId, args.intendedRoleIds ?? []);
+    await this.assertRolesGrantable(args.creatorUserId, intendedRoleIds);
 
     const token = generateInviteToken();
     const invitation = await this.prisma.invitation.create({
       data: {
         tokenHash: hashToken(this.env.TOKEN_PEPPER, token),
         email: args.email ?? null,
-        intendedRoleIds: args.intendedRoleIds ?? [],
+        intendedRoleIds,
         maxUses: 1,
         createdBy: args.creatorUserId,
         expiresAt: args.expiresAt ?? new Date(Date.now() + DEFAULT_EXPIRY_MS),

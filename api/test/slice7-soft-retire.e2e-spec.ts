@@ -96,12 +96,12 @@ describe('Slice 7.2 — Soft-retire filter, grace config, hard-deny', () => {
     expect(res.body.error.code).toBe('DIVISION_RETIRED');
   });
 
-  it('Retired-as-Hard-Deny: a gated mutation on a retired division returns 403', async () => {
+  it('a retired division refuses edits with 409, whatever grants the editor holds', async () => {
     const div = (await auth(http().post('/api/divisions')).send({ name: 'Deny Div' })).body.id;
     await auth(http().post(`/api/divisions/${div}/retire`));
-    // division:update is gated against the Division resource (carries retired=true),
-    // so the static forbid fires regardless of the admin's global grant.
+    // Lifecycle is the aggregate's rule; Cedar only decides who may edit.
     const res = await auth(http().patch(`/api/divisions/${div}`)).send({ name: 'Nope' });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('DIVISION_RETIRED');
   });
 });

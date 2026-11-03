@@ -6,7 +6,8 @@ import { SettingsService } from '../settings/settings.service';
 import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ActivityService } from '../activity/activity.service';
-import { ConflictError, DeniedError, NotFoundError } from '../common/errors';
+import { ConflictError, DeniedError, NotFoundError, UnprocessableError } from '../common/errors';
+import { ACTIONS } from '../access/actions';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { discordAvatarUrl } from '../common/discord-avatar';
@@ -42,8 +43,12 @@ export class UsersService {
     @Optional() private readonly sync: SyncService | null,
   ) {}
 
-  async list(includeRetired = false): Promise<UserView[]> {
-    const [{ anonymizeLabel: anonymize }, users] = await Promise.all([
+  /**
+   * The users the caller may see (`user:read`). Email addresses are personal data:
+   * they appear only on users the caller may also edit (`user:update`).
+   */
+  async list(actorUserId: string, includeRetired = false): Promise<UserView[]> {
+    const [{ anonymizeLabel: anonymize }, all] = await Promise.all([
       this.settings.get(),
       this.prisma.appUser.findMany({
         where: { ...activeFilter(includeRetired) },
@@ -63,11 +68,24 @@ export class UsersService {
         },
       }),
     ]);
+    const decisions = await this.access.decideMany(
+      actorUserId,
+      all.flatMap((u) => {
+        const resource = { type: 'User' as const, id: u.id };
+        return [
+          { action: ACTIONS.userRead.action, resource },
+          { action: ACTIONS.userUpdate.action, resource },
+        ];
+      }),
+    );
+    const canRead = (i: number) => decisions[2 * i];
+    const canEdit = new Set(all.filter((_, i) => decisions[2 * i + 1]).map((u) => u.id));
+    const users = all.filter((_, i) => canRead(i));
     // anonymizeLabel (Slice 7.4): render a retired (scrubbed) user's stored display
     // name as "Former member" without mutating the tombstone label in the DB.
     return users.map((u) => ({
       id: u.id,
-      email: u.email,
+      email: canEdit.has(u.id) ? u.email : null,
       displayName:
         anonymize && u.lifecycleState === LifecycleState.retired
           ? 'Former member'
@@ -273,7 +291,6 @@ export class UsersService {
           targetRole: {
             __entity: { type: CedarEngine.qualify('Role'), id: roleId },
           },
-          retired: false,
         },
       },
     });
@@ -290,9 +307,16 @@ export class UsersService {
     const user = await this.loadUser(targetUserId);
     const role = await this.prisma.role.findFirst({
       where: { id: roleId },
-      select: { id: true },
+      select: { id: true, lifecycleState: true },
     });
     if (!role) throw new NotFoundError('ROLE_NOT_FOUND', 'Role not found');
+    // Retired things accept no new references.
+    if (user.lifecycleState === LifecycleState.retired) {
+      throw new ConflictError('USER_RETIRED', 'User is retired');
+    }
+    if (role.lifecycleState === LifecycleState.retired) {
+      throw new UnprocessableError('ROLE_RETIRED', 'Role is retired');
+    }
 
     await this.reauthorizeRoleScope(
       actorUserId,
@@ -307,20 +331,24 @@ export class UsersService {
     });
     if (existing) return; // idempotent
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.userRole.create({
-        data: { userId: user.id, roleId, grantedBy: actorUserId },
-      });
-      await this.activity.logActivity({
-        tx,
-        actorUserId,
-        subjectType: 'user',
-        subjectId: user.id,
-        verb: 'user_role.granted',
-        payload: { userId: user.id, roleId },
-      });
-      await this.access.bumpConfigVersion(tx);
-    });
+    // A role can carry forbid grants, so even granting one can strip admin authority.
+    await this.admin.withAdminFloor(
+      actorUserId,
+      { type: 'user', id: user.id, path: 'user.grant_role' },
+      async (tx) => {
+        await tx.userRole.create({
+          data: { userId: user.id, roleId, grantedBy: actorUserId },
+        });
+        await this.activity.logActivity({
+          tx,
+          actorUserId,
+          subjectType: 'user',
+          subjectId: user.id,
+          verb: 'user_role.granted',
+          payload: { userId: user.id, roleId },
+        });
+      },
+    );
     // Targeted, debounced reconcile of just this user — pulses the grant to Discord
     // at the Doorbell's ~5s pace rather than waiting for the Reconcile Floor.
     void this.sync?.notifyUserRoleChange(user.id, roleId);

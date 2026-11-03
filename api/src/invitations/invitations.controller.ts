@@ -13,7 +13,7 @@ import type { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { ENV, Env } from '../config/env';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { Authorize, orgResource } from '../access/authorize.decorator';
+import { Authorize, invitationResource, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { AuthService } from '../auth/auth.service';
 import { SessionService } from '../auth/session.service';
@@ -86,7 +86,8 @@ export class InvitationsController {
     const { id, token } = await this.invitations.create({
       creatorUserId: user.id,
       email: body.email ?? null,
-      intendedRoleIds: body.intendedRoleIds ?? [],
+      // Omitted means "the default roles" (Member); an explicit [] means none.
+      intendedRoleIds: body.intendedRoleIds,
       expiresAt: body.expiresAt,
     });
     // Human-facing accept page (SPA route); distinct from the API's /invite/:token.
@@ -104,14 +105,7 @@ export class InvitationsController {
   @Contract(ROUTES.revokeInvitation)
   @Post('invitations/:id/revoke')
   @HttpCode(204)
-  @Authorize(ACTIONS.inviteRetire.action, async (req, prisma) => {
-    const id = String(req.params.id);
-    const inv = await prisma.invitation.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    return { type: 'Invitation' as const, id: inv?.id ?? id, attrs: { retired: false } };
-  })
+  @Authorize(ACTIONS.inviteRetire.action, invitationResource)
   async revoke(@Param('id') id: string, @Req() req: Request,
     @CurrentUser() user: CurrentUserRef): Promise<void> {
     await this.invitations.revoke(id, user.id);

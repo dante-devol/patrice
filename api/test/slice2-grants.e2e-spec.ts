@@ -22,7 +22,6 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
 
   let writingId: string;
   let artId: string;
-  let writingRoleId: string; // inherent division role for Writing
   let leadRoleId: string; // standalone WritingLead
 
   beforeAll(async () => {
@@ -36,7 +35,6 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
 
     const w = await auth(http().post('/api/divisions')).send({ name: 'Writing' });
     writingId = w.body.id;
-    writingRoleId = w.body.inherentRoleId;
     const a = await auth(http().post('/api/divisions')).send({ name: 'Art' });
     artId = a.body.id;
     const lead = await auth(http().post('/api/roles')).send({ name: 'WritingLead' });
@@ -114,8 +112,8 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
   });
 
   it('Cedar engine: a WritingLead member of Writing passes task:review on Writing, fails on Art', async () => {
-    // A user holding WritingLead (for the action grant) AND the Writing inherent
-    // role (for own_division membership).
+    // A user holding WritingLead (for the action grant) and a member of Writing
+    // (for own_division).
     const user = await prisma.appUser.create({
       data: {
         email: 'lead@example.com',
@@ -123,12 +121,8 @@ describe('Slice 2.3 — Permission Matrix + Grants', () => {
       },
       select: { id: true },
     });
-    await prisma.userRole.createMany({
-      data: [
-        { userId: user.id, roleId: leadRoleId },
-        { userId: user.id, roleId: writingRoleId },
-      ],
-    });
+    await prisma.userRole.create({ data: { userId: user.id, roleId: leadRoleId } });
+    await prisma.membership.create({ data: { userId: user.id, divisionId: writingId } });
 
     const taskOn = (divisionId: string) => ({
       type: 'Task' as const,

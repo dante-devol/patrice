@@ -4,16 +4,17 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
-import { GrantEffect, RoleKind, ScopeKind } from '@prisma/client';
+import { GrantEffect, ScopeKind } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { AdministrabilityService } from '../access/administrability.service';
-import { ADMIN_SEED_ACTIONS } from '../access/actions';
+import { ADMIN_SEED_ACTIONS, MEMBER_SEED_GRANTS } from '../access/actions';
 import { generateInviteToken, generateOpaqueToken, hashToken } from '../common/tokens';
 import { PROCESS_ROLE, isApiRole, type ProcessRoleValue } from '../common/process-role';
 
 const ADMIN_ROLE_NAME = 'Admin';
+const MEMBER_ROLE_NAME = 'Member';
 const BOOTSTRAP_EXPIRY_MS = 365 * 24 * 60 * 60 * 1000; // long-lived; gated by passcode
 
 export interface BootstrapStatus {
@@ -52,18 +53,22 @@ export class BootstrapService implements OnApplicationBootstrap {
     await this.refreshBootstrap();
   }
 
-  /** Ensure the settings row, the Admin role and its grants exist. */
+  /**
+   * Ensure the settings row and the seeded roles exist. Admin holds every action at
+   * global scope, topped up whenever an upgrade adds actions. Member is seeded once
+   * with its starter grants and is then the admins' to edit (or delete).
+   */
   private async ensureSeed(): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await this.settings.ensureRow(tx);
 
       let adminRole = await tx.role.findFirst({
-        where: { kind: RoleKind.standalone, name: ADMIN_ROLE_NAME },
+        where: { name: ADMIN_ROLE_NAME },
         select: { id: true },
       });
       if (!adminRole) {
         adminRole = await tx.role.create({
-          data: { name: ADMIN_ROLE_NAME, kind: RoleKind.standalone },
+          data: { name: ADMIN_ROLE_NAME },
           select: { id: true },
         });
       }
@@ -84,6 +89,24 @@ export class BootstrapService implements OnApplicationBootstrap {
           })),
         });
       }
+
+      const settings = await tx.systemSettings.findUniqueOrThrow({ where: { id: 1 } });
+      if (!settings.memberRoleSeeded) {
+        const member = await tx.role.create({ data: { name: MEMBER_ROLE_NAME }, select: { id: true } });
+        await tx.grant.createMany({
+          data: MEMBER_SEED_GRANTS.map((g) => ({
+            roleId: member.id,
+            action: g.action,
+            effect: GrantEffect.permit,
+            scopeKind: g.scopeKind,
+          })),
+        });
+        await tx.systemSettings.update({
+          where: { id: 1 },
+          data: { memberRoleId: member.id, memberRoleSeeded: true },
+        });
+      }
+      await tx.systemSettings.update({ where: { id: 1 }, data: { configVersion: { increment: 1 } } });
     });
   }
 
@@ -98,7 +121,7 @@ export class BootstrapService implements OnApplicationBootstrap {
     }
 
     const adminRole = await this.prisma.role.findFirstOrThrow({
-      where: { kind: RoleKind.standalone, name: ADMIN_ROLE_NAME },
+      where: { name: ADMIN_ROLE_NAME },
       select: { id: true },
     });
 

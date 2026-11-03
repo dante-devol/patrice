@@ -1,12 +1,8 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-import { Division, Role, SyncDirection, Team } from '../../core/api.types';
+import { Role, SyncDirection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
-import {
-  divisionColor as computeDivColor,
-  teamColor as computeTeamColor,
-} from '../tasks/task-presentation';
 
 /** One role↔Discord-group mapping, flattened for display in the roles table. */
 interface RoleMapping {
@@ -40,26 +36,15 @@ interface RoleMapping {
       </div>
       @if (error()) { <p class="error">{{ error() }}</p> }
       <table>
-        <thead><tr><th>Name</th><th>Color</th><th>Kind</th><th>Integration</th><th>State</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Integration</th><th>State</th><th></th></tr></thead>
         <tbody>
           @for (r of roles(); track r.id) {
             <tr [class.row--retired]="r.lifecycleState === 'retired'" [class.row--deactivated]="r.lifecycleState === 'deactivated'">
               <td>
-                @if (r.kind === 'standalone' && r.lifecycleState === 'active') {
+                @if (r.lifecycleState === 'active') {
                   <input [(ngModel)]="r.name" (blur)="rename(r)" />
                 } @else { {{ r.name }} }
               </td>
-              <td>
-                @if (r.kind === 'standalone') {
-                  <span style="display:inline-block;width:26px;height:20px;border-radius:3px;background:#a7aba3"></span>
-                } @else {
-                  <!-- Division/team roles: read-only inherited color swatch -->
-                  <span class="inline-block w-6 h-4 rounded"
-                        [style.background]="inheritedColor(r)"
-                        [title]="'Inherited from ' + (r.kind === 'division' ? 'division' : 'team')"></span>
-                }
-              </td>
-              <td><span [class]="kindBadge(r.kind)">{{ r.kind }}</span></td>
               <td>
                 @if (roleMappings(r.id); as maps) {
                   @if (maps.length === 0) {
@@ -78,18 +63,14 @@ interface RoleMapping {
               </td>
               <td><span [class]="lcStamp(r.lifecycleState)">{{ r.lifecycleState }}</span></td>
               <td>
-                @if (r.kind === 'standalone') {
-                  @if (r.lifecycleState === 'active') {
-                    <button class="secondary" (click)="retire(r)">Retire</button>
-                  } @else if (r.lifecycleState === 'retired') {
-                    <button class="secondary" (click)="revive(r)">Revive</button>
-                  }
-                } @else {
-                  <span class="muted">managed by {{ r.kind }}</span>
+                @if (r.lifecycleState === 'active') {
+                  <button class="secondary" (click)="retire(r)">Retire</button>
+                } @else if (r.lifecycleState === 'retired') {
+                  <button class="secondary" (click)="revive(r)">Revive</button>
                 }
               </td>
             </tr>
-          } @empty { <tr><td colspan="6" class="muted">No roles.</td></tr> }
+          } @empty { <tr><td colspan="4" class="muted">No roles.</td></tr> }
         </tbody>
       </table>
     </div>
@@ -98,8 +79,6 @@ interface RoleMapping {
 export class RolesAdminComponent {
   private readonly api = inject(ApiService);
   readonly roles = signal<Role[]>([]);
-  readonly divisions = signal<Division[]>([]);
-  readonly teams = signal<Team[]>([]);
   readonly mappingsByRole = signal<Map<string, RoleMapping[]>>(new Map());
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -111,14 +90,7 @@ export class RolesAdminComponent {
 
   private async refresh(): Promise<void> {
     try {
-      const [roles, divisions, teams] = await Promise.all([
-        this.api.listRoles(true),
-        this.api.listDivisions(true),
-        this.api.listTeams(true),
-      ]);
-      this.roles.set(roles);
-      this.divisions.set(divisions);
-      this.teams.set(teams);
+      this.roles.set(await this.api.listRoles(true));
       void this.loadMappings();
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -179,20 +151,6 @@ export class RolesAdminComponent {
   }
 
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
-  kindBadge(kind: string): string { return `badge badge--${kind}`; }
-
-  /** Resolved color for a division/team role (read-only inherited swatch). */
-  inheritedColor(r: Role): string {
-    if (r.divisionId) {
-      const d = this.divisions().find((d) => d.id === r.divisionId);
-      return d ? computeDivColor(d.name) : '#a7aba3';
-    }
-    if (r.teamId) {
-      const t = this.teams().find((t) => t.id === r.teamId);
-      return t ? computeTeamColor(t.name) : '#a7aba3';
-    }
-    return '#a7aba3';
-  }
 
   async create(): Promise<void> {
     this.busy.set(true);

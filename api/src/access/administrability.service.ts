@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError } from '../common/errors';
 import { EFFECTIVE_ADMIN_ACTIONS } from './actions';
+import { AccessService, ORGANIZATION_RESOURCE } from './access.service';
 
 /**
  * Internal sentinel thrown from inside a guarded transaction when a mutation would
@@ -20,67 +21,63 @@ export class LastAdminError extends Error {
 }
 
 /**
- * The **effective-admin** predicate — the single source for both Slice 1's
- * bootstrap "no effective admin" trigger and Slice 2/7's administrability
- * invariant (docs/slices/00-overview.md).
+ * The **effective-admin** predicate: the single source for bootstrap ("no effective
+ * admin" reopens setup) and the administrability invariant.
  *
- * Effective admin = an *active* user holding a `permit` grant for one of
- * EFFECTIVE_ADMIN_ACTIONS at `scope_kind='global'`. Scoped grants do not count.
+ * An effective admin is an *active* user whom Cedar permits every one of
+ * EFFECTIVE_ADMIN_ACTIONS org-wide. The answer is a real Cedar decision over the
+ * projected policy set, so `forbid` grants count, and inside a transaction it sees
+ * the uncommitted change being made.
  */
 @Injectable()
 export class AdministrabilityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
+    private readonly access: AccessService,
   ) {}
 
-  /** Count distinct active users who are effective admins. */
-  async effectiveAdminCount(
-    tx?: Prisma.TransactionClient,
-  ): Promise<number> {
+  /** The ids of every active effective admin (the cohort for admin alerts too). */
+  async effectiveAdminIds(tx?: Prisma.TransactionClient): Promise<string[]> {
     const db = tx ?? this.prisma;
-    const rows = await db.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(DISTINCT u.id) AS count
-      FROM app_user u
-      JOIN user_role ur ON ur.user_id = u.id
-      JOIN role r ON r.id = ur.role_id
-      JOIN "grant" g ON g.role_id = r.id
-      WHERE u.lifecycle_state = 'active'
-        AND r.lifecycle_state = 'active'
-        AND g.lifecycle_state = 'active'
-        AND g.effect = 'permit'
-        AND g.scope_kind = 'global'
-        AND g.action = ANY(${EFFECTIVE_ADMIN_ACTIONS})
-    `;
-    return Number(rows[0]?.count ?? 0n);
+    // Candidates: active users holding an active role with any permit grant on a
+    // governance action. Cedar then decides, forbids included.
+    const candidates = await db.appUser.findMany({
+      where: {
+        lifecycleState: 'active',
+        userRoles: {
+          some: {
+            role: {
+              lifecycleState: 'active',
+              grants: {
+                some: { lifecycleState: 'active', effect: 'permit', action: { in: [...EFFECTIVE_ADMIN_ACTIONS] } },
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (candidates.length === 0) return [];
+    const policiesText = await this.access.projectPolicies(db);
+    const admins: string[] = [];
+    for (const { id } of candidates) {
+      const principal = await this.access.buildPrincipal(id, db, policiesText);
+      const all = EFFECTIVE_ADMIN_ACTIONS.every((action) =>
+        this.access.evaluate(policiesText, principal, action, ORGANIZATION_RESOURCE),
+      );
+      if (all) admins.push(id);
+    }
+    return admins;
+  }
+
+  async effectiveAdminCount(tx?: Prisma.TransactionClient): Promise<number> {
+    return (await this.effectiveAdminIds(tx)).length;
   }
 
   /** Whether at least one effective admin exists. */
-  async effectiveAdminExists(
-    tx?: Prisma.TransactionClient,
-  ): Promise<boolean> {
+  async effectiveAdminExists(tx?: Prisma.TransactionClient): Promise<boolean> {
     return (await this.effectiveAdminCount(tx)) > 0;
-  }
-
-  /** The user ids of every active effective admin — the cohort for admin alerts. */
-  async effectiveAdminIds(
-    tx?: Prisma.TransactionClient,
-  ): Promise<string[]> {
-    const db = tx ?? this.prisma;
-    const rows = await db.$queryRaw<Array<{ id: string }>>`
-      SELECT DISTINCT u.id
-      FROM app_user u
-      JOIN user_role ur ON ur.user_id = u.id
-      JOIN role r ON r.id = ur.role_id
-      JOIN "grant" g ON g.role_id = r.id
-      WHERE u.lifecycle_state = 'active'
-        AND r.lifecycle_state = 'active'
-        AND g.lifecycle_state = 'active'
-        AND g.effect = 'permit'
-        AND g.scope_kind = 'global'
-        AND g.action = ANY(${EFFECTIVE_ADMIN_ACTIONS})
-    `;
-    return rows.map((r) => r.id);
   }
 
   /**
@@ -104,7 +101,7 @@ export class AdministrabilityService {
    * guarded transaction is gone) and raise `409 LAST_ADMIN`.
    */
   async withAdminFloor<T>(
-    actorUserId: string,
+    actorUserId: string | null,
     subject: { type: string; id: string; path: string },
     mutate: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {

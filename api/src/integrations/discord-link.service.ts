@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
 import { ConflictError } from '../common/errors';
 import { SyncService } from './sync/sync.service';
+import { AdministrabilityService } from '../access/administrability.service';
 import type { ExternalProfile } from '../auth/providers/login-provider';
 
 /**
@@ -24,6 +25,7 @@ export class DiscordLinkService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly sync: SyncService,
+    private readonly admin: AdministrabilityService,
   ) {}
 
   /**
@@ -97,38 +99,46 @@ export class DiscordLinkService {
 
     for (const link of links) {
       // Revoke integration-sourced roles this connection granted the user; the
-      // reconciler can't (the link is gone), so we do it here. Read-fresh actor
-      // roles mean this takes effect on the next request without a cache bump.
-      const integrationRoles = await this.prisma.userRole.findMany({
-        where: { userId, source: 'integration', sourceConnectionId: link.connectionId },
-        select: { roleId: true },
-      });
-      for (const ur of integrationRoles) {
-        await this.prisma.userRole.delete({
-          where: { userId_roleId: { userId, roleId: ur.roleId } },
-        });
-        await this.activity.logActivity({
-          actorUserId: userId,
-          subjectType: 'user_role',
-          subjectId: userId,
-          verb: 'integration.removed',
-          payload: { connectionId: link.connectionId, userId, roleId: ur.roleId },
-          source: ActivitySource.integration,
-          sourceConnectionId: link.connectionId,
-        });
-      }
+      // reconciler can't (the link is gone), so we do it here. One transaction per
+      // link, under the admin floor: unlinking can't strip the last admin.
+      await this.admin.withAdminFloor(
+        userId,
+        { type: 'user', id: userId, path: 'discord.unlink' },
+        async (tx) => {
+          const integrationRoles = await tx.userRole.findMany({
+            where: { userId, source: 'integration', sourceConnectionId: link.connectionId },
+            select: { roleId: true },
+          });
+          for (const ur of integrationRoles) {
+            await tx.userRole.delete({
+              where: { userId_roleId: { userId, roleId: ur.roleId } },
+            });
+            await this.activity.logActivity({
+              tx,
+              actorUserId: userId,
+              subjectType: 'user_role',
+              subjectId: userId,
+              verb: 'integration.removed',
+              payload: { connectionId: link.connectionId, userId, roleId: ur.roleId },
+              source: ActivitySource.integration,
+              sourceConnectionId: link.connectionId,
+            });
+          }
 
-      await this.prisma.syncBaseline.deleteMany({
-        where: { connectionId: link.connectionId, externalUserId: link.externalUserId },
-      });
-      await this.prisma.externalIdentity.delete({ where: { id: link.id } });
-      await this.activity.logActivity({
-        actorUserId: userId,
-        subjectType: 'external_identity',
-        subjectId: link.id,
-        verb: 'external_identity.unlinked',
-        payload: { connectionId: link.connectionId, userId, externalIdentityId: link.id },
-      });
+          await tx.syncBaseline.deleteMany({
+            where: { connectionId: link.connectionId, externalUserId: link.externalUserId },
+          });
+          await tx.externalIdentity.delete({ where: { id: link.id } });
+          await this.activity.logActivity({
+            tx,
+            actorUserId: userId,
+            subjectType: 'external_identity',
+            subjectId: link.id,
+            verb: 'external_identity.unlinked',
+            payload: { connectionId: link.connectionId, userId, externalIdentityId: link.id },
+          });
+        },
+      );
     }
 
     return links.length > 0;

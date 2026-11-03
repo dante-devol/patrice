@@ -435,10 +435,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List users
-         * @description Gated by the `user:update` action.
-         */
+        /** List users */
         get: operations["listUsers"];
         put?: never;
         post?: never;
@@ -619,10 +616,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List roles
-         * @description Gated by the `role:create` action.
-         */
+        /** List roles */
         get: operations["listRoles"];
         put?: never;
         /**
@@ -807,10 +801,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List divisions
-         * @description Gated by the `division:create` action.
-         */
+        /** List divisions */
         get: operations["listDivisions"];
         put?: never;
         /**
@@ -891,7 +882,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A division's request template */
+        /**
+         * A division's request template
+         * @description Gated by the `request_template:read` action.
+         */
         get: operations["getDivisionTemplate"];
         /**
          * Replace a division's request template
@@ -905,7 +899,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/teams": {
+    "/divisions/{id}/members": {
         parameters: {
             query?: never;
             header?: never;
@@ -913,15 +907,97 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List teams
-         * @description Gated by the `team:create` action.
+         * A division's members
+         * @description Gated by the `division:read` action.
          */
-        get: operations["listTeams"];
+        get: operations["listDivisionMembers"];
         put?: never;
         /**
-         * Create a team
-         * @description Gated by the `team:create` action.
+         * Add a member to a division
+         * @description Gated by the `division:manage_members` action.
          */
+        post: operations["addDivisionMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/divisions/{id}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member from a division
+         * @description Gated by the `division:manage_members` action.
+         */
+        delete: operations["removeDivisionMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A team's members
+         * @description Gated by the `team:read` action.
+         */
+        get: operations["listTeamMembers"];
+        put?: never;
+        /**
+         * Add a member to a team
+         * @description Gated by the `team:manage_members` action.
+         */
+        post: operations["addTeamMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member from a team
+         * @description Gated by the `team:manage_members` action.
+         */
+        delete: operations["removeTeamMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List teams */
+        get: operations["listTeams"];
+        put?: never;
+        /** Create a team */
         post: operations["createTeam"];
         delete?: never;
         options?: never;
@@ -999,10 +1075,7 @@ export interface paths {
         /** List tasks */
         get: operations["listTasks"];
         put?: never;
-        /**
-         * Create a task
-         * @description Gated by the `task:create` action.
-         */
+        /** Create a task */
         post: operations["createTask"];
         delete?: never;
         options?: never;
@@ -1017,7 +1090,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A task */
+        /**
+         * A task
+         * @description Gated by the `task:read` action.
+         */
         get: operations["getTask"];
         put?: never;
         post?: never;
@@ -1102,7 +1178,7 @@ export interface paths {
         put?: never;
         /**
          * Give up your seat on a task
-         * @description Gated by the `task:assign` action.
+         * @description Gated by the `task:leave` action.
          */
         post: operations["leaveTask"];
         delete?: never;
@@ -1198,7 +1274,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A task's request template */
+        /**
+         * A task's request template
+         * @description Gated by the `task:read` action.
+         */
         get: operations["getTaskTemplate"];
         /**
          * Replace a task's request template
@@ -1219,7 +1298,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A task's submissions */
+        /**
+         * A task's submissions
+         * @description Gated by the `submission:read` action.
+         */
         get: operations["listSubmissions"];
         put?: never;
         /**
@@ -1240,7 +1322,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A submission */
+        /**
+         * A submission
+         * @description Gated by the `submission:read` action.
+         */
         get: operations["getSubmission"];
         put?: never;
         post?: never;
@@ -1297,7 +1382,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A task's thread */
+        /**
+         * A task's thread
+         * @description Gated by the `message:read` action.
+         */
         get: operations["listMessages"];
         put?: never;
         /**
@@ -1438,7 +1526,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Download an attachment */
+        /**
+         * Download an attachment
+         * @description Gated by the `attachment:read` action.
+         */
         get: operations["downloadAttachment"];
         put?: never;
         post?: never;
@@ -1776,7 +1867,7 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "NO_DEFAULT_REQUEST_TEMPLATE" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "NO_FILE" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "NO_DEFAULT_REQUEST_TEMPLATE" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
@@ -1790,10 +1881,6 @@ export interface components {
         };
         /** @enum {string} */
         AuthMethod: "password" | "google" | "discord";
-        UserCapabilities: {
-            inviteCreate: boolean;
-            manageOrg: boolean;
-        };
         CurrentUser: {
             /** Format: uuid */
             id: string;
@@ -1804,7 +1891,8 @@ export interface components {
             hasDiscordLink: boolean;
             discordHandle: string | null;
             avatarUrl: string | null;
-            capabilities: components["schemas"]["UserCapabilities"];
+            allowedActions: string[];
+            taskAccessBlockedByDiscord: boolean;
         };
         Ok: {
             /** @enum {boolean} */
@@ -1879,12 +1967,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            /** @enum {string} */
-            kind: "standalone" | "division" | "team";
-            /** Format: uuid */
-            divisionId: string | null;
-            /** Format: uuid */
-            teamId: string | null;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
             retiredAt: string | null;
@@ -1930,8 +2012,6 @@ export interface components {
             /** Format: date-time */
             retiredAt: string | null;
             version: number;
-            /** Format: uuid */
-            inherentRoleId: string;
         };
         /** @enum {string} */
         QuestionType: "detail_text" | "multiline" | "text" | "numeric" | "dropdown" | "radio" | "attachment";
@@ -1972,17 +2052,25 @@ export interface components {
             ownerTaskId: string | null;
             questions: components["schemas"]["Question"][];
         };
+        Member: {
+            /** Format: uuid */
+            userId: string;
+            /** @enum {string} */
+            source: "patrice" | "integration";
+            /** Format: date-time */
+            createdAt: string;
+        };
         Team: {
             /** Format: uuid */
             id: string;
+            /** Format: uuid */
+            divisionId: string;
             name: string;
             restrictClaims: boolean;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
             retiredAt: string | null;
             version: number;
-            /** Format: uuid */
-            inherentRoleId: string;
         };
         /** @enum {string} */
         TaskStatus: "open" | "claimed" | "review" | "revising" | "approved";
@@ -2008,6 +2096,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             claimantUserIds: string[];
+            allowedActions?: string[];
         };
         TaskListResult: {
             items: components["schemas"]["Task"][];
@@ -4095,6 +4184,204 @@ export interface operations {
             };
         };
     };
+    listDivisionMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A division's members */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    addDivisionMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Add a member to a division */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    removeDivisionMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listTeamMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A team's members */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    addTeamMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Add a member to a team */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    removeTeamMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listTeams: {
         parameters: {
             query?: {
@@ -4136,6 +4423,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    divisionId: string;
                     name: string;
                     restrictClaims?: boolean;
                 };

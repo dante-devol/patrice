@@ -1,12 +1,10 @@
 /**
- * The closed Action vocabulary (`resource:verb`) — code-defined, admins cannot
- * invent new ones (docs/ARCHITECTURE.md §2.3). Slice 1 only *uses* a handful of
- * these via endpoints, but the governance actions (`grant:*`, `role:*`) are also
- * registered so the seeded Admin can hold them — that is what makes the Admin an
- * **effective admin** and lets bootstrap mode close (see EFFECTIVE_ADMIN_ACTIONS).
+ * The closed Action vocabulary (`resource:verb`). It's defined in code; admins can't
+ * invent actions, only grant these.
  *
- * Each action declares the Cedar **resource entity type** it applies to, which the
- * authorize guard uses to shape the request and the projector uses for schema text.
+ * Each action declares the Cedar **resource entity type** it applies to. Creating
+ * something targets the thing it is created in (a task in a Division, a message on a
+ * Task, an attachment on a Message), so no resource is ever a made-up id.
  */
 export type CedarEntityType =
   | 'Organization'
@@ -17,7 +15,8 @@ export type CedarEntityType =
   | 'Message'
   | 'Attachment'
   | 'Division'
-  | 'Integration';
+  | 'Team'
+  | 'Role';
 
 export interface ActionDef {
   /** `resource:verb` string — the Cedar action id and the grant.action value. */
@@ -26,19 +25,18 @@ export interface ActionDef {
   readonly resourceType: CedarEntityType;
 }
 
-/**
- * The **full** closed vocabulary (docs/slices/02 "Action vocabulary"). Registered
- * with the engine in Slice 2.3 so the permission matrix can grant any action even
- * before its endpoint lands (tasks/messages/attachments arrive in Slices 4–5). The
- * `resourceType` shapes both the authorize request and the projection-time schema.
- */
 export const ACTIONS = {
-  // task:* — endpoints land in Slices 4–5; registered here for the matrix.
-  taskCreate: { action: 'task:create', resourceType: 'Task' },
+  // ---- Tasks. Reads of a task's parts (thread, submissions, files) target the task.
+  taskRead: { action: 'task:read', resourceType: 'Task' },
+  messageRead: { action: 'message:read', resourceType: 'Task' },
+  submissionRead: { action: 'submission:read', resourceType: 'Task' },
+  attachmentRead: { action: 'attachment:read', resourceType: 'Task' },
+  taskCreate: { action: 'task:create', resourceType: 'Division' },
   taskUpdate: { action: 'task:update', resourceType: 'Task' },
   taskRetire: { action: 'task:retire', resourceType: 'Task' },
   taskRevive: { action: 'task:revive', resourceType: 'Task' },
   taskAssign: { action: 'task:assign', resourceType: 'Task' },
+  taskLeave: { action: 'task:leave', resourceType: 'Task' },
   taskSubmit: { action: 'task:submit', resourceType: 'Task' },
   taskReview: { action: 'task:review', resourceType: 'Task' },
   taskRetireSubmission: { action: 'task:retire_submission', resourceType: 'Task' },
@@ -46,15 +44,18 @@ export const ACTIONS = {
   taskConfigureRequestTemplate: { action: 'task:configure_request_template', resourceType: 'Task' },
   taskManageClaims: { action: 'task:manage_claims', resourceType: 'Task' },
   taskChangeRequester: { action: 'task:change_requester', resourceType: 'Task' },
-  // message:* / attachment:*
-  messageCreate: { action: 'message:create', resourceType: 'Message' },
+  /** Exempts a principal from the `requireDiscordLink` gate on task access. */
+  taskBypassDiscordGate: { action: 'task:bypass_discord_gate', resourceType: 'Organization' },
+  // ---- Messages and attachments.
+  messageCreate: { action: 'message:create', resourceType: 'Task' },
   messageUpdate: { action: 'message:update', resourceType: 'Message' },
   messageRetire: { action: 'message:retire', resourceType: 'Message' },
   messageRevive: { action: 'message:revive', resourceType: 'Message' },
-  attachmentCreate: { action: 'attachment:create', resourceType: 'Attachment' },
+  attachmentCreate: { action: 'attachment:create', resourceType: 'Message' },
   attachmentRetire: { action: 'attachment:retire', resourceType: 'Attachment' },
   attachmentRevive: { action: 'attachment:revive', resourceType: 'Attachment' },
-  // user:* — update is metadata; grant_role/revoke_role are role-scoped (Slice 2.4).
+  // ---- Users.
+  userRead: { action: 'user:read', resourceType: 'User' },
   userUpdate: { action: 'user:update', resourceType: 'User' },
   userRetire: { action: 'user:retire', resourceType: 'User' },
   userRevive: { action: 'user:revive', resourceType: 'User' },
@@ -62,38 +63,37 @@ export const ACTIONS = {
   userReactivate: { action: 'user:reactivate', resourceType: 'User' },
   userGrantRole: { action: 'user:grant_role', resourceType: 'User' },
   userRevokeRole: { action: 'user:revoke_role', resourceType: 'User' },
-  // session:revoke — own=session's user (G/O); /auth/logout is gated by @ own.
   sessionRevoke: { action: 'session:revoke', resourceType: 'Session' },
-  // invite:*
+  // ---- Invitations.
   inviteCreate: { action: 'invite:create', resourceType: 'Organization' },
   inviteRetire: { action: 'invite:retire', resourceType: 'Invitation' },
-  // Governance actions — the singleton org is the resource (admin holds globals).
+  // ---- Governance: the permission matrix. Org-wide by nature.
   grantCreate: { action: 'grant:create', resourceType: 'Organization' },
   grantUpdate: { action: 'grant:update', resourceType: 'Organization' },
   grantRetire: { action: 'grant:retire', resourceType: 'Organization' },
   grantRevive: { action: 'grant:revive', resourceType: 'Organization' },
+  roleRead: { action: 'role:read', resourceType: 'Role' },
   roleCreate: { action: 'role:create', resourceType: 'Organization' },
   roleUpdate: { action: 'role:update', resourceType: 'Organization' },
   roleRetire: { action: 'role:retire', resourceType: 'Organization' },
   roleRevive: { action: 'role:revive', resourceType: 'Organization' },
-  // Division/Team config (Slice 2.2). create/retire/revive are governance-scoped:
-  // the singleton org is the resource (admin holds global grants), mirroring the
-  // role ops — keeps revive clear of the Retired-as-Hard-Deny that targets the
-  // entity itself. `division:update` is (S)-scopable per §2.3 (it gates the default
-  // request template, Slice 3): its resource is the Division, so a `specific_division`
-  // grant lets a division admin edit only their own division. Global grants still
-  // match any Division resource, so the existing org-wide admin is unaffected.
+  // ---- Divisions and teams. Everything but creating a division targets the unit
+  //      itself, so a division admin can be granted `specific_division` authority.
+  divisionRead: { action: 'division:read', resourceType: 'Division' },
   divisionCreate: { action: 'division:create', resourceType: 'Organization' },
   divisionUpdate: { action: 'division:update', resourceType: 'Division' },
-  divisionRetire: { action: 'division:retire', resourceType: 'Organization' },
-  divisionRevive: { action: 'division:revive', resourceType: 'Organization' },
-  teamCreate: { action: 'team:create', resourceType: 'Organization' },
-  teamUpdate: { action: 'team:update', resourceType: 'Organization' },
-  teamRetire: { action: 'team:retire', resourceType: 'Organization' },
-  teamRevive: { action: 'team:revive', resourceType: 'Organization' },
-  // config:update — org settings editor (Slice 2.4).
+  divisionRetire: { action: 'division:retire', resourceType: 'Division' },
+  divisionRevive: { action: 'division:revive', resourceType: 'Division' },
+  divisionManageMembers: { action: 'division:manage_members', resourceType: 'Division' },
+  requestTemplateRead: { action: 'request_template:read', resourceType: 'Division' },
+  teamRead: { action: 'team:read', resourceType: 'Team' },
+  teamCreate: { action: 'team:create', resourceType: 'Division' },
+  teamUpdate: { action: 'team:update', resourceType: 'Team' },
+  teamRetire: { action: 'team:retire', resourceType: 'Team' },
+  teamRevive: { action: 'team:revive', resourceType: 'Team' },
+  teamManageMembers: { action: 'team:manage_members', resourceType: 'Team' },
+  // ---- System.
   configUpdate: { action: 'config:update', resourceType: 'Organization' },
-  // integration:* — org-scoped; resource is the singleton org (admin governance).
   integrationCreate: { action: 'integration:create', resourceType: 'Organization' },
   integrationUpdate: { action: 'integration:update', resourceType: 'Organization' },
   integrationRetire: { action: 'integration:retire', resourceType: 'Organization' },
@@ -102,20 +102,21 @@ export const ACTIONS = {
 
 export type ActionKey = keyof typeof ACTIONS;
 
-/** All registered action strings (for schema generation + Admin seeding). */
-export const ALL_ACTION_STRINGS: readonly string[] = Object.values(ACTIONS).map(
-  (a) => a.action,
-);
+/** All registered action strings (for schema generation and Admin seeding). */
+export const ALL_ACTION_STRINGS: readonly string[] = Object.values(ACTIONS).map((a) => a.action);
 
 /** Map action string → resource entity type. */
 export const RESOURCE_TYPE_BY_ACTION: Readonly<Record<string, CedarEntityType>> =
   Object.fromEntries(Object.values(ACTIONS).map((a) => [a.action, a.resourceType]));
 
+/** Actions gated by `requireDiscordLink` (task access, reads included). */
+export const TASK_FAMILY_ACTIONS: readonly string[] = Object.values(ACTIONS)
+  .filter((a) => ['Task', 'Message', 'Attachment'].includes(a.resourceType) || a.action === 'task:create')
+  .map((a) => a.action);
+
 /**
- * Effective-admin governance actions — a `permit` grant on any of these at
- * `scope_kind='global'` (by an active user) makes that user an effective admin.
- * Single source of truth, read by bootstrap (Slice 1) and the administrability
- * invariant (Slice 2/7). Mirrors docs/slices/00-overview.md.
+ * Effective-admin governance actions. The administrability invariant requires at
+ * least one active user whom Cedar permits *all* of these org-wide.
  */
 export const EFFECTIVE_ADMIN_ACTIONS: readonly string[] = [
   'grant:create',
@@ -126,40 +127,41 @@ export const EFFECTIVE_ADMIN_ACTIONS: readonly string[] = [
   'role:retire',
 ];
 
+/** The seeded Admin role holds every action at global scope, new ones included. */
+export const ADMIN_SEED_ACTIONS: readonly string[] = ALL_ACTION_STRINGS;
+
 /**
- * Actions the seeded Admin role receives at `scope_kind='global'` in Slice 1:
- * the invite endpoints it actually uses, plus the governance actions that make it
- * an effective admin. Later slices add more grants via the matrix UI.
+ * The seeded Member role: see names, do work on your own tasks. Editable like any
+ * role; new invitations pre-assign it.
  */
-export const ADMIN_SEED_ACTIONS: readonly string[] = [
-  'invite:create',
-  'invite:retire',
-  // `*:revive` actions are seeded with global-scoped Admin grants by default
-  // (docs/slices/02 action vocabulary); narrower revive authority is delegated
-  // via the matrix. Slice 2 seeds role/division/team management for the admin.
-  'role:revive',
-  'division:create',
-  'division:update',
-  'division:retire',
-  'division:revive',
-  'team:create',
-  'team:update',
-  'team:retire',
-  'team:revive',
-  // Matrix + membership + settings authority (Slices 2.3–2.4).
-  'grant:revive',
-  'config:update',
-  // Integration management (Slice 8).
-  'integration:create',
-  'integration:update',
-  'integration:retire',
-  'integration:revive',
-  'user:update',
-  'user:retire',
-  'user:revive',
-  'user:deactivate',
-  'user:reactivate',
-  'user:grant_role',
-  'user:revoke_role',
-  ...EFFECTIVE_ADMIN_ACTIONS,
+export const MEMBER_SEED_GRANTS: ReadonlyArray<{ action: string; scopeKind: 'global' | 'own' | 'own_division' }> = [
+  // Names and structure, so the client can render people and units.
+  { action: 'user:read', scopeKind: 'global' },
+  { action: 'division:read', scopeKind: 'global' },
+  { action: 'team:read', scopeKind: 'global' },
+  { action: 'role:read', scopeKind: 'global' },
+  { action: 'request_template:read', scopeKind: 'global' },
+  // Tasks you can see: your own, ones you hold a seat on, and ones you could claim.
+  { action: 'task:read', scopeKind: 'own' },
+  { action: 'message:read', scopeKind: 'own' },
+  { action: 'submission:read', scopeKind: 'own' },
+  { action: 'attachment:read', scopeKind: 'own' },
+  // Doing the work.
+  { action: 'task:assign', scopeKind: 'own' },
+  { action: 'task:leave', scopeKind: 'own' },
+  { action: 'task:submit', scopeKind: 'own' },
+  { action: 'message:create', scopeKind: 'own' },
+  { action: 'message:update', scopeKind: 'own' },
+  { action: 'message:retire', scopeKind: 'own' },
+  { action: 'attachment:create', scopeKind: 'own' },
+  { action: 'attachment:retire', scopeKind: 'own' },
+  // Requesting work in your divisions, and running the tasks you requested.
+  { action: 'task:create', scopeKind: 'own_division' },
+  { action: 'task:update', scopeKind: 'own' },
+  { action: 'task:retire', scopeKind: 'own' },
+  { action: 'task:review', scopeKind: 'own' },
+  { action: 'task:retire_submission', scopeKind: 'own' },
+  { action: 'task:complete', scopeKind: 'own' },
+  { action: 'task:manage_claims', scopeKind: 'own' },
+  { action: 'task:configure_request_template', scopeKind: 'own' },
 ];

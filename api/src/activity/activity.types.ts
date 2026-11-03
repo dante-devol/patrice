@@ -57,6 +57,8 @@ export const activityPayloadSchemas = {
   'division.retired': z.object({ divisionId: uuid }).strict(),
   'division.revived': z.object({ divisionId: uuid }).strict(),
   'team.created': z.object({ teamId: uuid }).strict(),
+  'membership.added': z.object({ userId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid }).strict(),
+  'membership.removed': z.object({ userId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid }).strict(),
   'team.updated': z.object({ teamId: uuid }).strict(),
   'team.retired': z.object({ teamId: uuid }).strict(),
   'team.revived': z.object({ teamId: uuid }).strict(),

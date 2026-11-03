@@ -20,7 +20,6 @@ describe('Slice 4.2 — Claiming, openings, requester', () => {
 
   let writingId: string; // restrict_claims = false
   let secretId: string; // restrict_claims = true
-  let secretRoleId: string; // Secret's inherent role
   let userA: { userId: string; session: AdminSession };
   let userB: { userId: string; session: AdminSession }; // Secret member
   let userC: { userId: string; session: AdminSession };
@@ -37,7 +36,6 @@ describe('Slice 4.2 — Claiming, openings, requester', () => {
     writingId = writing.body.id;
     const secret = await auth(http().post('/api/divisions')).send({ name: 'Secret', restrictClaims: true });
     secretId = secret.body.id;
-    secretRoleId = secret.body.inherentRoleId;
 
     for (const d of [writingId, secretId]) {
       await auth(http().put(`/api/divisions/${d}/request-template`)).send({
@@ -60,9 +58,11 @@ describe('Slice 4.2 — Claiming, openings, requester', () => {
     const claimer = await auth(http().post('/api/roles')).send({ name: 'Claimer' });
     const claimerId = claimer.body.id;
     await auth(http().post('/api/grants')).send({ roleId: claimerId, action: 'task:assign', scopeKind: 'own' });
+    await auth(http().post('/api/grants')).send({ roleId: claimerId, action: 'task:leave', scopeKind: 'own' });
 
     userA = await inviteAndAccept(booted, admin, { email: 'a@example.com', intendedRoleIds: [claimerId] });
-    userB = await inviteAndAccept(booted, admin, { email: 'b@example.com', intendedRoleIds: [claimerId, secretRoleId] });
+    userB = await inviteAndAccept(booted, admin, { email: 'b@example.com', intendedRoleIds: [claimerId] });
+    await prisma.membership.create({ data: { userId: userB.userId, divisionId: secretId } });
     userC = await inviteAndAccept(booted, admin, { email: 'c@example.com', intendedRoleIds: [claimerId] });
   });
 

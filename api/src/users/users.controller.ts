@@ -12,11 +12,8 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { NotFoundError } from '../common/errors';
-import { Authorize, orgResource } from '../access/authorize.decorator';
+import { Authorize, userResource, userWithRoleResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
-import { CedarEngine } from '../access/cedar/engine';
-import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
 import {
   grantRoleSchema,
@@ -28,65 +25,20 @@ import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
 import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
-/**
- * Resolve the target User as a Cedar resource, carrying the **real** `retired` state so
- * the Retired-as-Hard-Deny static forbid actually fires on a retired/tombstoned target
- * (mirrors divisionResource/taskResource — hardcoding `retired: false` here makes the
- * hard-deny a no-op for every user action). 404 if the user doesn't exist.
- */
-const targetUser = async (req: Request, prisma: PrismaService) => {
-  const id = String(req.params.id);
-  const user = await prisma.appUser.findUnique({
-    where: { id },
-    select: { id: true, lifecycleState: true },
-  });
-  if (!user) throw new NotFoundError('USER_NOT_FOUND', 'User not found');
-  return {
-    type: 'User' as const,
-    id: user.id,
-    attrs: { retired: user.lifecycleState === 'retired' },
-  };
-};
-
-/**
- * The target User for `user:revive` — **omits** `retired` so reviving a retired user
- * doesn't trip the Retired-as-Hard-Deny forbid (mirrors the task/message revive
- * resolvers). Revive is the one action that legitimately targets a retired user.
- */
-const reviveUser = (req: Request) => ({
-  type: 'User' as const,
-  id: String(req.params.id),
-  attrs: {},
-});
-
-/** Resolve a User whose `targetRole` is the role being granted/revoked (role scope). */
-function userWithTargetRole(roleId: string) {
-  return (req: Request) => ({
-    type: 'User' as const,
-    id: String(req.params.id),
-    attrs: {
-      retired: false,
-      targetRole: {
-        __entity: { type: CedarEngine.qualify('Role'), id: roleId },
-      },
-    },
-  });
-}
-
 @Controller('users')
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
   @Contract(ROUTES.listUsers)
   @Get()
-  @Authorize(ACTIONS.userUpdate.action, orgResource)
-  async list(@Query('include') include: string | undefined) {
-    return this.users.list(include === 'retired');
+  async list(@Query('include') include: string | undefined, @CurrentUser() user: CurrentUserRef) {
+    // Lists show what the caller may read; the service filters per row.
+    return this.users.list(user.id, include === 'retired');
   }
 
   @Contract(ROUTES.updateUser)
   @Patch(':id')
-  @Authorize(ACTIONS.userUpdate.action, targetUser)
+  @Authorize(ACTIONS.userUpdate.action, userResource)
   async update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(updateUserSchema)) body: UpdateUserDto,
@@ -98,7 +50,7 @@ export class UsersController {
   @Contract(ROUTES.deactivateUser)
   @Post(':id/deactivate')
   @HttpCode(204)
-  @Authorize(ACTIONS.userDeactivate.action, targetUser)
+  @Authorize(ACTIONS.userDeactivate.action, userResource)
   async deactivate(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
     await this.users.deactivate(id, user.id);
   }
@@ -106,7 +58,7 @@ export class UsersController {
   @Contract(ROUTES.reactivateUser)
   @Post(':id/reactivate')
   @HttpCode(204)
-  @Authorize(ACTIONS.userReactivate.action, targetUser)
+  @Authorize(ACTIONS.userReactivate.action, userResource)
   async reactivate(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
     await this.users.reactivate(id, user.id);
   }
@@ -114,7 +66,7 @@ export class UsersController {
   @Contract(ROUTES.retireUser)
   @Post(':id/retire')
   @HttpCode(204)
-  @Authorize(ACTIONS.userRetire.action, targetUser)
+  @Authorize(ACTIONS.userRetire.action, userResource)
   async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
     await this.users.retire(id, user.id);
   }
@@ -122,7 +74,7 @@ export class UsersController {
   @Contract(ROUTES.reviveUser)
   @Post(':id/revive')
   @HttpCode(204)
-  @Authorize(ACTIONS.userRevive.action, reviveUser)
+  @Authorize(ACTIONS.userRevive.action, userResource)
   async revive(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
     await this.users.revive(id, user.id);
   }
@@ -132,9 +84,7 @@ export class UsersController {
   @HttpCode(204)
   // Scope check at the boundary: the actor must hold user:grant_role covering the
   // specific role (global, or role-scoped to this role).
-  @Authorize(ACTIONS.userGrantRole.action, (req) =>
-    userWithTargetRole(String((req.body as { roleId?: string }).roleId ?? ''))(req),
-  )
+  @Authorize(ACTIONS.userGrantRole.action, userWithRoleResource)
   async grantRole(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(grantRoleSchema)) body: GrantRoleDto,
@@ -147,9 +97,7 @@ export class UsersController {
   @Contract(ROUTES.revokeUserRole)
   @Delete(':id/roles/:roleId')
   @HttpCode(204)
-  @Authorize(ACTIONS.userRevokeRole.action, (req) =>
-    userWithTargetRole(String(req.params.roleId))(req),
-  )
+  @Authorize(ACTIONS.userRevokeRole.action, userWithRoleResource)
   async revokeRole(
     @Param('id') id: string,
     @Param('roleId') roleId: string,

@@ -13,11 +13,11 @@ function codeOf(fn: () => void): string | undefined {
 }
 
 describe('Division', () => {
-  it('creates with defaults and raises division + inherent role events', () => {
+  it('creates with defaults and raises a creation event', () => {
     const d = Division.create('  Writing  ');
     expect(d.name).toBe('Writing');
     expect(d.settings).toEqual({ defaultOpenings: 1, openingsLocked: false, restrictClaims: false });
-    expect(d.pullEvents().map((e) => e.type)).toEqual(['division.created', 'role.created']);
+    expect(d.pullEvents().map((e) => e.type)).toEqual(['division.created']);
     expect(d.pullEvents()).toEqual([]);
   });
 
@@ -35,15 +35,14 @@ describe('Division', () => {
     expect(d.settings).toEqual({ defaultOpenings: 3, openingsLocked: false, restrictClaims: true });
   });
 
-  it('retire and revive mark policy changes and enforce the grace window', () => {
+  it('retire and revive enforce the grace window; a retired division is read-only', () => {
     const d = Division.create('Art');
     d.pullEvents();
     const t0 = new Date('2026-01-01T00:00:00Z');
     d.retire(t0);
     expect(d.lifecycle.isRetired).toBe(true);
-    const events = d.pullEvents();
-    expect(events.map((e) => e.type)).toEqual(['division.retired', 'role.retired']);
-    expect(events.every((e) => e.policyChanged)).toBe(true);
+    expect(d.pullEvents().map((e) => e.type)).toEqual(['division.retired']);
+    expect(codeOf(() => d.update({ name: 'X' }))).toBe('DIVISION_RETIRED');
 
     expect(codeOf(() => d.retire(t0))).toBe('ALREADY_RETIRED');
     expect(codeOf(() => d.revive(new Date(t0.getTime() + 25 * HOUR), 24 * HOUR))).toBe('NOT_REVIVABLE');

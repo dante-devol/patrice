@@ -57,6 +57,7 @@ describe('Slice 4.3 — Messages, attachments, system messages', () => {
 
     const claimerRole = await auth(http().post('/api/roles')).send({ name: 'Claimer' });
     await auth(http().post('/api/grants')).send({ roleId: claimerRole.body.id, action: 'task:assign', scopeKind: 'own' });
+    await auth(http().post('/api/grants')).send({ roleId: claimerRole.body.id, action: 'task:leave', scopeKind: 'own' });
     claimer = await inviteAndAccept(booted, admin, { email: 'claimer@example.com', intendedRoleIds: [claimerRole.body.id] });
 
     taskId = (await auth(http().post('/api/tasks')).send({ name: 'Thread host', divisionId: writingId })).body.id;

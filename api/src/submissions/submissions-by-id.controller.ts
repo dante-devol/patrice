@@ -32,6 +32,7 @@ export class SubmissionsByIdController {
 
   @Contract(ROUTES.getSubmission)
   @Get()
+  @Authorize(ACTIONS.submissionRead.action, submissionResource)
   async get(@Param('id') id: string) {
     return this.submissions.get(id);
   }

@@ -167,16 +167,12 @@ describe('Account self-service', () => {
     it("needs session:revoke to see or end someone else's sessions", async () => {
       const mine = await http().get('/api/me/sessions').set('Cookie', admin.cookies);
       const adminSession = mine.body[0].id as string;
+      // A user without the grant can't touch anyone else's sessions…
       expect((await as(user.session, http().delete(`/api/sessions/${adminSession}`))).status).toBe(403);
-      expect((await http().get(`/api/users/${user.userId}/sessions`).set('Cookie', admin.cookies)).status).toBe(403);
-
       const me = await http().get('/api/me').set('Cookie', admin.cookies);
-      const adminRole = await prisma.userRole.findFirstOrThrow({ where: { userId: me.body.id } });
-      await as(admin, http().post('/api/grants')).send({
-        roleId: adminRole.roleId,
-        action: 'session:revoke',
-        scopeKind: 'global',
-      });
+      expect((await http().get(`/api/users/${me.body.id}/sessions`).set('Cookie', user.session.cookies)).status).toBe(403);
+
+      // …while Admin (seeded with every action) can.
       const theirs = await http().get(`/api/users/${user.userId}/sessions`).set('Cookie', admin.cookies);
       expect(theirs.status).toBe(200);
       const res = await as(admin, http().delete(`/api/sessions/${theirs.body[0].id}`));

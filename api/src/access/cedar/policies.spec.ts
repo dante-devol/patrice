@@ -1,5 +1,5 @@
 import { CedarEngine } from './engine';
-import { grantToPolicy, ProjectableGrant, staticPolicies } from './policies';
+import { grantToPolicy, ProjectableGrant, staticPolicies, supportsOwnScope } from './policies';
 import { ALL_ACTION_STRINGS } from '../actions';
 
 /**
@@ -51,28 +51,38 @@ describe('grantToPolicy — Slice 4 task scopes', () => {
     expect(engine.validationErrors(policy)).toEqual([]);
   });
 
-  it('projects message:create @ own as a sender-ownership clause', () => {
+  it('projects message:create @ own as "can see the task"', () => {
     const policy = grantToPolicy(
       baseGrant({ action: 'message:create', scopeKind: 'own' }),
+    );
+    expect(policy).toContain('resource.requester == principal');
+    expect(policy).toContain('resource.claimants.contains(principal)');
+    expect(engine.validationErrors(policy)).toEqual([]);
+  });
+
+  it('projects attachment:create @ own as "on your own message"', () => {
+    const policy = grantToPolicy(
+      baseGrant({ action: 'attachment:create', scopeKind: 'own' }),
     );
     expect(policy).toContain('resource.sender == principal');
     expect(engine.validationErrors(policy)).toEqual([]);
   });
 
-  it('projects attachment:create @ own as an uploader-ownership clause', () => {
-    const policy = grantToPolicy(
-      baseGrant({ action: 'attachment:create', scopeKind: 'own' }),
-    );
-    expect(policy).toContain('resource.uploader == principal');
-    expect(engine.validationErrors(policy)).toEqual([]);
-  });
-
-  it('projects task:submit @ own as a claimant-ownership clause', () => {
+  it('projects task:submit @ own as "holds a seat"', () => {
     const policy = grantToPolicy(
       baseGrant({ action: 'task:submit', scopeKind: 'own' }),
     );
-    expect(policy).toContain('resource.claimant == principal');
+    expect(policy).toContain('resource.claimants.contains(principal)');
     expect(engine.validationErrors(policy)).toEqual([]);
+  });
+
+  it('every action that supports `own` projects to a schema-valid policy', () => {
+    const own = ALL_ACTION_STRINGS.filter(supportsOwnScope);
+    expect(own.length).toBeGreaterThan(10);
+    for (const action of own) {
+      const policy = grantToPolicy(baseGrant({ action, scopeKind: 'own' }));
+      expect([action, engine.validationErrors(policy)]).toEqual([action, []]);
+    }
   });
 
   it('projects task:review @ own as a requester-ownership clause', () => {
@@ -91,6 +101,7 @@ describe('staticPolicies — self-review forbid (Slice 5)', () => {
     const policies = staticPolicies({
       selfReviewAllowed: false,
       registeredActions: ALL_ACTION_STRINGS,
+      discordGatedActions: [],
     });
     const forbid = policies.find((p) => p.includes('static_self_review_forbid'));
     expect(forbid).toBeDefined();
@@ -105,6 +116,7 @@ describe('staticPolicies — self-review forbid (Slice 5)', () => {
     const policies = staticPolicies({
       selfReviewAllowed: true,
       registeredActions: ALL_ACTION_STRINGS,
+      discordGatedActions: [],
     });
     expect(policies.some((p) => p.includes('static_self_review_forbid'))).toBe(false);
   });

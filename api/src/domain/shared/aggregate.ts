@@ -11,6 +11,8 @@ export interface DomainEvent<V extends ActivityVerb = ActivityVerb> {
   payload: ActivityPayload<V>;
   /** True when the change alters the projected Cedar policy text. */
   policyChanged?: boolean;
+  /** True when the change alters who holds which role (the admin floor re-checks). */
+  authorityChanged?: boolean;
 }
 
 /**
