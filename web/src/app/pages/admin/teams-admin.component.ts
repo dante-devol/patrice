@@ -23,7 +23,7 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
         <tbody>
           @for (t of teams(); track t.id) {
             <tr [class.row--retired]="t.lifecycleState === 'retired'" [class.row--deactivated]="t.lifecycleState === 'deactivated'">
-              <td><input [(ngModel)]="t.name" (blur)="save(t, { name: t.name })" /></td>
+              <td class="name-cell" [style.--c]="t.color ?? computeColor(t)"><input [(ngModel)]="t.name" (blur)="save(t, { name: t.name })" aria-label="Name" /></td>
               <td>
                 <div class="row" style="gap:4px;align-items:center;flex-wrap:nowrap">
                   <input type="color" [value]="t.color ?? computeColor(t)"
@@ -38,9 +38,9 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
               <td><span [class]="lcStamp(t.lifecycleState)">{{ t.lifecycleState }}</span></td>
               <td>
                 @if (t.lifecycleState === 'active') {
-                  <button class="secondary" (click)="retire(t)">Retire</button>
+                  <button class="quiet danger" (click)="retire(t)">Retire</button>
                 } @else if (t.lifecycleState === 'retired') {
-                  <button class="secondary" (click)="revive(t)">Revive</button>
+                  <button class="quiet" (click)="revive(t)">Revive</button>
                 }
               </td>
             </tr>

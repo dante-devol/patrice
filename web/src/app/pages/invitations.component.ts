@@ -38,7 +38,7 @@ import { errorMessage } from '../core/errors';
               <td>{{ inv.expiresAt | date: 'short' }}</td>
               <td>
                 @if (inv.status === 'pending') {
-                  <button class="secondary" (click)="revoke(inv.id)">Revoke</button>
+                  <button class="quiet danger" (click)="revoke(inv.id)">Revoke</button>
                 }
               </td>
             </tr>

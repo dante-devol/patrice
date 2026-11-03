@@ -25,6 +25,24 @@ export function stampClass(status: TaskStatus | null): string {
   return `stamp--${stampStatus(status)}`;
 }
 
+const STAMP_LABELS: Record<TaskStatus, string> = {
+  open: 'Open',
+  claimed: 'Claimed',
+  review: 'In review',
+  revising: 'Revising',
+  approved: 'Approved',
+};
+
+/** The sentence-case words printed on a status stamp. */
+export function stampLabel(status: TaskStatus | null): string {
+  return STAMP_LABELS[stampStatus(status)];
+}
+
+/** The short task ID shown with the tags (the first four hex digits of the UUID). */
+export function shortTaskId(id: string): string {
+  return id.replace(/-/g, '').slice(0, 4);
+}
+
 // ---- Single vs. multi-claim ----------------------------------------------
 
 /**
@@ -58,13 +76,13 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 
 // ---- Colours (client-side defaults until a DB `color` column exists) ------
 
-/** Canonical division hues from the design spike, keyed by lowercased name. */
+/** Canonical division hues (web/DESIGN.md), keyed by lowercased name. */
 const DIVISION_HUES: Record<string, string> = {
-  writing: '#3c5ba0',
-  art: '#b0573c',
-  scripting: '#2e7d5b',
-  testing: '#7e54a3',
-  leadership: '#a9810f',
+  writing: '#3f5fb5',
+  art: '#c0563a',
+  scripting: '#2d8060',
+  testing: '#7b57a8',
+  leadership: '#a57f12',
 };
 
 /** Muted palette for entities without a canonical hue (teams, novel divisions). */
@@ -102,26 +120,7 @@ export function avatarColor(seed: string): string {
   return paletteColor(`user:${seed}`);
 }
 
-// ---- User-order timeline colours ------------------------------------------
-
-const GOLDEN_ANGLE_DEG = 137.508;
-const USER_COLOR_START_HUE = 200; // Start at teal/blue — feels neutral as user #1
-
-/**
- * Deterministic hue for the nth user to appear in a task's history
- * (ordinal is 1-based: first person seen = 1, second = 2, …).
- *
- * variant:
- *  'full' — saturated, for comment fills and submission borders
- *  'soft' — desaturated, for other system-event borders
- *  'bg'   — very light tint, for submission node backgrounds
- */
-export function userOrderColor(ordinal: number, variant: 'full' | 'soft' | 'bg' = 'full'): string {
-  const h = (USER_COLOR_START_HUE + (ordinal - 1) * GOLDEN_ANGLE_DEG) % 360;
-  if (variant === 'full') return `hsl(${h.toFixed(1)},62%,42%)`;
-  if (variant === 'soft') return `hsl(${h.toFixed(1)},26%,60%)`;
-  return `hsl(${h.toFixed(1)},50%,92%)`;
-}
+// ---- History actors ------------------------------------------------------
 
 /** Extract the primary actor user-ID from a raw system message body. */
 export function parseActorId(body: string): string | null {

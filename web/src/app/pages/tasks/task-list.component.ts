@@ -1,196 +1,147 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
 import { Task, TaskFilters, TaskStatus, OrgSettings, IntegrationConnection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
-import { UserAvatarComponent } from './user-avatar.component';
-import { isMultiClaim, relativeTime, stampClass, stampStatus } from './task-presentation';
+import { TaskRowComponent } from './task-row.component';
+import { stampLabel, stampStatus } from './task-presentation';
 
 const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approved'];
 
 /**
- * Tasks "work board" (Slice 4, ui-tailwind). The faceted list — division chips, a status
- * segmented control, team filter — over keyset "load more" paging, restyled to the
- * drafting-board design: each row is a ticket with a division spine, a rubber-stamp
- * status, and a claim affordance that is the assignee avatar for 1-of-1 tasks (the norm)
- * and only becomes the pip slot-gauge for multi-claim tasks. "Request a task" reveals the
- * inline create form (a task is created by its requester). The API re-authorizes every
- * create.
+ * Tasks "work board" (Slice 4). The faceted list — division and status switchers, a team
+ * filter — over keyset "load more" paging. Tasks sit as rows on one ruled sheet
+ * (`task-row`, see web/DESIGN.md). "Request a task" reveals the inline create form (a task
+ * is created by its requester). The API re-authorizes every create.
  */
 @Component({
   selector: 'task-list',
   standalone: true,
-  imports: [FormsModule, RouterLink, UserAvatarComponent],
+  imports: [FormsModule, TaskRowComponent],
   template: `
     @if (discordGated()) {
       <div class="discord-gate">
-        <span style="font-size:18px">⚠️</span>
-        <span>
-          Your organisation requires a linked Discord account to access tasks.
-          <a (click)="linkDiscord()" style="cursor:pointer">Link now →</a>
-        </span>
+        Your organisation requires a linked Discord account to access tasks.
+        <a (click)="linkDiscord()">Link Discord</a>
       </div>
     }
     <div class="tasks-board font-sans" [style.opacity]="discordGated() ? '0.4' : '1'"
          [style.pointer-events]="discordGated() ? 'none' : 'auto'"
          [title]="discordGated() ? 'Link your Discord account to access tasks' : ''">
       <main class="pb-12">
-        <div class="flex items-end justify-between gap-4 mb-5">
-          <div>
-            <div class="font-mono text-[11.5px] tracking-[0.16em] uppercase text-ink-soft mb-1">Work board</div>
-            <h1 class="font-serif text-[30px] leading-[1.05] font-semibold">
-              {{ openCount() }} open · <span class="text-ink-soft">{{ inFlightCount() }} in flight</span>
-            </h1>
+        <div class="flex items-center justify-between gap-4 mb-5 flex-wrap">
+          <div class="flex items-baseline gap-3 flex-wrap">
+            <h1 class="font-display font-bold text-[28px] leading-tight">Work board</h1>
+            <span class="text-[13px] text-ink-soft">{{ openCount() }} open, {{ inFlightCount() }} in progress</span>
           </div>
-          <button
-            class="shrink-0 inline-flex items-center gap-2 rounded-md bg-accent text-paper font-medium text-[14px] px-4 py-2.5 shadow-card hover:bg-accent-ink"
-            (click)="showCreate.set(!showCreate())">
-            <span class="font-mono text-[15px] leading-none">+</span> Request a task
-          </button>
+          <button class="shrink-0 rounded bg-accent text-paper font-bold text-[13px] px-3.5 py-2 hover:bg-accent-ink"
+                  (click)="showCreate.set(!showCreate())">Request a task</button>
         </div>
 
         <!-- Create form (a task is created by its requester). -->
         @if (showCreate()) {
-          <div class="rounded-lg border border-line bg-paper shadow-card p-5 mb-5">
-            <h2 class="font-serif text-[18px] font-semibold mb-3">Request a task</h2>
+          <div class="paper p-5 mb-5">
+            <h2 class="font-display font-bold text-[18px] mb-3">Request a task</h2>
             <div class="grid sm:grid-cols-2 gap-3">
               <label class="block sm:col-span-2">
-                <span class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Name</span>
-                <input [(ngModel)]="newTask.name" placeholder="What needs doing?" class="field mt-1" />
+                <span class="text-[13px] text-ink-soft">Name</span>
+                <input [(ngModel)]="newTask.name" placeholder="Localize chapter 4 barks" class="field mt-1" />
               </label>
               <label class="block sm:col-span-2">
-                <span class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Description (markdown)</span>
-                <textarea rows="3" [(ngModel)]="newTask.description" placeholder="Optional" class="field mt-1"></textarea>
+                <span class="text-[13px] text-ink-soft">Description (markdown, optional)</span>
+                <textarea rows="3" [(ngModel)]="newTask.description" class="field mt-1"></textarea>
               </label>
               <label class="block">
-                <span class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Division</span>
+                <span class="text-[13px] text-ink-soft">Division</span>
                 <select [(ngModel)]="newTask.divisionId" class="field mt-1">
-                  <option [ngValue]="''">Select a division…</option>
+                  <option [ngValue]="''">Select a division</option>
                   @for (d of lookup.divisionList(); track d.id) { <option [ngValue]="d.id">{{ d.name }}</option> }
                 </select>
               </label>
               <label class="block">
-                <span class="font-mono text-[11px] uppercase tracking-wide text-ink-soft">Team (optional)</span>
+                <span class="text-[13px] text-ink-soft">Team (optional)</span>
                 <select [(ngModel)]="newTask.teamId" class="field mt-1">
                   <option [ngValue]="''">No team</option>
                   @for (t of lookup.teamList(); track t.id) { <option [ngValue]="t.id">{{ t.name }}</option> }
                 </select>
               </label>
             </div>
-            @if (createError()) { <p class="text-[13px] text-[#99492f] mt-2">{{ createError() }}</p> }
-            <div class="flex items-center gap-3 mt-4">
-              <button class="rounded-md bg-accent text-paper font-medium text-[13.5px] px-4 py-2 hover:bg-accent-ink disabled:opacity-50"
-                      (click)="create()" [disabled]="busy() || !newTask.name.trim() || !newTask.divisionId">Request</button>
-              <button class="font-mono text-[12.5px] text-ink-soft hover:text-ink" (click)="showCreate.set(false)">cancel</button>
+            @if (createError()) { <p class="text-[13px] text-rust mt-2">{{ createError() }}</p> }
+            <div class="flex items-center gap-4 mt-4">
+              <button class="rounded bg-accent text-paper font-bold text-[13px] px-3.5 py-2 hover:bg-accent-ink disabled:opacity-50"
+                      (click)="create()" [disabled]="busy() || !newTask.name.trim() || !newTask.divisionId">Request task</button>
+              <button class="text-[13px] text-ink-soft hover:text-ink hover:underline" (click)="showCreate.set(false)">Cancel</button>
             </div>
             @if (lookup.divisionList().length === 0) {
-              <p class="text-[12.5px] text-ink-soft mt-2">Division options are visible to org admins. You can still open a task by URL.</p>
+              <p class="text-[13px] text-ink-soft mt-2">Division options are visible to org admins. You can still open a task by URL.</p>
             }
           </div>
         }
 
-        <!-- Division facets -->
-        <div class="flex flex-wrap items-center gap-2 mb-3">
-          <button class="chip rounded-full border text-[12.5px] px-3 py-1 font-medium"
-                  [class]="!filters.division ? 'border-ink bg-ink text-paper' : 'border-line bg-paper'"
+        <!-- Division facets: the selected division is bold and underlined in its own hue. -->
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-3 text-[13px]">
+          <button class="pb-0.5 border-b-2"
+                  [class]="!filters.division ? 'border-ink text-ink font-bold' : 'border-transparent text-ink-soft hover:text-ink'"
                   (click)="setDivision(undefined)">All divisions</button>
           @for (d of lookup.divisionList(); track d.id) {
-            <button class="chip rounded-full border border-line bg-paper text-[12.5px] px-3 py-1 dtag"
-                    [class.ring-2]="filters.division === d.id" [class.ring-line]="filters.division === d.id"
-                    [style.--c]="divColor(d.id)" (click)="setDivision(d.id)">{{ d.name }}</button>
+            <button class="pb-0.5 border-b-2"
+                    [class.font-bold]="filters.division === d.id"
+                    [style.color]="divColor(d.id)"
+                    [style.borderColor]="filters.division === d.id ? divColor(d.id) : 'transparent'"
+                    (click)="setDivision(d.id)">{{ d.name }}</button>
           }
         </div>
 
-        <!-- Status segmented control + team filter -->
-        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div class="inline-flex rounded-md border border-line bg-paper overflow-hidden font-mono text-[11.5px] uppercase tracking-[0.08em]">
-            <button class="px-3 py-1.5" [class]="!filters.status ? 'bg-ink text-paper' : 'text-ink-soft hover:text-ink'"
-                    (click)="setStatus(undefined)">Any</button>
+        <!-- Status switcher + team filter -->
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-3 text-[13px] border-b border-line">
+          <div class="flex flex-wrap gap-x-5">
+            <button class="pb-1.5 -mb-px border-b-2"
+                    [class]="!filters.status ? 'border-ink text-ink font-bold' : 'border-transparent text-ink-soft hover:text-ink'"
+                    (click)="setStatus(undefined)">Any status</button>
             @for (s of statuses; track s) {
-              <button class="px-3 py-1.5 border-l border-line capitalize"
-                      [class]="filters.status === s ? 'bg-ink text-paper' : 'text-ink-soft hover:text-ink'"
-                      (click)="setStatus(s)">{{ s }}</button>
+              <button class="pb-1.5 -mb-px border-b-2"
+                      [class]="filters.status === s ? 'border-ink text-ink font-bold' : 'border-transparent text-ink-soft hover:text-ink'"
+                      (click)="setStatus(s)">{{ statusLabel(s) }}</button>
             }
           </div>
-          <div class="font-mono text-[12px] text-ink-soft flex items-center gap-2">
-            <span>team:</span>
-            <select [(ngModel)]="filters.team" (ngModelChange)="reload()" class="text-ink bg-transparent font-mono text-[12px]">
-              <option [ngValue]="undefined">all</option>
+          <label class="flex items-center gap-2 pb-1.5 text-ink-soft">
+            <span>Team</span>
+            <select [(ngModel)]="filters.team" (ngModelChange)="reload()" class="text-ink border border-line rounded bg-paper px-2 py-0.5">
+              <option [ngValue]="undefined">All teams</option>
               @for (t of lookup.teamList(); track t.id) { <option [ngValue]="t.id">{{ t.name }}</option> }
             </select>
-          </div>
+          </label>
         </div>
 
-        @if (error()) { <p class="text-[13px] text-[#99492f] mb-3">{{ error() }}</p> }
+        @if (error()) { <p class="text-[13px] text-rust mb-3">{{ error() }}</p> }
 
-        <ul class="flex flex-col gap-2.5">
+        <div class="sheet">
           @for (t of tasks(); track t.id) {
-            <li>
-              <a [routerLink]="['/tasks', t.id]"
-                 class="ticket flex gap-3.5 rounded-lg border border-line bg-paper shadow-card pl-2 pr-4 py-3.5"
-                 [class.opacity-90]="t.statusCache === 'approved'"
-                 [style.--c]="divColor(t.divisionId)"
-                 [style.--tc]="teamCol(t.teamId)">
-                <div class="spine"></div>
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2.5 flex-wrap">
-                    <h2 class="font-serif text-[17px] font-semibold leading-tight truncate">{{ t.name }}</h2>
-                    <span class="font-mono text-[12px] text-ink-soft">#{{ shortId(t.id) }}</span>
-                  </div>
-                  @if (t.description) {
-                    <p class="text-[13.5px] text-ink-soft mt-1 line-clamp-1">{{ t.description }}</p>
-                  }
-                  <div class="flex items-center gap-3 mt-2 flex-wrap">
-                    <span class="dtag">{{ lookup.divisionName(t.divisionId) }}</span>
-                    @if (t.teamId) { <span class="ttag">{{ lookup.teamName(t.teamId) }}</span> }
-                    <span class="font-mono text-[12px] text-ink-soft">requested by {{ lookup.userName(t.requesterUserId) }} · {{ rel(t.createdAt) }}</span>
-                  </div>
-                </div>
-                <div class="flex flex-col items-end justify-between shrink-0 gap-3">
-                  <span class="stamp" [class]="stampMod(t)">{{ stamp(t) }}</span>
-                  @if (multi(t)) {
-                    <div class="flex items-center gap-0.5 flex-wrap justify-end">
-                      @for (uid of t.claimantUserIds; track uid) {
-                        <user-avatar [name]="lookup.userName(uid)" [seed]="uid" [size]="20" />
-                      }
-                      @for (p of emptySlots(t); track $index) {
-                        <user-avatar [empty]="true" [size]="20" />
-                      }
-                      <span class="gauge-n ml-1">{{ t.claimantUserIds.length }}/{{ t.openings }}</span>
-                    </div>
-                  } @else if (t.claimantUserIds.length > 0) {
-                    <user-avatar [name]="lookup.userName(t.claimantUserIds[0])" [seed]="t.claimantUserIds[0]" [size]="26" />
-                  } @else {
-                    <user-avatar [empty]="true" [size]="26" />
-                  }
-                </div>
-              </a>
-            </li>
+            <task-row [task]="t" />
           } @empty {
-            <li class="rounded-lg border border-dashed border-line bg-paper/60 px-5 py-10 text-center">
-              <p class="font-serif text-[17px] mb-1">Nothing on the board</p>
-              <p class="text-[13.5px] text-ink-soft">No tasks match these facets. Try clearing a filter, or request a task.</p>
-            </li>
+            <div class="px-5 py-10 text-center">
+              <p class="font-display font-bold text-[17px] mb-1">No tasks match these filters</p>
+              <p class="text-[13.5px] text-ink-soft">Clear a filter, or request a task.</p>
+            </div>
           }
-        </ul>
+        </div>
 
         @if (nextCursor()) {
-          <div class="mt-6 flex justify-center">
-            <button class="font-mono text-[12.5px] text-ink-soft border border-line bg-paper rounded-md px-4 py-2 hover:text-ink hover:border-ink/40 disabled:opacity-50"
-                    (click)="loadMore()" [disabled]="busy()">load 20 more →</button>
+          <div class="mt-5 flex justify-center">
+            <button class="text-[13px] font-bold border border-line bg-paper rounded px-3.5 py-2 hover:bg-paper-hover disabled:opacity-50"
+                    (click)="loadMore()" [disabled]="busy()">Load 20 more</button>
           </div>
         }
       </main>
     </div>
   `,
   styles: [
-    `.field { width: 100%; padding: 9px 11px; background: #fff; border: 1px solid #d3d5cc; border-radius: 7px; color: #191b19; font: inherit; }
-     .field:focus-visible { outline: 2px solid #0f7a6b; outline-offset: 1px; }
-     .discord-gate { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 16px; background: rgba(255,107,107,.08); border: 1px solid var(--danger,#c0392b); border-radius: 8px; font-size: 13px; }
-     .discord-gate a { color: var(--accent,#0f7a6b); cursor: pointer; }`,
+    `.field { width: 100%; padding: 8px 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 2px; color: var(--ink); font: inherit; }
+     .field:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+     .discord-gate { padding: 10px 14px; margin-bottom: 16px; background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--rust); border-radius: 2px; font-size: 13px; }
+     .discord-gate a { cursor: pointer; font-weight: 700; margin-left: 4px; }`,
   ],
 })
 export class TaskListComponent {
@@ -245,27 +196,9 @@ export class TaskListComponent {
 
   // ---- view helpers ----
   divColor(id: string): string { return this.lookup.divisionColor(id); }
-  teamCol(id: string | null): string { return this.lookup.teamColor(id); }
-  rel(iso: string): string {
-    return relativeTime(iso);
-  }
-  shortId(id: string): string {
-    return id.replace(/-/g, '').slice(0, 4);
-  }
-  stamp(t: Task): TaskStatus {
-    return stampStatus(t.statusCache);
-  }
-  stampMod(t: Task): string {
-    return stampClass(t.statusCache);
-  }
+  statusLabel(s: TaskStatus): string { return stampLabel(s); }
   isOpen(t: Task): boolean {
-    return this.stamp(t) === 'open';
-  }
-  multi(t: Task): boolean {
-    return isMultiClaim(t);
-  }
-  emptySlots(t: Task): unknown[] {
-    return new Array(Math.max(0, t.openings - t.claimantUserIds.length));
+    return stampStatus(t.statusCache) === 'open';
   }
 
   setDivision(id: string | undefined): void {

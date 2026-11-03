@@ -37,7 +37,7 @@ import { QuestionRendererComponent } from './question-renderer.component';
               <div class="q-controls">
                 <button type="button" class="secondary" (click)="move(i, -1)" [disabled]="i === 0">↑</button>
                 <button type="button" class="secondary" (click)="move(i, 1)" [disabled]="i === questions.length - 1">↓</button>
-                <button type="button" class="secondary" (click)="remove(i)">Remove</button>
+                <button type="button" class="quiet danger" (click)="remove(i)">Remove</button>
               </div>
               <question-renderer class="grow" mode="authoring" [group]="asGroup(q)" />
             </div>
@@ -58,7 +58,7 @@ import { QuestionRendererComponent } from './question-renderer.component';
      .q-row { display: flex; gap: 0.5rem; align-items: flex-start; }
      .q-controls { display: flex; flex-direction: column; gap: 0.25rem; }
      .grow { flex: 1; }
-     .ok { color: #0a5249; font-weight: 600; }`,
+     .ok { color: #2d6b50; font-weight: 700; }`,
   ],
 })
 export class RequestTemplateBuilderComponent implements OnInit {

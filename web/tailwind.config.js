@@ -1,49 +1,56 @@
 /**
- * Tailwind theme for the Tasks slice (ui-tailwind). The tokens mirror the approved
- * design spike (`web/design/`): a cool "drafting board" palette with the IBM Plex trio.
+ * Tailwind theme for the "graphite sheet" visual language — see `web/DESIGN.md`, which is
+ * the source of truth for every token here. Cool grey board, white ruled sheets, graphite
+ * ink; Bricolage Grotesque (`font-display`) for names of things, Atkinson Hyperlegible
+ * (`font-sans`) for everything else. There is deliberately no monospace or serif family.
  *
- * Scope note: Tailwind's utilities are global, but only the Tasks pages use the light
- * board theme — the rest of the app (admin/auth) still rides the dark token set in
- * `styles.css`. Preflight is disabled so adding Tailwind doesn't reset the existing
- * hand-written component styles those pages depend on.
+ * Preflight is disabled: the semantic element styles in `styles.css` (`.panel`, `button`,
+ * `table`, `label`…) theme the non-Tailwind pages, and Tailwind stays additive.
  *
- * Division/team hues are DB-configurable (a `color` column is a pending backend gap);
- * the values here are the current client-side defaults, also mirrored as CSS vars in
- * `styles.css` for the per-row `--c` / `--tc` spine + tag colors.
+ * Division/team hues are DB-configurable eventually (a `color` column is a pending backend
+ * gap); the `div.*` values are the current client-side defaults, mirrored in
+ * `task-presentation.ts` and as CSS vars in `styles.css`.
  */
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ['./src/**/*.{html,ts}'],
+  // Stamp modifiers are built at runtime (`stamp--${status}`, `stamp--lc-${state}`), so the
+  // content scan can't see them; keep every one of them.
+  safelist: [{ pattern: /^stamp--/ }],
   corePlugins: {
-    // The app's other pages still use the legacy dark stylesheet; Preflight would
-    // reset their elements. Keep Tailwind additive — utilities only, no global reset.
+    // Keep Tailwind additive — utilities only, no global reset (see note above).
     preflight: false,
   },
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
-        serif: ['"IBM Plex Serif"', 'Georgia', 'serif'],
-        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+        sans: ['"Atkinson Hyperlegible"', 'system-ui', 'sans-serif'],
+        display: ['"Bricolage Grotesque"', '"Atkinson Hyperlegible"', 'system-ui', 'sans-serif'],
       },
       colors: {
-        board: '#E7E8E1',
-        paper: '#FBFBF8',
-        ink: '#191B19',
-        'ink-soft': '#5B605C',
-        line: '#D3D5CC',
-        accent: '#0F7A6B',
-        'accent-ink': '#0A5249',
+        board: '#E2E4E7',
+        paper: '#FFFFFF',
+        'paper-alt': '#F5F6F8',
+        'paper-hover': '#EEF0F3',
+        ink: '#2A2D32',
+        'ink-soft': '#62666E',
+        line: '#D5D8DD',
+        margin: '#9AA6B6',
+        faint: '#A3A7AE',
+        rust: '#8E3B26',
+        // The primary action is graphite; `accent` names the role, not a hue.
+        accent: '#2A2D32',
+        'accent-ink': '#43474F',
         div: {
-          writing: '#3C5BA0',
-          art: '#B0573C',
-          scripting: '#2E7D5B',
-          testing: '#7E54A3',
-          leadership: '#A9810F',
+          writing: '#3F5FB5',
+          art: '#C0563A',
+          scripting: '#2D8060',
+          testing: '#7B57A8',
+          leadership: '#A57F12',
         },
       },
-      boxShadow: {
-        card: '0 1px 0 rgba(25,27,25,0.04), 0 1px 2px rgba(25,27,25,0.05)',
+      borderRadius: {
+        DEFAULT: '2px',
       },
     },
   },

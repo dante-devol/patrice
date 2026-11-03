@@ -23,54 +23,58 @@ export interface SubmitDialogData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule],
   template: `
-    <div class="dialog-card tasks-board font-sans p-5">
-      <div class="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <div class="font-mono text-[11px] tracking-[0.16em] uppercase text-ink-soft mb-1">Submit work</div>
-          <h2 class="font-serif text-[20px] font-semibold leading-tight">Your answers</h2>
+    <div class="dialog-card tasks-board font-sans">
+      <div class="flex items-start gap-3 border-b border-line">
+        <div class="flex-1 px-5 py-4">
+          <h2 class="font-display font-bold text-[18px] leading-tight">Submit work</h2>
+          <p class="text-[13px] text-ink-soft mt-0.5">Answer the request template, then submit it for review.</p>
         </div>
-        <button class="font-mono text-[18px] leading-none text-ink-soft hover:text-ink -mt-1" (click)="close()" aria-label="Close">×</button>
+        <button class="text-[20px] leading-none text-ink-soft hover:text-ink px-4 pt-3.5" (click)="close()" aria-label="Close">×</button>
       </div>
 
-      @if (answerable().length === 0) {
-        <p class="text-[14px] text-ink-soft">This is a coordination-only task — nothing to submit.</p>
-      } @else {
-        @for (q of answerable(); track q.id ?? q.prompt) {
-          <div class="flex flex-col gap-1.5 mb-3">
-            <label class="text-[13.5px] font-medium">{{ q.prompt }} @if (q.required) { <span class="text-[#99492f]">*</span> }</label>
-            @switch (q.type) {
-              @case ('detail_text') { <textarea rows="5" [(ngModel)]="model[q.id!]" class="field"></textarea> }
-              @case ('multiline') { <textarea rows="3" [(ngModel)]="model[q.id!]" class="field"></textarea> }
-              @case ('text') { <input [(ngModel)]="model[q.id!]" class="field" /> }
-              @case ('numeric') { <input type="number" [(ngModel)]="model[q.id!]" class="field" /> }
-              @case ('dropdown') {
-                <select [(ngModel)]="model[q.id!]" [multiple]="!!q.constraints.multi" class="field">
-                  @for (o of q.constraints.options ?? []; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
-                </select>
-              }
-              @case ('radio') {
-                @for (o of q.constraints.options ?? []; track o.value) {
-                  <label class="inline-flex items-center gap-1.5 mr-4 text-[13.5px]">
-                    <input type="radio" [name]="q.id ?? ''" [value]="o.value" [(ngModel)]="model[q.id ?? '']" /> {{ o.label }}
-                  </label>
+      <div class="px-5 py-4">
+        @if (answerable().length === 0) {
+          <p class="text-[14px] text-ink-soft">This task is coordination only, so there's nothing to submit.</p>
+        } @else {
+          @for (q of answerable(); track q.id ?? q.prompt) {
+            <div class="flex flex-col gap-1.5 mb-3.5">
+              <label class="text-[13px] font-bold" [attr.for]="'q-' + q.id">{{ q.prompt }}@if (q.required) { <span class="text-ink-soft font-normal">, required</span> }</label>
+              @switch (q.type) {
+                @case ('detail_text') { <textarea [id]="'q-' + q.id" rows="5" [(ngModel)]="model[q.id!]" class="field"></textarea> }
+                @case ('multiline') { <textarea [id]="'q-' + q.id" rows="3" [(ngModel)]="model[q.id!]" class="field"></textarea> }
+                @case ('text') { <input [id]="'q-' + q.id" [(ngModel)]="model[q.id!]" class="field" /> }
+                @case ('numeric') { <input [id]="'q-' + q.id" type="number" [(ngModel)]="model[q.id!]" class="field" /> }
+                @case ('dropdown') {
+                  <select [id]="'q-' + q.id" [(ngModel)]="model[q.id!]" [multiple]="!!q.constraints.multi" class="field">
+                    @for (o of q.constraints.options ?? []; track o.value) { <option [value]="o.value">{{ o.label }}</option> }
+                  </select>
                 }
+                @case ('radio') {
+                  <div>
+                    @for (o of q.constraints.options ?? []; track o.value) {
+                      <label class="inline-flex items-center gap-1.5 mr-4 text-[13.5px]">
+                        <input type="radio" [name]="q.id ?? ''" [value]="o.value" [(ngModel)]="model[q.id ?? '']" /> {{ o.label }}
+                      </label>
+                    }
+                  </div>
+                }
+                @case ('attachment') { <span class="text-[13px] text-ink-soft">File answers can't be edited here yet.</span> }
               }
-              @case ('attachment') { <span class="text-[13px] text-ink-soft">Attachment answers aren't editable here yet.</span> }
-            }
-          </div>
+            </div>
+          }
         }
-      }
+      </div>
 
-      <div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-line">
-        <button class="font-mono text-[12.5px] text-ink-soft hover:text-ink" (click)="close()">cancel</button>
-        <button class="rounded-md bg-accent text-paper font-medium text-[13.5px] px-4 py-2 hover:bg-accent-ink disabled:opacity-50"
+      <div class="flex items-center justify-end gap-4 px-5 py-3 border-t border-line text-[13px]">
+        <button class="text-ink-soft hover:text-ink hover:underline" (click)="close()">Cancel</button>
+        <button class="rounded bg-accent text-paper font-bold px-3.5 py-2 hover:bg-accent-ink disabled:opacity-50"
                 (click)="submit()" [disabled]="busy() || answerable().length === 0">Submit for review</button>
       </div>
     </div>
   `,
   styles: [
-    `.field { width: 100%; padding: 8px 10px; background: #fff; border: 1px solid #d3d5cc; border-radius: 6px; color: #191b19; font: inherit; }
-     .field:focus-visible { outline: 2px solid #0f7a6b; outline-offset: 1px; }`,
+    `.field { width: 100%; padding: 8px 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 2px; color: var(--ink); font: inherit; }
+     .field:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }`,
   ],
 })
 export class SubmitDialogComponent {

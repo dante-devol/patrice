@@ -48,15 +48,15 @@ const users = [
 
 const task = (o) => ({
   claimsClosed: false, lifecycleState: 'active', retiredAt: null, version: 1,
-  updatedAt: o.createdAt, teamId: null, description: '', ...o,
+  updatedAt: o.createdAt, teamId: null, description: '', claimantUserIds: [], ...o,
 });
 
 const tasks = [
   task({ id: 't-tavern', name: 'Tavern interior — concept sheet', divisionId: 'd-art', requesterUserId: 'u-sela', openings: 1, statusCache: 'open', createdAt: ago(6 * H), description: 'Three mood frames for the riverside tavern — warm lamplight, late evening. PNG, 2K wide.' }),
-  task({ id: 't-localize', name: 'Localize Chapter 3 — tavern dialogue', divisionId: 'd-writing', teamId: 't-usa', requesterUserId: 'u-devin', openings: 2, statusCache: 'review', createdAt: ago(5 * D), description: 'Pass over the 40 tavern barks; keep cadence loose and in-character. Two translators on it.' }),
-  task({ id: 't-save', name: 'Port save-system to the v2 schema', divisionId: 'd-scripting', requesterUserId: 'u-joon', openings: 1, statusCache: 'revising', createdAt: ago(8 * D), description: 'Migrate legacy save blobs; returned once — needs the backwards-compat shim Joon flagged.' }),
-  task({ id: 't-regress', name: 'Regression pass — Act I quest flags', divisionId: 'd-testing', teamId: 't-usa', requesterUserId: 'u-aric', openings: 1, statusCache: 'claimed', createdAt: ago(2 * D), description: 'Walk every Act I branch; confirm flags clear on completion. Custom test form attached.' }),
-  task({ id: 't-signoff', name: 'Sign off Act I voice direction', divisionId: 'd-leadership', requesterUserId: 'u-devin', openings: 1, statusCache: 'approved', createdAt: ago(11 * D), description: 'Final review of the Act I VO brief before recording opens. Approved by leadership.' }),
+  task({ id: 't-localize', claimantUserIds: ['u-maya', 'u-aric'], name: 'Localize Chapter 3 — tavern dialogue', divisionId: 'd-writing', teamId: 't-usa', requesterUserId: 'u-devin', openings: 2, statusCache: 'review', createdAt: ago(5 * D), description: 'Pass over the 40 tavern barks; keep cadence loose and in-character. Two translators on it.' }),
+  task({ id: 't-save', claimantUserIds: ['u-maya'], name: 'Port save-system to the v2 schema', divisionId: 'd-scripting', requesterUserId: 'u-joon', openings: 1, statusCache: 'revising', createdAt: ago(8 * D), description: 'Migrate legacy save blobs; returned once — needs the backwards-compat shim Joon flagged.' }),
+  task({ id: 't-regress', claimantUserIds: ['u-joon'], name: 'Regression pass — Act I quest flags', divisionId: 'd-testing', teamId: 't-usa', requesterUserId: 'u-aric', openings: 1, statusCache: 'claimed', createdAt: ago(2 * D), description: 'Walk every Act I branch; confirm flags clear on completion. Custom test form attached.' }),
+  task({ id: 't-signoff', claimantUserIds: ['u-aric'], name: 'Sign off Act I voice direction', divisionId: 'd-leadership', requesterUserId: 'u-devin', openings: 1, statusCache: 'approved', createdAt: ago(11 * D), description: 'Final review of the Act I VO brief before recording opens. Approved by leadership.' }),
   task({ id: 't-barks', name: 'Write merchant barks — 20 lines', divisionId: 'd-writing', requesterUserId: 'u-maya', openings: 2, statusCache: 'open', createdAt: ago(1 * D), description: 'Short, repeatable merchant lines for the market district. Two writers welcome.' }),
 ];
 
@@ -119,6 +119,8 @@ async function mock(page) {
     if (p === '/users') return json(route, users);
     if (p === '/notifications') return json(route, { items: [], unreadCount: 0, nextCursor: null });
     if (p.endsWith('/notifications/stream')) return route.abort();
+    if (p === '/integrations') return json(route, []);
+    if (p === '/invitations') return json(route, []);
     if (p === '/roles') return json(route, roles);
     if (p === '/grants') return json(route, []);
     if (p === '/actions') return json(route, { actions: ['task:create', 'task:claim', 'task:review'] });
@@ -146,12 +148,14 @@ await page.getByText('What needs doing?').waitFor().catch(() => {});
 await page.screenshot({ path: join(OUT, 'tasks-overview-create.png'), fullPage: true });
 
 await page.goto(`${BASE}/tasks/t-localize`, { waitUntil: 'networkidle' });
-await page.getByRole('heading', { name: 'Localize Chapter 3 — tavern dialogue' }).waitFor();
+// The requester sees the title as an inline-editable input, so wait on the history instead.
+await page.getByText('Devin requested this task').waitFor();
 await page.screenshot({ path: join(OUT, 'task-detail.png'), fullPage: true });
 
 // Review dialog — the 2nd "view submission" is Maya's v2 (in review → shows controls).
-await page.getByRole('button', { name: /view submission/ }).nth(1).click();
+await page.getByRole('button', { name: /view submission/i }).nth(1).click();
 await page.getByRole('button', { name: 'Approve' }).waitFor();
+await page.waitForTimeout(250); // let the 140ms dialog-in animation finish
 await page.screenshot({ path: join(OUT, 'review-dialog.png'), fullPage: true });
 await page.keyboard.press('Escape');
 await page.waitForTimeout(200);
@@ -159,6 +163,7 @@ await page.waitForTimeout(200);
 // Submit-work dialog from the claim strip.
 await page.getByRole('button', { name: 'Submit work' }).click();
 await page.getByRole('button', { name: 'Submit for review' }).waitFor();
+await page.waitForTimeout(250);
 await page.screenshot({ path: join(OUT, 'submit-dialog.png'), fullPage: true });
 await page.keyboard.press('Escape');
 

@@ -26,7 +26,7 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
         <tbody>
           @for (d of divisions(); track d.id) {
             <tr [class.row--retired]="d.lifecycleState === 'retired'" [class.row--deactivated]="d.lifecycleState === 'deactivated'">
-              <td><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" /></td>
+              <td class="name-cell" [style.--c]="d.color ?? computeColor(d)"><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" aria-label="Name" /></td>
               <td>
                 <div class="row" style="gap:4px;align-items:center;flex-wrap:nowrap">
                   <input type="color" [value]="d.color ?? computeColor(d)"
@@ -47,12 +47,12 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
               <td><span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span></td>
               <td>
                 <button class="secondary" (click)="toggleRequestTemplate(d.id)">
-                  {{ openRequestTemplate() === d.id ? 'Hide request template' : 'Request Template' }}
+                  {{ openRequestTemplate() === d.id ? 'Hide request template' : 'Request template' }}
                 </button>
                 @if (d.lifecycleState === 'active') {
-                  <button class="secondary" (click)="retire(d)">Retire</button>
+                  <button class="quiet danger" (click)="retire(d)">Retire</button>
                 } @else if (d.lifecycleState === 'retired') {
-                  <button class="secondary" (click)="revive(d)">Revive</button>
+                  <button class="quiet" (click)="revive(d)">Revive</button>
                 }
               </td>
             </tr>

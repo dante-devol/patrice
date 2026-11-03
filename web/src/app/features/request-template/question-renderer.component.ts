@@ -107,7 +107,7 @@ import {
     }
   `,
   styles: [
-    `.question-card { border: 1px solid #ddd; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; }
+    `.question-card { border: 1px solid var(--line); border-radius: 2px; padding: 0.75rem; margin-bottom: 0.5rem; }
      .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.4rem; }
      .grow { flex: 1; }
      .inline { display: inline-flex; align-items: center; gap: 0.3rem; }

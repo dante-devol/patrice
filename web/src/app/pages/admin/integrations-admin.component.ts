@@ -26,10 +26,9 @@ interface ConnectionRow extends IntegrationConnection {
     .status-badge {
       font-size: 11px;
       padding: 2px 8px;
-      border-radius: 999px;
+      border-radius: 2px;
       border: 1px solid var(--border);
-      font-weight: 600;
-      letter-spacing: .03em;
+      font-weight: 700;
     }
     .status-badge.active  { border-color: var(--ok);     color: var(--ok); }
     .status-badge.broken  { border-color: var(--danger);  color: var(--danger); }
@@ -39,7 +38,7 @@ interface ConnectionRow extends IntegrationConnection {
     .connection-card {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 2px;
       margin-bottom: 12px;
       overflow: hidden;
     }
@@ -51,7 +50,7 @@ interface ConnectionRow extends IntegrationConnection {
       cursor: pointer;
       user-select: none;
     }
-    .connection-header:hover { background: rgba(255,255,255,.03); }
+    .connection-header:hover { background: var(--paper-hover); }
     .connection-header .chevron { color: var(--muted); font-size: 12px; transition: transform .15s; }
     .connection-header .chevron.open { transform: rotate(90deg); }
     .connection-name { font-weight: 600; flex: 1; }
@@ -62,18 +61,18 @@ interface ConnectionRow extends IntegrationConnection {
     .mapping-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
     .mapping-row:last-child { border-bottom: none; }
     .mapping-ids { font-size: 12px; color: var(--muted); font-family: monospace; }
-    .broken-pill { font-size: 11px; color: var(--danger); border: 1px solid var(--danger); padding: 1px 6px; border-radius: 999px; }
+    .broken-pill { font-size: 11px; color: var(--danger); border: 1px solid var(--danger); padding: 1px 6px; border-radius: 2px; }
 
     .add-mapping-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: flex-end; }
     .add-mapping-form select, .add-mapping-form input { flex: 1; min-width: 120px; margin-top: 0; }
     .add-mapping-form button { margin-top: 0; }
 
-    .section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; margin-top: 4px; }
+    .section-label { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--ink); margin-bottom: 8px; margin-top: 4px; }
 
     .discord-logo { width: 18px; height: 18px; opacity: .7; }
 
     /* ── Health panel (pinned to top) ───────────────────────────── */
-    .health { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; background: var(--panel); }
+    .health { border: 1px solid var(--border); border-radius: 2px; padding: 14px 16px; margin-bottom: 18px; background: var(--panel); }
     .health-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .health-head h3 { margin: 0; font-size: 14px; flex: 1; }
     .health-card { border-top: 1px solid var(--border); padding: 12px 0; }
@@ -82,14 +81,14 @@ interface ConnectionRow extends IntegrationConnection {
     .health-title .name { font-weight: 600; flex: 1; }
     .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; font-size: 13px; }
     .hcell { display: flex; flex-direction: column; gap: 2px; }
-    .hlabel { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-    .gw-pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); width: fit-content; }
+    .hlabel { font-size: 13px; color: var(--muted); }
+    .gw-pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 2px; border: 1px solid var(--border); width: fit-content; }
     .gw-pill.connected { color: var(--ok); border-color: var(--ok); }
     .gw-pill.connecting { color: var(--muted); border-color: var(--muted); }
-    .gw-pill.degraded { color: #b8860b; border-color: #b8860b; }
+    .gw-pill.degraded { color: #7a5b00; border-color: #a9810f; }
     .gw-pill.down { color: var(--danger); border-color: var(--danger); }
     .health-error { color: var(--danger); font-size: 12.5px; margin: 10px 0 0; }
-    .health-warn { color: #b8860b; font-size: 12.5px; margin: 8px 0 0; }
+    .health-warn { color: #7a5b00; font-size: 12.5px; margin: 8px 0 0; }
     .health-actions { display: flex; gap: 8px; margin-top: 12px; }
     .health-actions button { margin-top: 0; padding: 5px 12px; font-size: 12px; }
     .retry-pill { font-size: 11px; margin-top: 0; padding: 2px 8px; }
