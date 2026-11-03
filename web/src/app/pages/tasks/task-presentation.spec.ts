@@ -89,7 +89,7 @@ describe('task-presentation', () => {
     it('renders typed events with resolved names', () => {
       const events = buildHistory(
         [
-          entry({ id: 'e0', type: 'task.created', actorUserId: 'u3', payload: {}, occurredAt: at(16) }),
+          entry({ id: 'e0', type: 'task.created', actorUserId: 'u3', payload: { templateOrigin: 'library', sourceTemplateId: null }, occurredAt: at(16) }),
           entry({ id: 'e1', type: 'task.claimed', payload: { userId: 'u1' } }),
         ],
         [],

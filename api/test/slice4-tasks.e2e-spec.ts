@@ -22,6 +22,8 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
   let artId: string;
   let emptyDivId: string; // a division with NO request template
   let adminRoleId: string;
+  let writingTemplateId: string;
+  let artTemplateId: string;
 
   beforeAll(async () => {
     await resetDatabase();
@@ -35,16 +37,16 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     artId = (await auth(http().post('/api/divisions')).send({ name: 'Art' })).body.id;
     emptyDivId = (await auth(http().post('/api/divisions')).send({ name: 'Coordination' })).body.id;
 
-    // Give Writing + Art a request template (Coordination intentionally has none).
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    // Give Writing + Art a default template (Coordination intentionally has none).
+    writingTemplateId = (await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [
         { type: 'text', prompt: 'Title', required: true, constraints: { maxChars: 120 } },
         { type: 'detail_text', prompt: 'Body', required: true, constraints: {} },
       ],
-    });
-    await auth(http().put(`/api/divisions/${artId}/request-template`)).send({
+    })).body.id;
+    artTemplateId = (await auth(http().post(`/api/divisions/${artId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'attachment', prompt: 'Asset', required: true, constraints: { allowedTypes: ['image/png'] } }],
-    });
+    })).body.id;
 
     // The seeded Admin role isn't granted task:* by default — grant it globally.
     const adminUser = await prisma.appUser.findFirstOrThrow({
@@ -71,11 +73,12 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
   const auth = (r: request.Test) =>
     r.set('Cookie', admin.cookies).set('x-csrf-token', admin.csrf);
 
-  it('creates a task and deep-copies the division request template', async () => {
+  it("creates a task with a snapshot of the division's default template", async () => {
     const res = await auth(http().post('/api/tasks')).send({
       name: 'First chapter',
       description: 'Write it',
       divisionId: writingId,
+      template: { kind: 'default' },
     });
     expect(res.status).toBe(201);
     expect(res.body.divisionId).toBe(writingId);
@@ -83,47 +86,49 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     expect(res.body.openings).toBe(1);
     const taskId = res.body.id;
 
-    // The copy is a separate request template row owned by the task (owner_task_id set,
-    // owner_division_id null) — schema has no task.request_template_id.
+    expect(res.body.templateOrigin).toBe('library');
+    expect(res.body.sourceTemplateId).toBe(writingTemplateId);
+
     const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     expect(qn.status).toBe(200);
-    expect(qn.body.ownerTaskId).toBe(taskId);
-    expect(qn.body.ownerDivisionId).toBeNull();
+    expect(qn.body).toMatchObject({ taskId, origin: 'library', sourceTemplateId: writingTemplateId, locked: false });
     expect(qn.body.questions.map((q: any) => q.prompt)).toEqual(['Title', 'Body']);
 
-    // The copied questions are fresh rows (distinct ids from the division default).
-    const divQn = await auth(http().get(`/api/divisions/${writingId}/request-template`));
+    // The snapshot's questions are fresh rows (distinct ids from the library's).
+    const divQn = await auth(http().get(`/api/request-templates/${writingTemplateId}`));
     const divIds = new Set(divQn.body.questions.map((q: any) => q.id));
     for (const q of qn.body.questions) expect(divIds.has(q.id)).toBe(false);
   });
 
-  it('editing the division default afterward does NOT change an existing task copy', async () => {
-    const created = await auth(http().post('/api/tasks')).send({ name: 'Snapshot', divisionId: artId });
+  it('editing the library template afterward does NOT change an existing task', async () => {
+    const created = await auth(http().post('/api/tasks')).send({ name: 'Snapshot', divisionId: artId, template: { kind: 'default' } });
     const taskId = created.body.id;
     const before = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     expect(before.body.questions).toHaveLength(1);
 
     // Rewrite Art's default to a totally different set.
-    await auth(http().put(`/api/divisions/${artId}/request-template`)).send({
+    const edit = await auth(http().patch(`/api/request-templates/${artTemplateId}`)).send({
+      version: 0,
       questions: [
         { type: 'text', prompt: 'New A', required: false, constraints: {} },
         { type: 'text', prompt: 'New B', required: false, constraints: {} },
       ],
     });
+    expect(edit.status).toBe(200);
 
     const after = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     expect(after.body.questions).toHaveLength(1);
     expect(after.body.questions[0].prompt).toBe('Asset');
   });
 
-  it('422 NO_DEFAULT_REQUEST_TEMPLATE when the division has no request template', async () => {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'Nope', divisionId: emptyDivId });
+  it('422 TEMPLATE_REQUIRED when the division has no default template', async () => {
+    const res = await auth(http().post('/api/tasks')).send({ name: 'Nope', divisionId: emptyDivId, template: { kind: 'default' } });
     expect(res.status).toBe(422);
-    expect(res.body.error.code).toBe('NO_DEFAULT_REQUEST_TEMPLATE');
+    expect(res.body.error.code).toBe('TEMPLATE_REQUIRED');
   });
 
   it('writes a task.created activity row with an IDs-only payload', async () => {
-    const created = await auth(http().post('/api/tasks')).send({ name: 'Audited', divisionId: writingId });
+    const created = await auth(http().post('/api/tasks')).send({ name: 'Audited', divisionId: writingId, template: { kind: 'default' } });
     const row = await prisma.activity.findFirst({
       where: { verb: 'task.created', subjectId: created.body.id },
     });
@@ -131,14 +136,15 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     const payload = row!.payload as Record<string, unknown>;
     expect(payload.taskId).toBe(created.body.id);
     expect(payload.divisionId).toBe(writingId);
-    expect(typeof payload.requestTemplateId).toBe('string');
+    expect(payload.templateOrigin).toBe('library');
+    expect(payload.sourceTemplateId).toBe(writingTemplateId);
     expect(JSON.stringify(payload)).not.toContain('Audited');
   });
 
   describe('PATCH /tasks/:id — pure metadata only', () => {
     let taskId: string;
     beforeAll(async () => {
-      taskId = (await auth(http().post('/api/tasks')).send({ name: 'Editable', divisionId: writingId })).body.id;
+      taskId = (await auth(http().post('/api/tasks')).send({ name: 'Editable', divisionId: writingId, template: { kind: 'default' } })).body.id;
     });
 
     it('updates name and description', async () => {
@@ -164,9 +170,9 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
     let pagingDivId: string;
     beforeAll(async () => {
       pagingDivId = (await auth(http().post('/api/divisions')).send({ name: 'Paging' })).body.id;
-      await auth(http().put(`/api/divisions/${pagingDivId}/request-template`)).send({ questions: [] });
+      await auth(http().post(`/api/divisions/${pagingDivId}/request-templates`)).send({ name: 'Default', isDefault: true, questions: [] });
       for (let i = 0; i < 5; i++) {
-        await auth(http().post('/api/tasks')).send({ name: `P${i}`, divisionId: pagingDivId });
+        await auth(http().post('/api/tasks')).send({ name: `P${i}`, divisionId: pagingDivId, template: { kind: 'default' } });
       }
     });
 
@@ -218,7 +224,7 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
         action: 'task:configure_request_template',
         scopeKind: 'global',
       });
-      taskId = (await auth(http().post('/api/tasks')).send({ name: 'Configurable', divisionId: writingId })).body.id;
+      taskId = (await auth(http().post('/api/tasks')).send({ name: 'Configurable', divisionId: writingId, template: { kind: 'default' } })).body.id;
     });
 
     it('rewrites the task copy in place without touching the division default', async () => {
@@ -229,11 +235,11 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
         ],
       });
       expect(res.status).toBe(200);
-      expect(res.body.ownerTaskId).toBe(taskId);
+      expect(res.body.taskId).toBe(taskId);
       expect(res.body.questions.map((q: any) => q.prompt)).toEqual(['Overridden A', 'Overridden B']);
 
       // The Writing default is unchanged (still Title/Body).
-      const div = await auth(http().get(`/api/divisions/${writingId}/request-template`));
+      const div = await auth(http().get(`/api/request-templates/${writingTemplateId}`));
       expect(div.body.questions.map((q: any) => q.prompt)).toEqual(['Title', 'Body']);
     });
 
@@ -268,12 +274,12 @@ describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
       r.set('Cookie', scoped.cookies).set('x-csrf-token', scoped.csrf);
 
     it('a specific_division creator may create in their division', async () => {
-      const res = await asScoped(http().post('/api/tasks')).send({ name: 'Scoped ok', divisionId: writingId });
+      const res = await asScoped(http().post('/api/tasks')).send({ name: 'Scoped ok', divisionId: writingId, template: { kind: 'default' } });
       expect(res.status).toBe(201);
     });
 
     it('the same creator is refused in another division (403)', async () => {
-      const res = await asScoped(http().post('/api/tasks')).send({ name: 'Scoped no', divisionId: artId });
+      const res = await asScoped(http().post('/api/tasks')).send({ name: 'Scoped no', divisionId: artId, template: { kind: 'default' } });
       expect(res.status).toBe(403);
     });
   });

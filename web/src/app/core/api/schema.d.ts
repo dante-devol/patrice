@@ -839,7 +839,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/divisions/{id}/request-template": {
+    "/divisions/{id}/request-templates": {
         parameters: {
             query?: never;
             header?: never;
@@ -847,20 +847,48 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A division's request template
+         * A division's template library
          * @description Gated by the `request_template:read` action.
          */
-        get: operations["getDivisionTemplate"];
+        get: operations["listDivisionTemplates"];
+        put?: never;
         /**
-         * Replace a division's request template
-         * @description Gated by the `division:update` action.
+         * Add a template to a division library
+         * @description Gated by the `request_template:create` action.
          */
-        put: operations["putDivisionTemplate"];
-        post?: never;
+        post: operations["createDivisionTemplate"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/request-templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A library template
+         * @description Gated by the `request_template:read` action.
+         */
+        get: operations["getRequestTemplate"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a library template (permanent, audited; tasks keep their snapshots)
+         * @description Gated by the `request_template:delete` action.
+         */
+        delete: operations["deleteRequestTemplate"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a library template (questions diffed by id)
+         * @description Gated by the `request_template:update` action.
+         */
+        patch: operations["updateRequestTemplate"];
         trace?: never;
     };
     "/divisions/{id}/members": {
@@ -1239,12 +1267,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A task's request template
+         * A task's own questions
          * @description Gated by the `task:read` action.
          */
         get: operations["getTaskTemplate"];
         /**
-         * Replace a task's request template
+         * Edit a task's own questions (diffed by id; locked by a submission)
          * @description Gated by the `task:configure_request_template` action.
          */
         put: operations["putTaskTemplate"];
@@ -1269,6 +1297,26 @@ export interface paths {
         get: operations["getTaskTimeline"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a file for an attachment answer (pending until your submit claims it)
+         * @description Gated by the `task:submit` action.
+         */
+        post: operations["uploadAnswerFile"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1779,7 +1827,7 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "NO_DEFAULT_REQUEST_TEMPLATE" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
@@ -1917,10 +1965,26 @@ export interface components {
             defaultOpenings: number;
             openingsLocked: boolean;
             restrictClaims: boolean;
+            allowCustomTemplates: boolean;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
             retiredAt: string | null;
             version: number;
+        };
+        RequestTemplateSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            divisionId: string;
+            name: string;
+            description: string;
+            isDefault: boolean;
+            version: number;
+            questionCount: number;
+        };
+        RequestTemplateLibrary: {
+            items: components["schemas"]["RequestTemplateSummary"][];
+            allowedActions: string[];
         };
         /** @enum {string} */
         QuestionType: "detail_text" | "multiline" | "text" | "numeric" | "dropdown" | "radio" | "attachment";
@@ -1956,9 +2020,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            ownerDivisionId: string | null;
-            /** Format: uuid */
-            ownerTaskId: string | null;
+            divisionId: string;
+            name: string;
+            description: string;
+            isDefault: boolean;
+            version: number;
             questions: components["schemas"]["Question"][];
         };
         Member: {
@@ -1983,6 +2049,8 @@ export interface components {
         };
         /** @enum {string} */
         TaskStatus: "open" | "claimed" | "review" | "revising" | "approved";
+        /** @enum {string} */
+        TemplateOrigin: "library" | "custom";
         Task: {
             /** Format: uuid */
             id: string;
@@ -1995,7 +2063,15 @@ export interface components {
             /** Format: uuid */
             requesterUserId: string;
             openings: number;
-            statusCache: components["schemas"]["TaskStatus"] | null;
+            claimsClosed: boolean;
+            statusCache: components["schemas"]["TaskStatus"];
+            templateOrigin: components["schemas"]["TemplateOrigin"];
+            /** Format: uuid */
+            sourceTemplateId: string | null;
+            /** Format: date-time */
+            completedAt: string | null;
+            /** Format: uuid */
+            completedBy: string | null;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
             retiredAt: string | null;
@@ -2011,6 +2087,15 @@ export interface components {
             items: components["schemas"]["Task"][];
             nextCursor: string | null;
         };
+        TaskTemplate: {
+            /** Format: uuid */
+            taskId: string;
+            origin: components["schemas"]["TemplateOrigin"];
+            /** Format: uuid */
+            sourceTemplateId: string | null;
+            locked: boolean;
+            questions: components["schemas"]["Question"][];
+        };
         TimelineEntry: {
             /** Format: uuid */
             id: string;
@@ -2020,7 +2105,12 @@ export interface components {
             actorUserId: string | null;
             /** Format: date-time */
             occurredAt: string;
-            payload: Record<string, never>;
+            payload: {
+                /** @enum {string} */
+                templateOrigin: "library" | "custom";
+                /** Format: uuid */
+                sourceTemplateId: string | null;
+            };
         } | {
             /** Format: uuid */
             id: string;
@@ -2059,6 +2149,7 @@ export interface components {
             payload: {
                 /** Format: uuid */
                 userId: string;
+                submissionIds: string[];
             };
         } | {
             /** Format: uuid */
@@ -2166,8 +2257,27 @@ export interface components {
                 reason: string;
             };
         };
+        AttachmentMeta: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            taskId: string;
+            /** Format: uuid */
+            messageId: string | null;
+            /** Format: uuid */
+            answerId: string | null;
+            filename: string;
+            contentType: string;
+            byteSize: number;
+            kind: string;
+            checksum: string | null;
+            /** Format: uuid */
+            uploaderUserId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
         /** @enum {string} */
-        SubmissionState: "review" | "revising" | "approved" | "rejected";
+        SubmissionState: "review" | "revising" | "approved" | "rejected" | "not_required";
         Answer: {
             /** Format: uuid */
             id: string;
@@ -2255,21 +2365,6 @@ export interface components {
         MessageListResult: {
             items: components["schemas"]["Message"][];
             nextCursor: string | null;
-        };
-        AttachmentMeta: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            messageId: string | null;
-            filename: string;
-            contentType: string;
-            byteSize: number;
-            kind: string;
-            checksum: string | null;
-            /** Format: uuid */
-            uploaderUserId: string;
-            /** Format: date-time */
-            createdAt: string;
         };
         Notification: {
             /** Format: uuid */
@@ -2390,6 +2485,7 @@ export interface components {
                 entityId: string;
             }[];
             orphanedBlobs: number;
+            pendingUploads: number;
         };
     };
     responses: never;
@@ -3930,6 +4026,7 @@ export interface operations {
                     defaultOpenings?: number;
                     openingsLocked?: boolean;
                     restrictClaims?: boolean;
+                    allowCustomTemplates?: boolean;
                 };
             };
         };
@@ -3970,6 +4067,7 @@ export interface operations {
                     defaultOpenings?: number;
                     openingsLocked?: boolean;
                     restrictClaims?: boolean;
+                    allowCustomTemplates?: boolean;
                     version?: number;
                 };
             };
@@ -4057,7 +4155,7 @@ export interface operations {
             };
         };
     };
-    getDivisionTemplate: {
+    listDivisionTemplates: {
         parameters: {
             query?: never;
             header?: never;
@@ -4068,7 +4166,175 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A division's request template */
+            /** @description A division's template library */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestTemplateLibrary"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    createDivisionTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    name: string;
+                    description?: string;
+                    isDefault?: boolean;
+                    questions: ({
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        type: "detail_text";
+                        prompt: string;
+                        /** @default false */
+                        required?: boolean;
+                        constraints: {
+                            maxChars?: number;
+                            minChars?: number;
+                        };
+                    } | {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        type: "multiline";
+                        prompt: string;
+                        /** @default false */
+                        required?: boolean;
+                        constraints: {
+                            maxChars?: number;
+                            minChars?: number;
+                        };
+                    } | {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        type: "text";
+                        prompt: string;
+                        /** @default false */
+                        required?: boolean;
+                        constraints: {
+                            maxChars?: number;
+                            minChars?: number;
+                        };
+                    } | {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        type: "numeric";
+                        prompt: string;
+                        /** @default false */
+                        required?: boolean;
+                        constraints: {
+                            /** @enum {string} */
+                            kind: "integer" | "float";
+                            min?: number;
+                            max?: number;
+                        };
+                    } | {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        type: "dropdown";
+                        prompt: string;
+                        /** @default false */
+                        required?: boolean;
+                        constraints: {
+                            multi: boolean;
+                            options: {
+                                value: string;
+                                label: string;
+                            }[];
+                            minSelect?: number;
+                            maxSelect?: number;
+                        };
+                    } | {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        type: "radio";
+                        prompt: string;
+                        /** @default false */
+                        required?: boolean;
+                        constraints: {
+                            multi: boolean;
+                            options: {
+                                value: string;
+                                label: string;
+                            }[];
+                            minSelect?: number;
+                            maxSelect?: number;
+                        };
+                    } | {
+                        /** Format: uuid */
+                        id?: string;
+                        /** @enum {string} */
+                        type: "attachment";
+                        prompt: string;
+                        /** @default false */
+                        required?: boolean;
+                        constraints: {
+                            allowedTypes: string[];
+                            maxBytes?: number;
+                            maxFiles?: number;
+                        };
+                    })[];
+                };
+            };
+        };
+        responses: {
+            /** @description Add a template to a division library */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestTemplate"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getRequestTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A library template */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4088,7 +4354,36 @@ export interface operations {
             };
         };
     };
-    putDivisionTemplate: {
+    deleteRequestTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    updateRequestTemplate: {
         parameters: {
             query?: never;
             header?: never;
@@ -4100,7 +4395,12 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    questions: ({
+                    name?: string;
+                    description?: string;
+                    isDefault?: boolean;
+                    questions?: ({
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "detail_text";
                         prompt: string;
@@ -4111,6 +4411,8 @@ export interface operations {
                             minChars?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "multiline";
                         prompt: string;
@@ -4121,6 +4423,8 @@ export interface operations {
                             minChars?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "text";
                         prompt: string;
@@ -4131,6 +4435,8 @@ export interface operations {
                             minChars?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "numeric";
                         prompt: string;
@@ -4143,6 +4449,8 @@ export interface operations {
                             max?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "dropdown";
                         prompt: string;
@@ -4158,6 +4466,8 @@ export interface operations {
                             maxSelect?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "radio";
                         prompt: string;
@@ -4173,6 +4483,8 @@ export interface operations {
                             maxSelect?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "attachment";
                         prompt: string;
@@ -4184,11 +4496,12 @@ export interface operations {
                             maxFiles?: number;
                         };
                     })[];
+                    version: number;
                 };
             };
         };
         responses: {
-            /** @description Replace a division's request template */
+            /** @description Edit a library template (questions diffed by id) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4629,6 +4942,116 @@ export interface operations {
                     divisionId: string;
                     /** Format: uuid */
                     teamId?: string;
+                    template: {
+                        /** @enum {string} */
+                        kind: "library";
+                        /** Format: uuid */
+                        templateId: string;
+                    } | {
+                        /** @enum {string} */
+                        kind: "custom";
+                        questions: ({
+                            /** Format: uuid */
+                            id?: string;
+                            /** @enum {string} */
+                            type: "detail_text";
+                            prompt: string;
+                            /** @default false */
+                            required?: boolean;
+                            constraints: {
+                                maxChars?: number;
+                                minChars?: number;
+                            };
+                        } | {
+                            /** Format: uuid */
+                            id?: string;
+                            /** @enum {string} */
+                            type: "multiline";
+                            prompt: string;
+                            /** @default false */
+                            required?: boolean;
+                            constraints: {
+                                maxChars?: number;
+                                minChars?: number;
+                            };
+                        } | {
+                            /** Format: uuid */
+                            id?: string;
+                            /** @enum {string} */
+                            type: "text";
+                            prompt: string;
+                            /** @default false */
+                            required?: boolean;
+                            constraints: {
+                                maxChars?: number;
+                                minChars?: number;
+                            };
+                        } | {
+                            /** Format: uuid */
+                            id?: string;
+                            /** @enum {string} */
+                            type: "numeric";
+                            prompt: string;
+                            /** @default false */
+                            required?: boolean;
+                            constraints: {
+                                /** @enum {string} */
+                                kind: "integer" | "float";
+                                min?: number;
+                                max?: number;
+                            };
+                        } | {
+                            /** Format: uuid */
+                            id?: string;
+                            /** @enum {string} */
+                            type: "dropdown";
+                            prompt: string;
+                            /** @default false */
+                            required?: boolean;
+                            constraints: {
+                                multi: boolean;
+                                options: {
+                                    value: string;
+                                    label: string;
+                                }[];
+                                minSelect?: number;
+                                maxSelect?: number;
+                            };
+                        } | {
+                            /** Format: uuid */
+                            id?: string;
+                            /** @enum {string} */
+                            type: "radio";
+                            prompt: string;
+                            /** @default false */
+                            required?: boolean;
+                            constraints: {
+                                multi: boolean;
+                                options: {
+                                    value: string;
+                                    label: string;
+                                }[];
+                                minSelect?: number;
+                                maxSelect?: number;
+                            };
+                        } | {
+                            /** Format: uuid */
+                            id?: string;
+                            /** @enum {string} */
+                            type: "attachment";
+                            prompt: string;
+                            /** @default false */
+                            required?: boolean;
+                            constraints: {
+                                allowedTypes: string[];
+                                maxBytes?: number;
+                                maxFiles?: number;
+                            };
+                        })[];
+                    } | {
+                        /** @enum {string} */
+                        kind: "default";
+                    };
                 };
             };
         };
@@ -4996,13 +5419,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A task's request template */
+            /** @description A task's own questions */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RequestTemplate"];
+                    "application/json": components["schemas"]["TaskTemplate"];
                 };
             };
             /** @description An error; `error.code` is one of `ErrorCode` */
@@ -5029,6 +5452,8 @@ export interface operations {
             content: {
                 "application/json": {
                     questions: ({
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "detail_text";
                         prompt: string;
@@ -5039,6 +5464,8 @@ export interface operations {
                             minChars?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "multiline";
                         prompt: string;
@@ -5049,6 +5476,8 @@ export interface operations {
                             minChars?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "text";
                         prompt: string;
@@ -5059,6 +5488,8 @@ export interface operations {
                             minChars?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "numeric";
                         prompt: string;
@@ -5071,6 +5502,8 @@ export interface operations {
                             max?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "dropdown";
                         prompt: string;
@@ -5086,6 +5519,8 @@ export interface operations {
                             maxSelect?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "radio";
                         prompt: string;
@@ -5101,6 +5536,8 @@ export interface operations {
                             maxSelect?: number;
                         };
                     } | {
+                        /** Format: uuid */
+                        id?: string;
                         /** @enum {string} */
                         type: "attachment";
                         prompt: string;
@@ -5116,13 +5553,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Replace a task's request template */
+            /** @description Edit a task's own questions (diffed by id; locked by a submission) */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RequestTemplate"];
+                    "application/json": components["schemas"]["TaskTemplate"];
                 };
             };
             /** @description An error; `error.code` is one of `ErrorCode` */
@@ -5154,6 +5591,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineEntry"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    uploadAnswerFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload a file for an attachment answer (pending until your submit claims it) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentMeta"];
                 };
             };
             /** @description An error; `error.code` is one of `ErrorCode` */

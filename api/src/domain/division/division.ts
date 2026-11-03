@@ -8,6 +8,8 @@ export interface DivisionSettings {
   defaultOpenings: number;
   openingsLocked: boolean;
   restrictClaims: boolean;
+  /** Any requester may write their own questions for a task here. */
+  allowCustomTemplates: boolean;
 }
 
 export interface DivisionState extends DivisionSettings {
@@ -33,6 +35,7 @@ export class Division extends AggregateRoot {
       defaultOpenings: s.defaultOpenings,
       openingsLocked: s.openingsLocked,
       restrictClaims: s.restrictClaims,
+      allowCustomTemplates: s.allowCustomTemplates,
     };
     this._lifecycle = s.lifecycle;
   }
@@ -44,6 +47,7 @@ export class Division extends AggregateRoot {
       defaultOpenings: Division.validOpenings(settings.defaultOpenings ?? 1),
       openingsLocked: settings.openingsLocked ?? false,
       restrictClaims: settings.restrictClaims ?? false,
+      allowCustomTemplates: settings.allowCustomTemplates ?? false,
       lifecycle: Lifecycle.active(),
       version: 0,
     });
@@ -83,6 +87,7 @@ export class Division extends AggregateRoot {
           : this._settings.defaultOpenings,
       openingsLocked: changes.openingsLocked ?? this._settings.openingsLocked,
       restrictClaims: changes.restrictClaims ?? this._settings.restrictClaims,
+      allowCustomTemplates: changes.allowCustomTemplates ?? this._settings.allowCustomTemplates,
     };
     this.raise({
       type: 'division.updated',
@@ -95,6 +100,7 @@ export class Division extends AggregateRoot {
           'defaultOpenings',
           'openingsLocked',
           'restrictClaims',
+          'allowCustomTemplates',
         ]),
       },
     });
@@ -132,8 +138,8 @@ export class Division extends AggregateRoot {
   }
 
   private static validOpenings(n: number): number {
-    if (!Number.isInteger(n) || n < 0 || n > MAX_DEFAULT_OPENINGS) {
-      throw new DomainError('VALIDATION_FAILED', 'Default openings must be 0–10000');
+    if (!Number.isInteger(n) || n < 1 || n > MAX_DEFAULT_OPENINGS) {
+      throw new DomainError('VALIDATION_FAILED', 'Default openings must be 1–10000');
     }
     return n;
   }

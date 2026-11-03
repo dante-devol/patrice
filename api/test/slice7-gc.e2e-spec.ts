@@ -42,7 +42,7 @@ describe('Slice 7.3 — GC sweep', () => {
     }
 
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'Title', required: true, constraints: {} }],
     });
     // A zero-length grace window makes anything retired immediately collectable.
@@ -60,7 +60,7 @@ describe('Slice 7.3 — GC sweep', () => {
 
   it('deletes a retired task aggregate as a unit; activity audit survives', async () => {
     const taskId = (
-      await auth(http().post('/api/tasks')).send({ name: 'Doomed', divisionId: writingId })
+      await auth(http().post('/api/tasks')).send({ name: 'Doomed', divisionId: writingId, template: { kind: 'default' } })
     ).body.id;
     await auth(http().post(`/api/tasks/${taskId}/claim`));
     const messageId = (
@@ -88,7 +88,7 @@ describe('Slice 7.3 — GC sweep', () => {
     expect(await prisma.message.count({ where: { taskId } })).toBe(0);
     expect(await prisma.taskClaimant.count({ where: { taskId } })).toBe(0);
     expect(await prisma.attachment.count({ where: { messageId } })).toBe(0);
-    expect(await prisma.requestTemplate.count({ where: { ownerTaskId: taskId } })).toBe(0);
+    expect(await prisma.taskQuestion.count({ where: { taskId } })).toBe(0);
 
     // The append-only activity log survives the aggregate it describes.
     expect(
@@ -101,11 +101,11 @@ describe('Slice 7.3 — GC sweep', () => {
 
   it('a division referenced by an active task survives; collects once dereferenced', async () => {
     const divId = (await auth(http().post('/api/divisions')).send({ name: 'Referenced' })).body.id;
-    await auth(http().put(`/api/divisions/${divId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${divId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'Q', required: false, constraints: {} }],
     });
     const taskId = (
-      await auth(http().post('/api/tasks')).send({ name: 'Live', divisionId: divId })
+      await auth(http().post('/api/tasks')).send({ name: 'Live', divisionId: divId, template: { kind: 'default' } })
     ).body.id;
 
     await auth(http().post(`/api/divisions/${divId}/retire`));
@@ -125,7 +125,7 @@ describe('Slice 7.3 — GC sweep', () => {
 
   it('reconciles an orphaned blob (row gone, blob left behind)', async () => {
     const taskId = (
-      await auth(http().post('/api/tasks')).send({ name: 'Orphan host', divisionId: writingId })
+      await auth(http().post('/api/tasks')).send({ name: 'Orphan host', divisionId: writingId, template: { kind: 'default' } })
     ).body.id;
     const messageId = (
       await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'm' })

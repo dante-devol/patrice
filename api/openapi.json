@@ -3,7 +3,7 @@
   "info": {
     "title": "Patrice API",
     "version": "0.1.0",
-    "description": "Error codes and their HTTP statuses:\n\n- `UNAUTHENTICATED` (401): No valid session\n- `INVALID_CREDENTIALS` (401): Email or password is wrong\n- `DISCORD_NO_ACCOUNT` (401): No Patrice account is linked to this Discord account\n- `FORBIDDEN` (403): The access engine denied the action\n- `CSRF_FAILED` (403): Missing or invalid CSRF token\n- `EMAIL_NOT_VERIFIED` (403): Login requires a verified email address\n- `INVALID_PASSCODE` (403): The invitation passcode is wrong\n- `EMAIL_MISMATCH` (403): The email does not match the invitation\n- `ROLE_NOT_GRANTABLE` (403): The inviter may not grant this role\n- `NOT_FOUND` (404): Not found\n- `RECORD_NOT_FOUND` (404): The record was removed while the request ran\n- `ATTACHMENT_NOT_FOUND` (404): Attachment not found\n- `CLAIMANT_NOT_FOUND` (404): That user does not hold a seat on this task\n- `CONNECTION_NOT_FOUND` (404): Integration connection not found\n- `DIVISION_NOT_FOUND` (404): Division not found\n- `GRANT_NOT_FOUND` (404): Grant not found\n- `INVITE_NOT_FOUND` (404): Invitation not found\n- `MAPPING_NOT_FOUND` (404): Group mapping not found\n- `MESSAGE_NOT_FOUND` (404): Message not found\n- `PARENT_NOT_FOUND` (404): The parent message was not found\n- `REQUEST_TEMPLATE_NOT_FOUND` (404): Request template not found\n- `ROLE_NOT_FOUND` (404): Role not found\n- `SESSION_NOT_FOUND` (404): Session not found\n- `SUBMISSION_NOT_FOUND` (404): Submission not found\n- `TASK_NOT_FOUND` (404): Task not found\n- `TEAM_NOT_FOUND` (404): Team not found\n- `USER_NOT_FOUND` (404): User not found\n- `CONFLICT` (409): Conflict\n- `ALREADY_EXISTS` (409): That value is already in use\n- `REFERENCE_CONFLICT` (409): Another record still references this one, or a referenced record is gone\n- `STALE_VERSION` (409): The record changed since it was read; reload and retry\n- `ALREADY_CLAIMED` (409): You already hold a seat on this task\n- `ALREADY_RETIRED` (409): Already retired\n- `ALREADY_SUBMITTED` (409): A submission is already awaiting review\n- `CLAIMS_CLOSED` (409): The task is not accepting claims\n- `DISCORD_ALREADY_LINKED` (409): This Discord account belongs to another user\n- `IDENTITY_TAKEN` (409): That sign-in account already belongs to another user\n- `PROVIDER_ALREADY_CONNECTED` (409): A different account from this provider is already connected\n- `DIVISION_RETIRED` (409): Division is retired\n- `DUPLICATE_CONNECTION` (409): That workspace is already connected\n- `DUPLICATE_MAPPING` (409): That mapping already exists\n- `EMAIL_TAKEN` (409): That email address is already in use\n- `INVALID_OPENINGS` (409): Openings cannot go below the active claimant count\n- `INVALID_TRANSITION` (409): The submission is not in a state that allows this\n- `INVITE_RACE_LOST` (409): The invitation was used concurrently\n- `LAST_ADMIN` (409): Refused: this would remove the last administrator\n- `LAST_AUTH_METHOD` (409): Refused: this would remove your only sign-in method\n- `MESSAGE_RETIRED` (409): Message is retired\n- `NOT_A_MEMBER` (409): The user does not hold that role\n- `NOT_CLAIMED` (409): You do not hold a seat on this task\n- `NOT_REVIVABLE` (409): Not retired, or past the grace period\n- `NO_OPENINGS` (409): Every seat on the task is taken\n- `OPENINGS_LOCKED` (409): Openings are locked for this division\n- `REQUEST_TEMPLATE_LOCKED` (409): The request template is locked by a submission\n- `STALE_SUBMISSION` (409): The submission changed since it was read\n- `SUBMISSION_RETIRED` (409): Submission is retired\n- `TASK_RETIRED` (409): Task is retired\n- `TEAM_RETIRED` (409): Team is retired\n- `USER_RETIRED` (409): User is retired\n- `GONE` (410): No longer available\n- `INVITE_UNAVAILABLE` (410): The invitation is expired, revoked or used up\n- `TOKEN_INVALID` (410): The link is invalid, expired or already used\n- `VALIDATION_FAILED` (422): The request body or parameters failed validation\n- `UNPROCESSABLE` (422): Unprocessable entity\n- `DISCORD_NOT_CONFIGURED` (422): Discord sign-in is not configured\n- `FILE_TOO_LARGE` (422): The upload exceeds the size limit\n- `INVALID_SUBMISSION` (422): The answers do not satisfy the request template\n- `NO_DEFAULT_REQUEST_TEMPLATE` (422): The division has no request template\n- `GOVERNANCE_ROLE_NOT_MAPPABLE` (422): A role holding governance grants cannot be mapped to an external group\n- `NO_FILE` (422): No file was uploaded\n- `TEAM_NOT_IN_DIVISION` (422): The team belongs to a different division than the task\n- `NOT_LINKED` (422): The account is not linked\n- `REPLY_TO_REPLY` (422): Threads are one level deep\n- `ROLE_RETIRED` (422): Role is retired\n- `WRONG_PASSWORD` (422): The current password is wrong\n- `TOO_MANY_REQUESTS` (429): Rate limit exceeded\n- `INTERNAL` (500): Internal server error\n- `ERROR` (500): Unclassified error\n- `QUEUE_UNAVAILABLE` (503): Background jobs are unavailable; try again later"
+    "description": "Error codes and their HTTP statuses:\n\n- `UNAUTHENTICATED` (401): No valid session\n- `INVALID_CREDENTIALS` (401): Email or password is wrong\n- `DISCORD_NO_ACCOUNT` (401): No Patrice account is linked to this Discord account\n- `FORBIDDEN` (403): The access engine denied the action\n- `CSRF_FAILED` (403): Missing or invalid CSRF token\n- `EMAIL_NOT_VERIFIED` (403): Login requires a verified email address\n- `INVALID_PASSCODE` (403): The invitation passcode is wrong\n- `EMAIL_MISMATCH` (403): The email does not match the invitation\n- `ROLE_NOT_GRANTABLE` (403): The inviter may not grant this role\n- `NOT_FOUND` (404): Not found\n- `RECORD_NOT_FOUND` (404): The record was removed while the request ran\n- `ATTACHMENT_NOT_FOUND` (404): Attachment not found\n- `CLAIMANT_NOT_FOUND` (404): That user does not hold a seat on this task\n- `CONNECTION_NOT_FOUND` (404): Integration connection not found\n- `DIVISION_NOT_FOUND` (404): Division not found\n- `GRANT_NOT_FOUND` (404): Grant not found\n- `INVITE_NOT_FOUND` (404): Invitation not found\n- `MAPPING_NOT_FOUND` (404): Group mapping not found\n- `MESSAGE_NOT_FOUND` (404): Message not found\n- `PARENT_NOT_FOUND` (404): The parent message was not found\n- `REQUEST_TEMPLATE_NOT_FOUND` (404): Request template not found\n- `ROLE_NOT_FOUND` (404): Role not found\n- `SESSION_NOT_FOUND` (404): Session not found\n- `SUBMISSION_NOT_FOUND` (404): Submission not found\n- `TASK_NOT_FOUND` (404): Task not found\n- `TEAM_NOT_FOUND` (404): Team not found\n- `USER_NOT_FOUND` (404): User not found\n- `CONFLICT` (409): Conflict\n- `ALREADY_EXISTS` (409): That value is already in use\n- `REFERENCE_CONFLICT` (409): Another record still references this one, or a referenced record is gone\n- `STALE_VERSION` (409): The record changed since it was read; reload and retry\n- `ALREADY_CLAIMED` (409): You already hold a seat on this task\n- `ALREADY_RETIRED` (409): Already retired\n- `ALREADY_SUBMITTED` (409): A submission is already awaiting review\n- `CLAIMS_CLOSED` (409): The task is not accepting claims\n- `DISCORD_ALREADY_LINKED` (409): This Discord account belongs to another user\n- `IDENTITY_TAKEN` (409): That sign-in account already belongs to another user\n- `PROVIDER_ALREADY_CONNECTED` (409): A different account from this provider is already connected\n- `DIVISION_RETIRED` (409): Division is retired\n- `DUPLICATE_CONNECTION` (409): That workspace is already connected\n- `DUPLICATE_MAPPING` (409): That mapping already exists\n- `EMAIL_TAKEN` (409): That email address is already in use\n- `INVALID_OPENINGS` (409): Openings cannot go below the active claimant count\n- `INVALID_TRANSITION` (409): The submission is not in a state that allows this\n- `INVITE_RACE_LOST` (409): The invitation was used concurrently\n- `LAST_ADMIN` (409): Refused: this would remove the last administrator\n- `LAST_AUTH_METHOD` (409): Refused: this would remove your only sign-in method\n- `MESSAGE_RETIRED` (409): Message is retired\n- `NOT_A_MEMBER` (409): The user does not hold that role\n- `NOT_CLAIMED` (409): You do not hold a seat on this task\n- `NOT_REVIVABLE` (409): Not retired, or past the grace period\n- `NO_OPENINGS` (409): Every seat on the task is taken\n- `OPENINGS_LOCKED` (409): Openings are locked for this division\n- `REQUEST_TEMPLATE_LOCKED` (409): The request template is locked by a submission\n- `TEMPLATE_NAME_TAKEN` (409): The division already has a template with that name\n- `QUESTION_HAS_ANSWERS` (409): A question with answers cannot be deleted\n- `SUBMITTED_CANNOT_LEAVE` (409): You cannot leave after submitting; the requester can retire your submission\n- `TASK_COMPLETED` (409): The task is complete\n- `ALREADY_COMPLETED` (409): The task is already complete\n- `STALE_SUBMISSION` (409): The submission changed since it was read\n- `SUBMISSION_RETIRED` (409): Submission is retired\n- `TASK_RETIRED` (409): Task is retired\n- `TEAM_RETIRED` (409): Team is retired\n- `USER_RETIRED` (409): User is retired\n- `GONE` (410): No longer available\n- `INVITE_UNAVAILABLE` (410): The invitation is expired, revoked or used up\n- `TOKEN_INVALID` (410): The link is invalid, expired or already used\n- `VALIDATION_FAILED` (422): The request body or parameters failed validation\n- `UNPROCESSABLE` (422): Unprocessable entity\n- `DISCORD_NOT_CONFIGURED` (422): Discord sign-in is not configured\n- `FILE_TOO_LARGE` (422): The upload exceeds the size limit\n- `INVALID_SUBMISSION` (422): The answers do not satisfy the request template\n- `TEMPLATE_REQUIRED` (422): The division has no default template; pick one\n- `TEMPLATE_NOT_IN_DIVISION` (422): The template belongs to a different division\n- `UNKNOWN_QUESTION_ID` (422): A question id does not belong to this template\n- `GOVERNANCE_ROLE_NOT_MAPPABLE` (422): A role holding governance grants cannot be mapped to an external group\n- `NO_FILE` (422): No file was uploaded\n- `TEAM_NOT_IN_DIVISION` (422): The team belongs to a different division than the task\n- `NOT_LINKED` (422): The account is not linked\n- `REPLY_TO_REPLY` (422): Threads are one level deep\n- `ROLE_RETIRED` (422): Role is retired\n- `WRONG_PASSWORD` (422): The current password is wrong\n- `TOO_MANY_REQUESTS` (429): Rate limit exceeded\n- `INTERNAL` (500): Internal server error\n- `ERROR` (500): Unclassified error\n- `QUEUE_UNAVAILABLE` (503): Background jobs are unavailable; try again later"
   },
   "servers": [
     {
@@ -77,6 +77,11 @@
           "NO_OPENINGS",
           "OPENINGS_LOCKED",
           "REQUEST_TEMPLATE_LOCKED",
+          "TEMPLATE_NAME_TAKEN",
+          "QUESTION_HAS_ANSWERS",
+          "SUBMITTED_CANNOT_LEAVE",
+          "TASK_COMPLETED",
+          "ALREADY_COMPLETED",
           "STALE_SUBMISSION",
           "SUBMISSION_RETIRED",
           "TASK_RETIRED",
@@ -90,7 +95,9 @@
           "DISCORD_NOT_CONFIGURED",
           "FILE_TOO_LARGE",
           "INVALID_SUBMISSION",
-          "NO_DEFAULT_REQUEST_TEMPLATE",
+          "TEMPLATE_REQUIRED",
+          "TEMPLATE_NOT_IN_DIVISION",
+          "UNKNOWN_QUESTION_ID",
           "GOVERNANCE_ROLE_NOT_MAPPABLE",
           "NO_FILE",
           "TEAM_NOT_IN_DIVISION",
@@ -649,6 +656,9 @@
           "restrictClaims": {
             "type": "boolean"
           },
+          "allowCustomTemplates": {
+            "type": "boolean"
+          },
           "lifecycleState": {
             "$ref": "#/components/schemas/Lifecycle"
           },
@@ -669,9 +679,70 @@
           "defaultOpenings",
           "openingsLocked",
           "restrictClaims",
+          "allowCustomTemplates",
           "lifecycleState",
           "retiredAt",
           "version"
+        ],
+        "additionalProperties": false
+      },
+      "RequestTemplateSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "divisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "questionCount": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "divisionId",
+          "name",
+          "description",
+          "isDefault",
+          "version",
+          "questionCount"
+        ],
+        "additionalProperties": false
+      },
+      "RequestTemplateLibrary": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestTemplateSummary"
+            }
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "items",
+          "allowedActions"
         ],
         "additionalProperties": false
       },
@@ -795,19 +866,21 @@
             "type": "string",
             "format": "uuid"
           },
-          "ownerDivisionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+          "divisionId": {
+            "type": "string",
             "format": "uuid"
           },
-          "ownerTaskId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer"
           },
           "questions": {
             "type": "array",
@@ -818,8 +891,11 @@
         },
         "required": [
           "id",
-          "ownerDivisionId",
-          "ownerTaskId",
+          "divisionId",
+          "name",
+          "description",
+          "isDefault",
+          "version",
           "questions"
         ],
         "additionalProperties": false
@@ -902,6 +978,13 @@
           "approved"
         ]
       },
+      "TemplateOrigin": {
+        "type": "string",
+        "enum": [
+          "library",
+          "custom"
+        ]
+      },
       "Task": {
         "type": "object",
         "properties": {
@@ -933,18 +1016,35 @@
           "openings": {
             "type": "integer"
           },
+          "claimsClosed": {
+            "type": "boolean"
+          },
           "statusCache": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TaskStatus"
-              },
-              {
-                "type": "null"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "templateOrigin": {
+            "$ref": "#/components/schemas/TemplateOrigin"
+          },
+          "sourceTemplateId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completedBy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           },
           "lifecycleState": {
             "$ref": "#/components/schemas/Lifecycle"
@@ -989,7 +1089,12 @@
           "teamId",
           "requesterUserId",
           "openings",
+          "claimsClosed",
           "statusCache",
+          "templateOrigin",
+          "sourceTemplateId",
+          "completedAt",
+          "completedBy",
           "lifecycleState",
           "retiredAt",
           "version",
@@ -1021,6 +1126,42 @@
         ],
         "additionalProperties": false
       },
+      "TaskTemplate": {
+        "type": "object",
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/TemplateOrigin"
+          },
+          "sourceTemplateId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            }
+          }
+        },
+        "required": [
+          "taskId",
+          "origin",
+          "sourceTemplateId",
+          "locked",
+          "questions"
+        ],
+        "additionalProperties": false
+      },
       "TimelineEntry": {
         "oneOf": [
           {
@@ -1049,7 +1190,26 @@
               },
               "payload": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                  "templateOrigin": {
+                    "type": "string",
+                    "enum": [
+                      "library",
+                      "custom"
+                    ]
+                  },
+                  "sourceTemplateId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "templateOrigin",
+                  "sourceTemplateId"
+                ],
                 "additionalProperties": false
               }
             },
@@ -1186,10 +1346,18 @@
                   "userId": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "submissionIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
                   }
                 },
                 "required": [
-                  "userId"
+                  "userId",
+                  "submissionIds"
                 ],
                 "additionalProperties": false
               }
@@ -1589,13 +1757,81 @@
           }
         ]
       },
+      "AttachmentMeta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "messageId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "answerId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "checksum": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uploaderUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "taskId",
+          "messageId",
+          "answerId",
+          "filename",
+          "contentType",
+          "byteSize",
+          "kind",
+          "checksum",
+          "uploaderUserId",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "SubmissionState": {
         "type": "string",
         "enum": [
           "review",
           "revising",
           "approved",
-          "rejected"
+          "rejected",
+          "not_required"
         ]
       },
       "Answer": {
@@ -1920,60 +2156,6 @@
         "required": [
           "items",
           "nextCursor"
-        ],
-        "additionalProperties": false
-      },
-      "AttachmentMeta": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "messageId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
-          "filename": {
-            "type": "string"
-          },
-          "contentType": {
-            "type": "string"
-          },
-          "byteSize": {
-            "type": "integer"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "checksum": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "uploaderUserId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "messageId",
-          "filename",
-          "contentType",
-          "byteSize",
-          "kind",
-          "checksum",
-          "uploaderUserId",
-          "createdAt"
         ],
         "additionalProperties": false
       },
@@ -2429,6 +2611,9 @@
           },
           "orphanedBlobs": {
             "type": "integer"
+          },
+          "pendingUploads": {
+            "type": "integer"
           }
         },
         "required": [
@@ -2440,7 +2625,8 @@
           "usersDeleted",
           "integrationConnections",
           "blocked",
-          "orphanedBlobs"
+          "orphanedBlobs",
+          "pendingUploads"
         ],
         "additionalProperties": false
       }
@@ -4798,13 +4984,16 @@
                   },
                   "defaultOpenings": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 10000
                   },
                   "openingsLocked": {
                     "type": "boolean"
                   },
                   "restrictClaims": {
+                    "type": "boolean"
+                  },
+                  "allowCustomTemplates": {
                     "type": "boolean"
                   }
                 },
@@ -4876,13 +5065,16 @@
                   },
                   "defaultOpenings": {
                     "type": "integer",
-                    "minimum": 0,
+                    "minimum": 1,
                     "maximum": 10000
                   },
                   "openingsLocked": {
                     "type": "boolean"
                   },
                   "restrictClaims": {
+                    "type": "boolean"
+                  },
+                  "allowCustomTemplates": {
                     "type": "boolean"
                   },
                   "version": {
@@ -5013,13 +5205,13 @@
         }
       }
     },
-    "/divisions/{id}/request-template": {
+    "/divisions/{id}/request-templates": {
       "get": {
-        "operationId": "getDivisionTemplate",
+        "operationId": "listDivisionTemplates",
         "tags": [
-          "org"
+          "templates"
         ],
-        "summary": "A division's request template",
+        "summary": "A division's template library",
         "description": "Gated by the `request_template:read` action.",
         "security": [
           {
@@ -5038,11 +5230,11 @@
         ],
         "responses": {
           "200": {
-            "description": "A division's request template",
+            "description": "A division's template library",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RequestTemplate"
+                  "$ref": "#/components/schemas/RequestTemplateLibrary"
                 }
               }
             }
@@ -5059,13 +5251,13 @@
           }
         }
       },
-      "put": {
-        "operationId": "putDivisionTemplate",
+      "post": {
+        "operationId": "createDivisionTemplate",
         "tags": [
-          "org"
+          "templates"
         ],
-        "summary": "Replace a division's request template",
-        "description": "Gated by the `division:update` action.",
+        "summary": "Add a template to a division library",
+        "description": "Gated by the `request_template:create` action.",
         "security": [
           {
             "session": []
@@ -5087,6 +5279,18 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  },
                   "questions": {
                     "type": "array",
                     "items": {
@@ -5094,6 +5298,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -5134,6 +5342,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -5174,6 +5386,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -5214,6 +5430,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -5262,6 +5482,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -5331,6 +5555,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -5400,6 +5628,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -5453,6 +5685,7 @@
                   }
                 },
                 "required": [
+                  "name",
                   "questions"
                 ],
                 "additionalProperties": false
@@ -5461,8 +5694,8 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Replace a division's request template",
+          "201": {
+            "description": "Add a template to a division library",
             "content": {
               "application/json": {
                 "schema": {
@@ -5470,6 +5703,559 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/request-templates/{id}": {
+      "get": {
+        "operationId": "getRequestTemplate",
+        "tags": [
+          "templates"
+        ],
+        "summary": "A library template",
+        "description": "Gated by the `request_template:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A library template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestTemplate"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateRequestTemplate",
+        "tags": [
+          "templates"
+        ],
+        "summary": "Edit a library template (questions diffed by id)",
+        "description": "Gated by the `request_template:update` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  },
+                  "questions": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "detail_text"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "constraints": {
+                              "type": "object",
+                              "properties": {
+                                "maxChars": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "minChars": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "prompt",
+                            "constraints"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "multiline"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "constraints": {
+                              "type": "object",
+                              "properties": {
+                                "maxChars": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "minChars": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "prompt",
+                            "constraints"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "constraints": {
+                              "type": "object",
+                              "properties": {
+                                "maxChars": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "minChars": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "prompt",
+                            "constraints"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "numeric"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "constraints": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "integer",
+                                    "float"
+                                  ]
+                                },
+                                "min": {
+                                  "type": "number"
+                                },
+                                "max": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "prompt",
+                            "constraints"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "dropdown"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "constraints": {
+                              "type": "object",
+                              "properties": {
+                                "multi": {
+                                  "type": "boolean"
+                                },
+                                "options": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "label": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "label"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "minItems": 1
+                                },
+                                "minSelect": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "maxSelect": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": [
+                                "multi",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "prompt",
+                            "constraints"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "radio"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "constraints": {
+                              "type": "object",
+                              "properties": {
+                                "multi": {
+                                  "type": "boolean"
+                                },
+                                "options": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "label": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "label"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "minItems": 1
+                                },
+                                "minSelect": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "maxSelect": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": [
+                                "multi",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "prompt",
+                            "constraints"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "attachment"
+                              ]
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            },
+                            "required": {
+                              "type": "boolean",
+                              "default": false
+                            },
+                            "constraints": {
+                              "type": "object",
+                              "properties": {
+                                "allowedTypes": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "maxBytes": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "maxFiles": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": [
+                                "allowedTypes"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "prompt",
+                            "constraints"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "maxItems": 200
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Edit a library template (questions diffed by id)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestTemplate"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRequestTemplate",
+        "tags": [
+          "templates"
+        ],
+        "summary": "Delete a library template (permanent, audited; tasks keep their snapshots)",
+        "description": "Gated by the `request_template:delete` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
           },
           "default": {
             "description": "An error; `error.code` is one of `ErrorCode`",
@@ -6230,11 +7016,459 @@
                   "teamId": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "template": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "library"
+                            ]
+                          },
+                          "templateId": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "templateId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "custom"
+                            ]
+                          },
+                          "questions": {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "detail_text"
+                                      ]
+                                    },
+                                    "prompt": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "required": {
+                                      "type": "boolean",
+                                      "default": false
+                                    },
+                                    "constraints": {
+                                      "type": "object",
+                                      "properties": {
+                                        "maxChars": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0
+                                        },
+                                        "minChars": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "prompt",
+                                    "constraints"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "multiline"
+                                      ]
+                                    },
+                                    "prompt": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "required": {
+                                      "type": "boolean",
+                                      "default": false
+                                    },
+                                    "constraints": {
+                                      "type": "object",
+                                      "properties": {
+                                        "maxChars": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0
+                                        },
+                                        "minChars": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "prompt",
+                                    "constraints"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text"
+                                      ]
+                                    },
+                                    "prompt": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "required": {
+                                      "type": "boolean",
+                                      "default": false
+                                    },
+                                    "constraints": {
+                                      "type": "object",
+                                      "properties": {
+                                        "maxChars": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0
+                                        },
+                                        "minChars": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "prompt",
+                                    "constraints"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "numeric"
+                                      ]
+                                    },
+                                    "prompt": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "required": {
+                                      "type": "boolean",
+                                      "default": false
+                                    },
+                                    "constraints": {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "integer",
+                                            "float"
+                                          ]
+                                        },
+                                        "min": {
+                                          "type": "number"
+                                        },
+                                        "max": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "prompt",
+                                    "constraints"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "dropdown"
+                                      ]
+                                    },
+                                    "prompt": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "required": {
+                                      "type": "boolean",
+                                      "default": false
+                                    },
+                                    "constraints": {
+                                      "type": "object",
+                                      "properties": {
+                                        "multi": {
+                                          "type": "boolean"
+                                        },
+                                        "options": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "value": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "label": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "value",
+                                              "label"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "minItems": 1
+                                        },
+                                        "minSelect": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        },
+                                        "maxSelect": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0
+                                        }
+                                      },
+                                      "required": [
+                                        "multi",
+                                        "options"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "prompt",
+                                    "constraints"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "radio"
+                                      ]
+                                    },
+                                    "prompt": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "required": {
+                                      "type": "boolean",
+                                      "default": false
+                                    },
+                                    "constraints": {
+                                      "type": "object",
+                                      "properties": {
+                                        "multi": {
+                                          "type": "boolean"
+                                        },
+                                        "options": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "value": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "label": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "value",
+                                              "label"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          "minItems": 1
+                                        },
+                                        "minSelect": {
+                                          "type": "integer",
+                                          "minimum": 0
+                                        },
+                                        "maxSelect": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0
+                                        }
+                                      },
+                                      "required": [
+                                        "multi",
+                                        "options"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "prompt",
+                                    "constraints"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": [
+                                        "attachment"
+                                      ]
+                                    },
+                                    "prompt": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    },
+                                    "required": {
+                                      "type": "boolean",
+                                      "default": false
+                                    },
+                                    "constraints": {
+                                      "type": "object",
+                                      "properties": {
+                                        "allowedTypes": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "maxBytes": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0
+                                        },
+                                        "maxFiles": {
+                                          "type": "integer",
+                                          "exclusiveMinimum": 0
+                                        }
+                                      },
+                                      "required": [
+                                        "allowedTypes"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "type",
+                                    "prompt",
+                                    "constraints"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "maxItems": 200
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "questions"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "default"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 },
                 "required": [
                   "name",
-                  "divisionId"
+                  "divisionId",
+                  "template"
                 ],
                 "additionalProperties": false
               }
@@ -6807,7 +8041,7 @@
         "tags": [
           "tasks"
         ],
-        "summary": "A task's request template",
+        "summary": "A task's own questions",
         "description": "Gated by the `task:read` action.",
         "security": [
           {
@@ -6826,11 +8060,11 @@
         ],
         "responses": {
           "200": {
-            "description": "A task's request template",
+            "description": "A task's own questions",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RequestTemplate"
+                  "$ref": "#/components/schemas/TaskTemplate"
                 }
               }
             }
@@ -6852,7 +8086,7 @@
         "tags": [
           "tasks"
         ],
-        "summary": "Replace a task's request template",
+        "summary": "Edit a task's own questions (diffed by id; locked by a submission)",
         "description": "Gated by the `task:configure_request_template` action.",
         "security": [
           {
@@ -6882,6 +8116,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -6922,6 +8160,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -6962,6 +8204,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -7002,6 +8248,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -7050,6 +8300,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -7119,6 +8373,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -7188,6 +8446,10 @@
                         {
                           "type": "object",
                           "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
                             "type": {
                               "type": "string",
                               "enum": [
@@ -7250,11 +8512,11 @@
         },
         "responses": {
           "200": {
-            "description": "Replace a task's request template",
+            "description": "Edit a task's own questions (diffed by id; locked by a submission)",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RequestTemplate"
+                  "$ref": "#/components/schemas/TaskTemplate"
                 }
               }
             }
@@ -7305,6 +8567,71 @@
                   "items": {
                     "$ref": "#/components/schemas/TimelineEntry"
                   }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/uploads": {
+      "post": {
+        "operationId": "uploadAnswerFile",
+        "tags": [
+          "submissions"
+        ],
+        "summary": "Upload a file for an attachment answer (pending until your submit claims it)",
+        "description": "Gated by the `task:submit` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload a file for an attachment answer (pending until your submit claims it)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentMeta"
                 }
               }
             }

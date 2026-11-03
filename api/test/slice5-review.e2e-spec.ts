@@ -34,7 +34,7 @@ describe('Slice 5.2 — Review lifecycle', () => {
 
     const writing = await auth(http().post('/api/divisions')).send({ name: 'Writing', defaultOpenings: 1 });
     writingId = writing.body.id;
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'Answer', required: true, constraints: {} }],
     });
 
@@ -67,7 +67,7 @@ describe('Slice 5.2 — Review lifecycle', () => {
   const as = (s: AdminSession) => (r: request.Test) => r.set('Cookie', s.cookies).set('x-csrf-token', s.csrf);
 
   async function setup(openings = 1): Promise<{ taskId: string; qId: string }> {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId, template: { kind: 'default' } });
     const taskId = res.body.id;
     if (openings > 1) {
       await auth(http().post(`/api/tasks/${taskId}/claims`)).send({ openingsDelta: openings - 1 });

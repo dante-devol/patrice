@@ -85,6 +85,14 @@ export const ACTIONS = {
   divisionRevive: { action: 'division:revive', resourceType: 'Division' },
   divisionManageMembers: { action: 'division:manage_members', resourceType: 'Division' },
   requestTemplateRead: { action: 'request_template:read', resourceType: 'Division' },
+  requestTemplateCreate: { action: 'request_template:create', resourceType: 'Division' },
+  requestTemplateUpdate: { action: 'request_template:update', resourceType: 'Division' },
+  requestTemplateDelete: { action: 'request_template:delete', resourceType: 'Division' },
+  /**
+   * Create a task with questions the requester writes. Also permitted by a static
+   * policy in divisions that allow custom templates; always needs `task:create` too.
+   */
+  taskComposeTemplate: { action: 'task:compose_template', resourceType: 'Division' },
   teamRead: { action: 'team:read', resourceType: 'Team' },
   teamCreate: { action: 'team:create', resourceType: 'Division' },
   teamUpdate: { action: 'team:update', resourceType: 'Team' },

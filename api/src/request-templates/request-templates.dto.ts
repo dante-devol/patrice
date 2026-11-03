@@ -1,12 +1,11 @@
 import { z } from 'zod';
 
 /**
- * PUT body for a division's default request template (Slice 3). The question set is
- * replace-in-place: `ordinal` is derived from array order, so callers send an
- * ordered list. An empty array is valid — it authors a zero-question (coordination-
- * only) request template. `constraints` is validated per type via a discriminated
- * union so a numeric range / option list / filetype set can't be attached to the
- * wrong type.
+ * Request template bodies. A question list is ordered (`ordinal` comes from array
+ * order) and may be empty, which is a coordination-only request. On an edit, a
+ * question that carries its `id` is kept and updated, one without is added, and any
+ * existing question left out is deleted (register E4). `constraints` is validated per
+ * type, so a range, option list or file-type set can't be attached to the wrong type.
  */
 
 const prompt = z.string().trim().min(1, 'Prompt is required').max(2000);
@@ -65,7 +64,7 @@ const attachmentConstraints = z
 
 function questionOf(type: string, constraints: z.ZodTypeAny) {
   return z
-    .object({ type: z.literal(type), prompt, required, constraints })
+    .object({ id: z.string().uuid().optional(), type: z.literal(type), prompt, required, constraints })
     .strict();
 }
 
@@ -79,9 +78,35 @@ const questionSchema = z.discriminatedUnion('type', [
   questionOf('attachment', attachmentConstraints),
 ]);
 
-export const putRequestTemplateSchema = z
-  .object({ questions: z.array(questionSchema).max(200) })
+export const questionListSchema = z.array(questionSchema).max(200);
+
+/** Replace a task's own questions (diffed by id). */
+export const putRequestTemplateSchema = z.object({ questions: questionListSchema }).strict();
+
+const templateName = z.string().trim().min(1, 'Template name is required').max(120);
+const templateDescription = z.string().max(2000);
+
+export const createRequestTemplateSchema = z
+  .object({
+    name: templateName,
+    description: templateDescription.optional(),
+    isDefault: z.boolean().optional(),
+    questions: questionListSchema,
+  })
+  .strict();
+
+export const updateRequestTemplateSchema = z
+  .object({
+    name: templateName.optional(),
+    description: templateDescription.optional(),
+    isDefault: z.boolean().optional(),
+    questions: questionListSchema.optional(),
+    // The version the client last read; a concurrent edit makes this a 409.
+    version: z.number().int().nonnegative(),
+  })
   .strict();
 
 export type PutRequestTemplateDto = z.infer<typeof putRequestTemplateSchema>;
+export type CreateRequestTemplateDto = z.infer<typeof createRequestTemplateSchema>;
+export type UpdateRequestTemplateDto = z.infer<typeof updateRequestTemplateSchema>;
 export type QuestionInput = z.infer<typeof questionSchema>;

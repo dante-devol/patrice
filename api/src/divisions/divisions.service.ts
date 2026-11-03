@@ -18,6 +18,7 @@ export interface DivisionView {
   defaultOpenings: number;
   openingsLocked: boolean;
   restrictClaims: boolean;
+  allowCustomTemplates: boolean;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
@@ -61,6 +62,7 @@ export class DivisionsService {
       defaultOpenings: r.defaultOpenings,
       openingsLocked: r.openingsLocked,
       restrictClaims: r.restrictClaims,
+      allowCustomTemplates: r.allowCustomTemplates,
       lifecycleState: r.lifecycleState,
       retiredAt: r.retiredAt,
       version: r.version,

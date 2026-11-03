@@ -21,6 +21,11 @@ const changes = z
   .record(z.object({ from: z.unknown(), to: z.unknown() }).strict())
   .optional();
 
+/** Which questions an edit added, removed and kept (ids only). */
+const questionDiff = z
+  .object({ added: z.array(uuid), removed: z.array(uuid), changed: z.array(uuid) })
+  .strict();
+
 export const activityPayloadSchemas = {
   'invite.created': z
     .object({
@@ -105,21 +110,57 @@ export const activityPayloadSchemas = {
   'config.updated': z
     .object({ changedKeys: z.array(z.string()), changes })
     .strict(),
-  // Slice 3 — request template authoring. IDs + the (non-PII) question count only.
+  // Request templates. Name, default flag, and question count and types are
+  // configuration and recorded as values; prompts and options are user-authored text,
+  // recorded by question id only.
+  'request_template.created': z
+    .object({
+      requestTemplateId: uuid,
+      divisionId: uuid,
+      name: z.string(),
+      isDefault: z.boolean(),
+      questionCount: z.number().int(),
+      questionTypes: z.array(z.string()),
+    })
+    .strict(),
   'request_template.updated': z
-    .object({ requestTemplateId: uuid, divisionId: uuid, questionCount: z.number().int() })
+    .object({
+      requestTemplateId: uuid,
+      divisionId: uuid,
+      changes,
+      descriptionChanged: z.boolean(),
+      questionCount: z.number().int(),
+      questionTypes: z.array(z.string()),
+      questions: questionDiff.optional(),
+    })
     .strict(),
-  // Slice 4.1 — per-task request template copy edited via task:configure_request_template.
+  'request_template.deleted': z
+    .object({
+      requestTemplateId: uuid,
+      divisionId: uuid,
+      name: z.string(),
+      isDefault: z.boolean(),
+      questionCount: z.number().int(),
+    })
+    .strict(),
+  // A task's own questions edited (task:configure_request_template).
   'task_request_template.updated': z
-    .object({ requestTemplateId: uuid, taskId: uuid, questionCount: z.number().int() })
+    .object({
+      taskId: uuid,
+      questionCount: z.number().int(),
+      questionTypes: z.array(z.string()),
+      questions: questionDiff,
+    })
     .strict(),
-  // Slice 4.1 — tasks. IDs only (no name/description PII; render by joining at read).
+  // Tasks. IDs only (no name/description PII; render by joining at read).
   'task.created': z
     .object({
       taskId: uuid,
       divisionId: uuid,
       teamId: uuid.nullable(),
-      requestTemplateId: uuid,
+      templateOrigin: z.enum(['library', 'custom']),
+      sourceTemplateId: uuid.nullable(),
+      questionCount: z.number().int(),
     })
     .strict(),
   'task.updated': z.object({ taskId: uuid }).strict(),
@@ -146,8 +187,9 @@ export const activityPayloadSchemas = {
   'message.retired': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'message.revived': z.object({ messageId: uuid, taskId: uuid }).strict(),
   'message.deleted': z.object({ messageId: uuid, taskId: uuid, keptAsMarker: z.boolean() }).strict(),
+  // An upload, onto a message or pending (for an answer).
   'attachment.created': z
-    .object({ attachmentId: uuid, messageId: uuid })
+    .object({ attachmentId: uuid, taskId: uuid, messageId: uuid.nullable() })
     .strict(),
   // Slice 7 — attachment lifecycle (independent retire/revive of a single file).
   'attachment.retired': z.object({ attachmentId: uuid }).strict(),
@@ -181,10 +223,10 @@ export const activityPayloadSchemas = {
     })
     .strict(),
   'task.claimant_removed': z
-    .object({ taskId: uuid, removedUserId: uuid, statusCache: z.string() })
+    .object({ taskId: uuid, removedUserId: uuid, statusCache: z.string(), submissionsRejected: z.array(uuid) })
     .strict(),
   'task.completed': z
-    .object({ taskId: uuid, statusCache: z.string() })
+    .object({ taskId: uuid, statusCache: z.string(), submissionsNotRequired: z.number().int() })
     .strict(),
   // Slice 7.3 — GC sweep. System-actored (actor_user_id NULL), IDs-only. One row per
   // collected aggregate/entity; `gc.blocked` records a RESTRICT backstop hit (a live

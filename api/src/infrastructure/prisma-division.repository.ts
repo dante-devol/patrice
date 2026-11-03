@@ -12,6 +12,7 @@ export function toDivision(row: DivisionRow): Division {
     defaultOpenings: row.defaultOpenings,
     openingsLocked: row.openingsLocked,
     restrictClaims: row.restrictClaims,
+    allowCustomTemplates: row.allowCustomTemplates,
     lifecycle: Lifecycle.of(row.lifecycleState, row.retiredAt),
     version: row.version,
   });

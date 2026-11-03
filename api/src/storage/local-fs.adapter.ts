@@ -1,4 +1,5 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, normalize, relative, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
@@ -29,10 +30,11 @@ export class LocalFsStorageAdapter implements StoragePort {
     return full;
   }
 
-  async put(key: string, body: Buffer, _contentType: string): Promise<void> {
+  async put(key: string, body: Buffer | Readable, _contentType: string): Promise<void> {
     const path = this.pathFor(key);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, body);
+    if (Buffer.isBuffer(body)) await writeFile(path, body);
+    else await pipeline(body, createWriteStream(path));
   }
 
   async getStream(key: string): Promise<Readable> {

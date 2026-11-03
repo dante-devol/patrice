@@ -24,7 +24,11 @@ import {
 } from '../integrations/integrations.dto';
 import { createMessageSchema, listMessagesQuerySchema, updateMessageSchema } from '../messages/messages.dto';
 import { listNotificationsQuerySchema } from '../notifications/notifications.dto';
-import { putRequestTemplateSchema } from '../request-templates/request-templates.dto';
+import {
+  createRequestTemplateSchema,
+  putRequestTemplateSchema,
+  updateRequestTemplateSchema,
+} from '../request-templates/request-templates.dto';
 import { createRoleSchema, updateRoleSchema } from '../roles/roles.dto';
 import { retireSubmissionSchema, reviewSchema, submitSchema } from '../submissions/submissions.dto';
 import {
@@ -149,8 +153,11 @@ export const ROUTES = {
   updateDivision: r({ method: 'patch', path: '/divisions/:id', tag: 'org', summary: 'Edit a division', action: 'division:update', body: updateDivisionSchema, status: 200, kind: 'json', response: S.Division }),
   retireDivision: r({ method: 'post', path: '/divisions/:id/retire', tag: 'org', summary: 'Retire a division', action: 'division:retire', status: 201, kind: 'json', response: S.Division }),
   reviveDivision: r({ method: 'post', path: '/divisions/:id/revive', tag: 'org', summary: 'Revive a retired division', action: 'division:revive', status: 201, kind: 'json', response: S.Division }),
-  getDivisionTemplate: r({ method: 'get', path: '/divisions/:id/request-template', tag: 'org', summary: "A division's request template", action: 'request_template:read', status: 200, kind: 'json', response: S.RequestTemplate }),
-  putDivisionTemplate: r({ method: 'put', path: '/divisions/:id/request-template', tag: 'org', summary: "Replace a division's request template", action: 'division:update', body: putRequestTemplateSchema, status: 200, kind: 'json', response: S.RequestTemplate }),
+  listDivisionTemplates: r({ method: 'get', path: '/divisions/:id/request-templates', tag: 'templates', summary: "A division's template library", action: 'request_template:read', status: 200, kind: 'json', response: S.RequestTemplateLibrary }),
+  createDivisionTemplate: r({ method: 'post', path: '/divisions/:id/request-templates', tag: 'templates', summary: 'Add a template to a division library', action: 'request_template:create', body: createRequestTemplateSchema, status: 201, kind: 'json', response: S.RequestTemplate }),
+  getRequestTemplate: r({ method: 'get', path: '/request-templates/:id', tag: 'templates', summary: 'A library template', action: 'request_template:read', status: 200, kind: 'json', response: S.RequestTemplate }),
+  updateRequestTemplate: r({ method: 'patch', path: '/request-templates/:id', tag: 'templates', summary: 'Edit a library template (questions diffed by id)', action: 'request_template:update', body: updateRequestTemplateSchema, status: 200, kind: 'json', response: S.RequestTemplate }),
+  deleteRequestTemplate: r({ method: 'delete', path: '/request-templates/:id', tag: 'templates', summary: 'Delete a library template (permanent, audited; tasks keep their snapshots)', action: 'request_template:delete', status: 204, kind: 'empty' }),
   listDivisionMembers: r({ method: 'get', path: '/divisions/:id/members', tag: 'org', summary: "A division's members", action: 'division:read', status: 200, kind: 'json', response: z.array(S.Member) }),
   addDivisionMember: r({ method: 'post', path: '/divisions/:id/members', tag: 'org', summary: 'Add a member to a division', action: 'division:manage_members', body: addMemberSchema, status: 200, kind: 'json', response: z.array(S.Member) }),
   removeDivisionMember: r({ method: 'delete', path: '/divisions/:id/members/:userId', tag: 'org', summary: 'Remove a member from a division', action: 'division:manage_members', status: 204, kind: 'empty' }),
@@ -176,11 +183,12 @@ export const ROUTES = {
   manageClaims: r({ method: 'post', path: '/tasks/:id/claims', tag: 'tasks', summary: 'Change openings or close claims', action: 'task:manage_claims', body: manageClaimsSchema, status: 200, kind: 'json', response: S.Task }),
   changeRequester: r({ method: 'post', path: '/tasks/:id/requester', tag: 'tasks', summary: "Hand a task to another requester", action: 'task:change_requester', body: changeRequesterSchema, status: 200, kind: 'json', response: S.Task }),
   completeTask: r({ method: 'post', path: '/tasks/:id/complete', tag: 'tasks', summary: 'Mark a task complete', action: 'task:complete', status: 200, kind: 'json', response: S.Task }),
-  getTaskTemplate: r({ method: 'get', path: '/tasks/:id/request-template', tag: 'tasks', summary: "A task's request template", action: 'task:read', status: 200, kind: 'json', response: S.RequestTemplate }),
+  getTaskTemplate: r({ method: 'get', path: '/tasks/:id/request-template', tag: 'tasks', summary: "A task's own questions", action: 'task:read', status: 200, kind: 'json', response: S.TaskTemplate }),
   getTaskTimeline: r({ method: 'get', path: '/tasks/:id/timeline', tag: 'tasks', summary: "What happened on a task, as typed events", action: 'task:read', status: 200, kind: 'json', response: z.array(S.TimelineEntry) }),
-  putTaskTemplate: r({ method: 'put', path: '/tasks/:id/request-template', tag: 'tasks', summary: "Replace a task's request template", action: 'task:configure_request_template', body: putRequestTemplateSchema, status: 200, kind: 'json', response: S.RequestTemplate }),
+  putTaskTemplate: r({ method: 'put', path: '/tasks/:id/request-template', tag: 'tasks', summary: "Edit a task's own questions (diffed by id; locked by a submission)", action: 'task:configure_request_template', body: putRequestTemplateSchema, status: 200, kind: 'json', response: S.TaskTemplate }),
 
   // ---- Submissions ----
+  uploadAnswerFile: r({ method: 'post', path: '/tasks/:id/uploads', tag: 'submissions', summary: 'Upload a file for an attachment answer (pending until your submit claims it)', action: 'task:submit', upload: true, status: 201, kind: 'json', response: S.AttachmentMeta }),
   submit: r({ method: 'post', path: '/tasks/:id/submissions', tag: 'submissions', summary: 'Submit answers', action: 'task:submit', body: submitSchema, status: 201, kind: 'json', response: S.Submission }),
   listSubmissions: r({ method: 'get', path: '/tasks/:id/submissions', tag: 'submissions', summary: "A task's submissions", action: 'submission:read', status: 200, kind: 'json', response: z.array(S.Submission) }),
   getSubmission: r({ method: 'get', path: '/submissions/:id', tag: 'submissions', summary: 'A submission', action: 'submission:read', status: 200, kind: 'json', response: S.Submission }),

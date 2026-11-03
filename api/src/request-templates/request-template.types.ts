@@ -88,6 +88,8 @@ export interface Answer {
 export interface AttachmentMeta {
   contentType: string;
   kind: string;
+  /** Checked against `maxBytes` when known. */
+  byteSize?: number;
 }
 
 /**
@@ -113,7 +115,8 @@ export type ValidationErrorCode =
   | 'too_many_selected'
   | 'too_many_files'
   | 'attachment_not_found'
-  | 'wrong_attachment_type';
+  | 'wrong_attachment_type'
+  | 'file_too_large';
 
 export interface ValidationErrorEntry {
   questionId: string;

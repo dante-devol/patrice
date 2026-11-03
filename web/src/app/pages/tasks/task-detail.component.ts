@@ -8,7 +8,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
 import { ToastService } from '../../core/toast.service';
-import { AdminUser, RequestTemplate, Submission, Task } from '../../core/api.types';
+import { AdminUser, Submission, Task, TaskTemplate } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { MessageThreadComponent } from './message-thread.component';
 import { SubmitDialogComponent } from './submit-dialog.component';
@@ -332,7 +332,7 @@ export class TaskDetailComponent implements OnInit {
   private readonly thread = viewChild(MessageThreadComponent);
 
   readonly task = signal<Task | null>(null);
-  readonly requestTemplate = signal<RequestTemplate | null>(null);
+  readonly requestTemplate = signal<TaskTemplate | null>(null);
   readonly submissions = signal<Submission[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);

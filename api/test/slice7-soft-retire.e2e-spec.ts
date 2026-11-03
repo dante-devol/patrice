@@ -86,12 +86,12 @@ describe('Slice 7.2 — Soft-retire filter, grace config, hard-deny', () => {
 
   it('blocks creating a new reference to a retired entity (API layer)', async () => {
     const div = (await auth(http().post('/api/divisions')).send({ name: 'Retired Div' })).body.id;
-    await auth(http().put(`/api/divisions/${div}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${div}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'Q', required: false, constraints: {} }],
     });
     await auth(http().post(`/api/divisions/${div}/retire`));
 
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: div });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: div, template: { kind: 'default' } });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('DIVISION_RETIRED');
   });

@@ -22,7 +22,12 @@ export interface GcReport {
   blocked: { entityType: string; entityId: string }[];
   /** Orphaned blobs reconciled away (0 on dry-run). */
   orphanedBlobs: number;
+  /** Pending uploads nobody claimed within a day, deleted with their blobs. */
+  pendingUploads: number;
 }
+
+/** How long a pending upload waits for its uploader's submit before it's collected. */
+export const PENDING_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** A fresh, empty report. */
 function emptyReport(): GcReport {
@@ -36,6 +41,7 @@ function emptyReport(): GcReport {
     integrationConnections: [],
     blocked: [],
     orphanedBlobs: 0,
+    pendingUploads: 0,
   };
 }
 
@@ -166,14 +172,15 @@ export class GcService {
 
   /** Whether a user authored content that must outlive them (→ scrub, not delete). */
   private async userHasHistory(userId: string): Promise<boolean> {
-    const [messages, submissions, tasks, attachments, claims] = await Promise.all([
+    const [messages, submissions, tasks, completed, attachments, claims] = await Promise.all([
       this.prisma.message.count({ where: { senderUserId: userId } }),
       this.prisma.submission.count({ where: { claimantUserId: userId } }),
       this.prisma.task.count({ where: { requesterUserId: userId } }),
+      this.prisma.task.count({ where: { completedBy: userId } }),
       this.prisma.attachment.count({ where: { uploaderUserId: userId } }),
       this.prisma.taskClaimant.count({ where: { userId } }),
     ]);
-    return messages + submissions + tasks + attachments + claims > 0;
+    return messages + submissions + tasks + completed + attachments + claims > 0;
   }
 
   /** Report what a sweep would collect — no deletes, no blob removal. */
@@ -197,7 +204,11 @@ export class GcService {
     const c = await this.collectable(cutoff);
     const report = emptyReport();
 
-    // Tasks first: deleting a retired task frees its references to retired
+    // Unclaimed pending uploads first: they may be the last thing keeping a retired
+    // user history-bearing.
+    report.pendingUploads = await this.collectPendingUploads();
+
+    // Tasks next: deleting a retired task frees its references to retired
     // divisions/teams, so those can collect in this same sweep.
     for (const taskId of c.tasks) {
       const blobKeys = await this.deleteTaskAggregate(taskId, report);
@@ -246,6 +257,28 @@ export class GcService {
 
     report.orphanedBlobs = await this.reconcileOrphanedBlobs();
     return report;
+  }
+
+  /** Delete pending uploads older than the TTL, then their blobs. */
+  private async collectPendingUploads(): Promise<number> {
+    const stale = await this.prisma.attachment.findMany({
+      where: {
+        messageId: null,
+        answerId: null,
+        createdAt: { lt: new Date(Date.now() - PENDING_UPLOAD_TTL_MS) },
+      },
+      select: { id: true, storageKey: true },
+    });
+    if (stale.length === 0) return 0;
+    await this.prisma.attachment.deleteMany({
+      where: { id: { in: stale.map((a) => a.id) }, messageId: null, answerId: null },
+    });
+    for (const a of stale) {
+      await this.storage.delete(a.storageKey).catch((e) =>
+        this.logger.error(`Blob delete failed for ${a.storageKey}: ${(e as Error).message}`),
+      );
+    }
+    return stale.length;
   }
 
   private async deleteIntegrationConnection(
@@ -411,7 +444,7 @@ export class GcService {
 
   /**
    * Delete a task and its whole aggregate as a unit (messages, submissions, answers,
-   * claimant slots, attachments, the task-owned request template). Self-referential FKs
+   * claimant slots, attachments, its own questions). Self-referential FKs
    * (reply→parent, resubmission→prior) are nulled first so a single `deleteMany` can't
    * trip RESTRICT mid-statement. Returns the deleted attachments' storage keys (for
    * post-commit blob removal), or `null` if a RESTRICT backstop blocked the delete.
@@ -423,9 +456,7 @@ export class GcService {
     try {
       const blobKeys = await this.prisma.$transaction(async (tx) => {
         const attachments = await tx.attachment.findMany({
-          where: {
-            OR: [{ message: { taskId } }, { answer: { submission: { taskId } } }],
-          },
+          where: { taskId },
           select: { id: true, storageKey: true },
         });
 
@@ -439,8 +470,7 @@ export class GcService {
         await tx.message.deleteMany({ where: { taskId } });
         await tx.submission.deleteMany({ where: { taskId } }); // cascades answers
         await tx.taskClaimant.deleteMany({ where: { taskId } });
-        await tx.requestTemplate.deleteMany({ where: { ownerTaskId: taskId } }); // cascades questions
-        await tx.task.delete({ where: { id: taskId } });
+        await tx.task.delete({ where: { id: taskId } }); // cascades its questions
 
         await this.logCollected(tx, 'task', taskId, 'gc.task_collected', {
           taskId,
@@ -460,9 +490,9 @@ export class GcService {
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
-        // Owned children first (the request template), then the division. Memberships
+        // Owned children first (the template library), then the division. Memberships
         // cascade with it.
-        await tx.requestTemplate.deleteMany({ where: { ownerDivisionId: divisionId } });
+        await tx.requestTemplate.deleteMany({ where: { divisionId } });
         await tx.division.delete({ where: { id: divisionId } });
         await this.logCollected(tx, 'division', divisionId, 'gc.division_collected', {
           divisionId,

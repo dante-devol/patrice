@@ -48,6 +48,9 @@ export type Question = Schemas['Question'];
  *  body is stricter per type; the server validates the per-type constraint keys. */
 export type QuestionInput = Pick<Question, 'type' | 'prompt' | 'required' | 'constraints'>;
 export type RequestTemplate = Schemas['RequestTemplate'];
+export type RequestTemplateLibrary = Schemas['RequestTemplateLibrary'];
+export type TaskTemplate = Schemas['TaskTemplate'];
+export type TemplateChoice = JsonBody<'createTask'>['template'];
 
 export type Task = Schemas['Task'];
 export type TaskListResult = Schemas['TaskListResult'];

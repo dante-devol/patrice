@@ -35,7 +35,8 @@ export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
     // Self-reference so a 'specific_division'/'own_division' scope on a
     // division-targeted action (division:update, task:create) can match.
     division?: Division,
-    restrictClaims?: Bool
+    restrictClaims?: Bool,
+    allowCustomTemplates?: Bool
   };
   entity Team {
     // Self-reference, plus the team's division so division scopes cover its teams.

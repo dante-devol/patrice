@@ -6,7 +6,7 @@ import { z } from 'zod';
  * turns anything else into a 422. Lifecycle goes through retire/revive endpoints.
  */
 const name = z.string().trim().min(1, 'Division name is required').max(120);
-const defaultOpenings = z.number().int().min(0).max(10_000);
+const defaultOpenings = z.number().int().min(1).max(10_000);
 
 export const createDivisionSchema = z
   .object({
@@ -14,6 +14,7 @@ export const createDivisionSchema = z
     defaultOpenings: defaultOpenings.optional(),
     openingsLocked: z.boolean().optional(),
     restrictClaims: z.boolean().optional(),
+    allowCustomTemplates: z.boolean().optional(),
   })
   .strict();
 
@@ -23,6 +24,7 @@ export const updateDivisionSchema = z
     defaultOpenings: defaultOpenings.optional(),
     openingsLocked: z.boolean().optional(),
     restrictClaims: z.boolean().optional(),
+    allowCustomTemplates: z.boolean().optional(),
     // Optional optimistic-lock check: the version the client last read.
     version: z.number().int().nonnegative().optional(),
   })

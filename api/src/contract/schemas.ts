@@ -24,7 +24,10 @@ export const QuestionType = z
   .enum(['detail_text', 'multiline', 'text', 'numeric', 'dropdown', 'radio', 'attachment'])
   .openapi('QuestionType');
 export const TaskStatus = z.enum(['open', 'claimed', 'review', 'revising', 'approved']).openapi('TaskStatus');
-export const SubmissionState = z.enum(['review', 'revising', 'approved', 'rejected']).openapi('SubmissionState');
+export const SubmissionState = z
+  .enum(['review', 'revising', 'approved', 'rejected', 'not_required'])
+  .openapi('SubmissionState');
+export const TemplateOrigin = z.enum(['library', 'custom']).openapi('TemplateOrigin');
 export const AuthMethod = z.enum(['password', 'google', 'discord']).openapi('AuthMethod');
 export const InvitationStatus = z.enum(['pending', 'revoked', 'exhausted', 'expired']).openapi('InvitationStatus');
 export const ActivitySource = z.enum(['patrice', 'integration', 'system']).openapi('ActivitySource');
@@ -161,6 +164,7 @@ export const Division = z
     defaultOpenings: z.number().int(),
     openingsLocked: z.boolean(),
     restrictClaims: z.boolean(),
+    allowCustomTemplates: z.boolean(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
@@ -241,15 +245,43 @@ export const Question = z
   .strict()
   .openapi('Question');
 
+const templateHeader = {
+  id,
+  divisionId: id,
+  name: z.string(),
+  description: z.string(),
+  isDefault: z.boolean(),
+  version: z.number().int(),
+};
+
+/** A library template in a division, with its questions. */
 export const RequestTemplate = z
+  .object({ ...templateHeader, questions: z.array(Question) })
+  .strict()
+  .openapi('RequestTemplate');
+
+export const RequestTemplateSummary = z
+  .object({ ...templateHeader, questionCount: z.number().int() })
+  .strict()
+  .openapi('RequestTemplateSummary');
+
+/** A division's library for the picker, and what the caller may do in the division. */
+export const RequestTemplateLibrary = z
+  .object({ items: z.array(RequestTemplateSummary), allowedActions: z.array(z.string()) })
+  .strict()
+  .openapi('RequestTemplateLibrary');
+
+/** A task's own questions: a snapshot, locked once a live submission exists. */
+export const TaskTemplate = z
   .object({
-    id,
-    ownerDivisionId: id.nullable(),
-    ownerTaskId: id.nullable(),
+    taskId: id,
+    origin: TemplateOrigin,
+    sourceTemplateId: id.nullable(),
+    locked: z.boolean(),
     questions: z.array(Question),
   })
   .strict()
-  .openapi('RequestTemplate');
+  .openapi('TaskTemplate');
 
 export const Task = z
   .object({
@@ -260,8 +292,12 @@ export const Task = z
     teamId: id.nullable(),
     requesterUserId: id,
     openings: z.number().int(),
-    // An explicit union: zod-to-openapi drops `null` from `.nullable()` on a registered schema.
-    statusCache: z.union([TaskStatus, z.null()]),
+    claimsClosed: z.boolean(),
+    statusCache: TaskStatus,
+    templateOrigin: TemplateOrigin,
+    sourceTemplateId: id.nullable(),
+    completedAt: nullableTimestamp,
+    completedBy: id.nullable(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
@@ -294,7 +330,10 @@ export const Attachment = z
 export const AttachmentMeta = z
   .object({
     id,
+    taskId: id,
+    // Neither set: a pending upload, waiting for its uploader's submit to claim it.
     messageId: id.nullable(),
+    answerId: id.nullable(),
     filename: z.string(),
     contentType: z.string(),
     byteSize: z.number().int(),
@@ -474,6 +513,7 @@ export const GcReport = z
     integrationConnections: z.array(id),
     blocked: z.array(z.object({ entityType: z.string(), entityId: id }).strict()),
     orphanedBlobs: z.number().int(),
+    pendingUploads: z.number().int(),
   })
   .strict()
   .openapi('GcReport');

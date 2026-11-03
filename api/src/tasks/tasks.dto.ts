@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { questionListSchema } from '../request-templates/request-templates.dto';
 
 /**
  * Task DTOs (Slice 4.1). Creation takes name/description + the target division (and
@@ -11,12 +12,24 @@ const name = z.string().trim().min(1, 'Task name is required').max(200);
 const description = z.string().max(20_000);
 const uuid = z.string().uuid();
 
+/**
+ * Where the new task's questions come from: a library template of the task's
+ * division, questions the requester writes (needs `task:compose_template`), or the
+ * division's default.
+ */
+export const templateChoiceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('library'), templateId: uuid }).strict(),
+  z.object({ kind: z.literal('custom'), questions: questionListSchema }).strict(),
+  z.object({ kind: z.literal('default') }).strict(),
+]);
+
 export const createTaskSchema = z
   .object({
     name,
     description: description.optional(),
     divisionId: uuid,
     teamId: uuid.optional(),
+    template: templateChoiceSchema,
   })
   .strict();
 
@@ -31,6 +44,7 @@ export const updateTaskSchema = z
   });
 
 export type CreateTaskDto = z.infer<typeof createTaskSchema>;
+export type TemplateChoice = z.infer<typeof templateChoiceSchema>;
 export type UpdateTaskDto = z.infer<typeof updateTaskSchema>;
 
 /**

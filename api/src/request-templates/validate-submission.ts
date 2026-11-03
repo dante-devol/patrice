@@ -201,6 +201,9 @@ async function validateAttachment(
         `Attachment type "${meta.contentType}" is not allowed`,
       );
     }
+    if (c.maxBytes != null && meta.byteSize != null && meta.byteSize > c.maxBytes) {
+      err('file_too_large', `Each file must be at most ${c.maxBytes} bytes`);
+    }
   }
   return errors;
 }

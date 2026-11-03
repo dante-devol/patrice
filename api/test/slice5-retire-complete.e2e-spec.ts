@@ -31,7 +31,7 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
 
     const writing = await auth(http().post('/api/divisions')).send({ name: 'Writing' });
     writingId = writing.body.id;
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'Answer', required: true, constraints: {} }],
     });
 
@@ -63,7 +63,7 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
   const as = (s: AdminSession) => (r: request.Test) => r.set('Cookie', s.cookies).set('x-csrf-token', s.csrf);
 
   async function claimedSubmission(): Promise<{ taskId: string; submissionId: string }> {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId, template: { kind: 'default' } });
     const taskId = res.body.id;
     await as(claimer.session)(http().post(`/api/tasks/${taskId}/claim`));
     const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
@@ -80,7 +80,7 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
     expect((await auth(http().post(`/api/submissions/${submissionId}/retire`)).send({ reason: 'no' })).status).toBe(422);
   });
 
-  it('retire records a timeline entry with the reason and reverts the slot', async () => {
+  it('retire records a timeline entry with the reason and opens the seat', async () => {
     const { taskId, submissionId } = await claimedSubmission();
 
     const res = await auth(http().post(`/api/submissions/${submissionId}/retire`)).send({
@@ -94,10 +94,12 @@ describe('Slice 5.3 — Retire-submission & manual complete', () => {
     const retired = timeline.find((e: { type: string }) => e.type === 'submission.retired');
     expect(retired.payload).toMatchObject({ submissionId, reason: 'spam / junk submission' });
 
-    // Slot reverted → claimable again; status floors to claimed (Empty Contributing Set).
+    // The claimant leaves the seat, which opens for anyone (intent-vs-reality §6.1).
     const slot = await prisma.taskClaimant.findFirstOrThrow({ where: { taskId, userId: claimer.userId } });
-    expect(slot.hasSubmitted).toBe(false);
-    expect((await auth(http().get(`/api/tasks/${taskId}`))).body.statusCache).toBe('claimed');
+    expect(slot.leftAt).not.toBeNull();
+    const after = (await auth(http().get(`/api/tasks/${taskId}`))).body;
+    expect(after.claimantUserIds).toEqual([]);
+    expect(after.statusCache).toBe('open');
 
     // The audit row points at the timeline entry; the free-text reason stays out of it.
     const act = await prisma.activity.findFirstOrThrow({ where: { verb: 'submission.retired', subjectId: submissionId } });

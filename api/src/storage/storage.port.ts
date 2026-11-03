@@ -9,8 +9,11 @@ import { Readable } from 'node:stream';
 export const STORAGE_PORT = Symbol('STORAGE_PORT');
 
 export interface StoragePort {
-  /** Store `body` under `key` with the given content type (overwrites if present). */
-  put(key: string, body: Buffer, contentType: string): Promise<void>;
+  /**
+   * Store `body` under `key` with the given content type (overwrites if present). A
+   * stream needs its `byteLength` (S3 requires a content length up front).
+   */
+  put(key: string, body: Buffer | Readable, contentType: string, byteLength?: number): Promise<void>;
 
   /** Open a readable stream over the stored object (throws if missing). */
   getStream(key: string): Promise<Readable>;

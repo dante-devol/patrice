@@ -22,6 +22,9 @@ import {
   NotificationListResult,
   OrgSettings,
   RequestTemplate,
+  RequestTemplateLibrary,
+  TaskTemplate,
+  TemplateChoice,
   QuestionInput,
   ReviewDecision,
   Role,
@@ -220,26 +223,40 @@ export class ApiService {
     return firstValueFrom(this.http.post<void>(`/api/users/${userId}/revive`, {}));
   }
 
-  // ---- Slice 3: request templates -----------------------------------------
+  // ---- Request templates --------------------------------------------------
+  // The admin builder still edits one template per division: the library's default.
+  // The picker and multi-template UI arrive with the web client rework.
 
-  /** A division's default request template, or null when it has none yet (404). */
-  async getRequestTemplate(divisionId: string): Promise<RequestTemplate | null> {
-    try {
-      return await firstValueFrom(
-        this.http.get<RequestTemplate>(`/api/divisions/${divisionId}/request-template`),
-      );
-    } catch (e) {
-      if (e instanceof HttpErrorResponse && e.status === 404) return null;
-      throw e;
-    }
+  listRequestTemplates(divisionId: string): Promise<RequestTemplateLibrary> {
+    return firstValueFrom(
+      this.http.get<RequestTemplateLibrary>(`/api/divisions/${divisionId}/request-templates`),
+    );
   }
 
-  putRequestTemplate(
-    divisionId: string,
-    questions: QuestionInput[],
-  ): Promise<RequestTemplate> {
+  /** A division's default template, or null when it has none. */
+  async getRequestTemplate(divisionId: string): Promise<RequestTemplate | null> {
+    const library = await this.listRequestTemplates(divisionId);
+    const summary = library.items.find((t) => t.isDefault);
+    if (!summary) return null;
+    return firstValueFrom(this.http.get<RequestTemplate>(`/api/request-templates/${summary.id}`));
+  }
+
+  /** Replace the default template's questions, creating the default if there is none. */
+  async putRequestTemplate(divisionId: string, questions: QuestionInput[]): Promise<RequestTemplate> {
+    const library = await this.listRequestTemplates(divisionId);
+    const current = library.items.find((t) => t.isDefault);
+    if (current) {
+      return firstValueFrom(
+        this.http.patch<RequestTemplate>(`/api/request-templates/${current.id}`, {
+          questions,
+          version: current.version,
+        }),
+      );
+    }
     return firstValueFrom(
-      this.http.put<RequestTemplate>(`/api/divisions/${divisionId}/request-template`, {
+      this.http.post<RequestTemplate>(`/api/divisions/${divisionId}/request-templates`, {
+        name: 'Default',
+        isDefault: true,
         questions,
       }),
     );
@@ -274,13 +291,17 @@ export class ApiService {
     return firstValueFrom(this.http.get<Task>(`/api/tasks/${id}`));
   }
 
+  /** Create a task; without a template choice it uses the division's default. */
   createTask(body: {
     name: string;
     description?: string;
     divisionId: string;
     teamId?: string;
+    template?: TemplateChoice;
   }): Promise<Task> {
-    return firstValueFrom(this.http.post<Task>('/api/tasks', body));
+    return firstValueFrom(
+      this.http.post<Task>('/api/tasks', { ...body, template: body.template ?? { kind: 'default' } }),
+    );
   }
 
   updateTask(id: string, body: { name?: string; description?: string }): Promise<Task> {
@@ -312,11 +333,11 @@ export class ApiService {
     );
   }
 
-  /** A task's own request template copy, or null when absent (404). */
-  async getTaskRequestTemplate(taskId: string): Promise<RequestTemplate | null> {
+  /** A task's own questions, or null when absent (404). */
+  async getTaskRequestTemplate(taskId: string): Promise<TaskTemplate | null> {
     try {
       return await firstValueFrom(
-        this.http.get<RequestTemplate>(`/api/tasks/${taskId}/request-template`),
+        this.http.get<TaskTemplate>(`/api/tasks/${taskId}/request-template`),
       );
     } catch (e) {
       if (e instanceof HttpErrorResponse && e.status === 404) return null;

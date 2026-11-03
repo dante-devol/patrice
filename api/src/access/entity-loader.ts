@@ -105,10 +105,20 @@ export class EntityLoader {
   async division(id: string): Promise<ResourceRef> {
     const d = await this.db.division.findUnique({
       where: { id: this.id(id, 'DIVISION_NOT_FOUND', 'Division') },
-      select: { id: true, restrictClaims: true },
+      select: { id: true, restrictClaims: true, allowCustomTemplates: true },
     });
     if (!d) throw notFound('DIVISION_NOT_FOUND', 'Division');
     return divisionRef(d);
+  }
+
+  /** The division a library template belongs to. */
+  async requestTemplateDivision(id: string): Promise<ResourceRef> {
+    const t = await this.db.requestTemplate.findUnique({
+      where: { id: this.id(id, 'REQUEST_TEMPLATE_NOT_FOUND', 'Request template') },
+      select: { divisionId: true },
+    });
+    if (!t) throw notFound('REQUEST_TEMPLATE_NOT_FOUND', 'Request template');
+    return this.division(t.divisionId);
   }
 
   async team(id: string): Promise<ResourceRef> {
@@ -194,11 +204,15 @@ export const TASK_REF_SELECT = {
   claimants: { where: { leftAt: null }, select: { userId: true } },
 } as const;
 
-export function divisionRef(d: { id: string; restrictClaims: boolean }): ResourceRef {
+export function divisionRef(d: { id: string; restrictClaims: boolean; allowCustomTemplates?: boolean }): ResourceRef {
   return {
     type: 'Division',
     id: d.id,
-    attrs: { division: ref('Division', d.id), restrictClaims: d.restrictClaims },
+    attrs: {
+      division: ref('Division', d.id),
+      restrictClaims: d.restrictClaims,
+      allowCustomTemplates: d.allowCustomTemplates ?? false,
+    },
   };
 }
 
@@ -220,7 +234,8 @@ function notFound(
     | 'TEAM_NOT_FOUND'
     | 'USER_NOT_FOUND'
     | 'INVITE_NOT_FOUND'
-    | 'SESSION_NOT_FOUND',
+    | 'SESSION_NOT_FOUND'
+    | 'REQUEST_TEMPLATE_NOT_FOUND',
   label: string,
 ): NotFoundError {
   return new NotFoundError(code, `${label} not found`);

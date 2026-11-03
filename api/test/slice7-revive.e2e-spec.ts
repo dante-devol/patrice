@@ -29,7 +29,7 @@ describe('Slice 7.1 — Revive endpoints', () => {
     prisma = new PrismaClient();
 
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'Title', required: true, constraints: {} }],
     });
 
@@ -56,7 +56,7 @@ describe('Slice 7.1 — Revive endpoints', () => {
     }
 
     taskId = (
-      await auth(http().post('/api/tasks')).send({ name: 'Chapter', divisionId: writingId })
+      await auth(http().post('/api/tasks')).send({ name: 'Chapter', divisionId: writingId, template: { kind: 'default' } })
     ).body.id;
   });
 

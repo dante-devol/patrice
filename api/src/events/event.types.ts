@@ -12,10 +12,13 @@ const uuid = z.string().uuid();
  * shapes (exported in the contract); nothing parses sentences.
  */
 export const domainEventPayloadSchemas = {
-  'task.created': z.object({}).strict(),
+  'task.created': z
+    .object({ templateOrigin: z.enum(['library', 'custom']), sourceTemplateId: uuid.nullable() })
+    .strict(),
   'task.claimed': z.object({ userId: uuid }).strict(),
   'task.left': z.object({ userId: uuid }).strict(),
-  'task.claimant_evicted': z.object({ userId: uuid }).strict(),
+  // The evictee's submissions from that seat, now treated as rejected.
+  'task.claimant_evicted': z.object({ userId: uuid, submissionIds: z.array(uuid) }).strict(),
   'task.requester_changed': z.object({ fromUserId: uuid.optional(), toUserId: uuid }).strict(),
   'task.claims_changed': z
     .object({ openings: z.number().int().optional(), claimsClosed: z.boolean().optional() })

@@ -38,7 +38,7 @@ describe('Slice 4.2 — Claiming, openings, requester', () => {
     secretId = secret.body.id;
 
     for (const d of [writingId, secretId]) {
-      await auth(http().put(`/api/divisions/${d}/request-template`)).send({
+      await auth(http().post(`/api/divisions/${d}/request-templates`)).send({ name: 'Default', isDefault: true,
         questions: [{ type: 'text', prompt: 'T', required: false, constraints: {} }],
       });
     }
@@ -76,7 +76,7 @@ describe('Slice 4.2 — Claiming, openings, requester', () => {
   const as = (s: AdminSession) => (r: request.Test) => r.set('Cookie', s.cookies).set('x-csrf-token', s.csrf);
 
   async function makeTask(divisionId: string): Promise<string> {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId, template: { kind: 'default' } });
     expect(res.status).toBe(201);
     return res.body.id;
   }

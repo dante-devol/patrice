@@ -36,7 +36,7 @@ describe('Slice 6 — Notifications', () => {
 
     const writing = await auth(http().post('/api/divisions')).send({ name: 'Writing' });
     writingId = writing.body.id;
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [
         { type: 'detail_text', prompt: 'Body', required: true, constraints: { minChars: 3 } },
       ],
@@ -88,7 +88,7 @@ describe('Slice 6 — Notifications', () => {
   }
 
   async function makeClaimedTask(): Promise<{ taskId: string; questionId: string }> {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId, template: { kind: 'default' } });
     const taskId = res.body.id;
     await as(claimer.session)(http().post(`/api/tasks/${taskId}/claim`));
     const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
@@ -96,7 +96,7 @@ describe('Slice 6 — Notifications', () => {
   }
 
   it('claim notifies the requester, not the claimant (sender suppressed)', async () => {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId, template: { kind: 'default' } });
     const taskId = res.body.id;
     await as(claimer.session)(http().post(`/api/tasks/${taskId}/claim`));
 

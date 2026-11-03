@@ -108,11 +108,11 @@ export class SubmissionsService {
   } as const;
 
   /**
-   * Capture a claimant's answers (`task:submit`). Validates via the Slice-3
-   * `validateSubmission` (422 on failure), then in one transaction creates the
-   * `submission` (next `submission_no`, chained to the returned prior version),
-   * persists `answer` rows, re-owns referenced attachments to those answers, marks
-   * the slot submitted, emits system message M1, and recomputes `status_cache`.
+   * Capture a seated claimant's answers (`task:submit`) against the task's own
+   * questions. Attachment answers may only reference the submitter's **own pending
+   * uploads on this task** (problems D1); the submit claims them. A resubmission is
+   * valid only after a return, and only within the claimant's current tenure of the
+   * seat.
    */
   async submit(
     taskId: string,
@@ -121,32 +121,30 @@ export class SubmissionsService {
   ): Promise<SubmissionView> {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      select: { id: true, lifecycleState: true },
+      select: { id: true, lifecycleState: true, completedAt: true },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
     if (task.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('TASK_RETIRED', 'Task is retired');
     }
+    if (task.completedAt) throw new ConflictError('TASK_COMPLETED', 'The task is complete');
 
     const slot = await this.prisma.taskClaimant.findUnique({
       where: { taskId_userId: { taskId, userId: actorUserId } },
-      select: { leftAt: true },
+      select: { leftAt: true, joinedAt: true },
     });
     if (!slot || slot.leftAt !== null) {
       throw new ConflictError('NOT_CLAIMED', 'You do not hold a slot on this task');
     }
 
-    const requestTemplate = await this.prisma.requestTemplate.findUnique({
-      where: { ownerTaskId: taskId },
-      include: { questions: { orderBy: { ordinal: 'asc' } } },
+    const questions = await this.prisma.taskQuestion.findMany({
+      where: { taskId },
+      orderBy: { ordinal: 'asc' },
     });
-    if (!requestTemplate) {
-      throw new NotFoundError('REQUEST_TEMPLATE_NOT_FOUND', 'This task has no request template');
-    }
 
     const rtDef: RequestTemplateDef = {
-      id: requestTemplate.id,
-      questions: requestTemplate.questions.map((q) => ({
+      id: taskId,
+      questions: questions.map((q) => ({
         id: q.id,
         ordinal: q.ordinal,
         type: q.type as RequestTemplateDef['questions'][number]['type'],
@@ -155,17 +153,26 @@ export class SubmissionsService {
         constraints: q.constraints as never,
       })),
     };
-    const typeById = new Map(requestTemplate.questions.map((q) => [q.id, q.type]));
+    const typeById = new Map(questions.map((q) => [q.id, q.type]));
     const answers: Answer[] = dto.answers.map((a) =>
       toValidatorAnswer(typeById.get(a.questionId), a),
     );
 
+    // Only the submitter's own pending uploads on this task can be answers; anything
+    // else is "not found" to the validator.
+    const claimable = (ids: string[]): Prisma.AttachmentWhereInput => ({
+      id: { in: ids },
+      taskId,
+      uploaderUserId: actorUserId,
+      messageId: null,
+      answerId: null,
+    });
     const lookup: AttachmentLookupPort = async (attId) => {
       const att = await this.prisma.attachment.findFirst({
-        where: { id: attId },
-        select: { contentType: true, kind: true },
+        where: claimable([attId]),
+        select: { contentType: true, kind: true, byteSize: true },
       });
-      return att ? { contentType: att.contentType, kind: att.kind } : null;
+      return att ? { contentType: att.contentType, kind: att.kind, byteSize: Number(att.byteSize) } : null;
     };
 
     const result = await validateSubmission(rtDef, answers, lookup);
@@ -184,22 +191,22 @@ export class SubmissionsService {
       const latest = await tx.submission.findFirst({
         where: { taskId, claimantUserId: actorUserId },
         orderBy: { submissionNo: 'desc' },
-        select: { id: true, submissionNo: true, state: true, lifecycleState: true },
+        select: { id: true, submissionNo: true, state: true, lifecycleState: true, submittedAt: true },
       });
-      // A resubmission is only valid from a returned (`revising`) active version.
-      if (latest && latest.lifecycleState === LifecycleState.active) {
-        if (latest.state !== SubmissionState.revising) {
-          throw new ConflictError(
-            'ALREADY_SUBMITTED',
-            'Your current submission is not awaiting a resubmission',
-          );
-        }
+      // Work from an earlier tenure of the seat doesn't count; within this tenure a
+      // resubmission is only valid from a returned (`revising`) live version.
+      const current =
+        latest && latest.lifecycleState === LifecycleState.active && latest.submittedAt >= slot.joinedAt
+          ? latest
+          : null;
+      if (current && current.state !== SubmissionState.revising) {
+        throw new ConflictError(
+          'ALREADY_SUBMITTED',
+          'Your current submission is not awaiting a resubmission',
+        );
       }
       const submissionNo = (latest?.submissionNo ?? 0) + 1;
-      const prevSubmissionId =
-        latest && latest.lifecycleState === LifecycleState.active
-          ? latest.id
-          : null;
+      const prevSubmissionId = current?.id ?? null;
 
       const submission = await tx.submission.create({
         data: {
@@ -225,15 +232,17 @@ export class SubmissionsService {
           },
           select: { id: true },
         });
-        if (dtoAnswer.attachmentIds && dtoAnswer.attachmentIds.length > 0) {
-          // Re-own referenced attachments to this answer (message XOR answer CHECK
-          // stays satisfied: answer_id set, message_id cleared).
-          await tx.attachment.updateMany({
-            where: {
-              id: { in: dtoAnswer.attachmentIds },
-            },
-            data: { answerId: answer.id, messageId: null },
+        const ids = [...new Set(dtoAnswer.attachmentIds ?? [])];
+        if (ids.length > 0) {
+          // Claim the submitter's pending uploads. A count short of the list means
+          // one was claimed or deleted since validation.
+          const { count } = await tx.attachment.updateMany({
+            where: claimable(ids),
+            data: { answerId: answer.id },
           });
+          if (count !== ids.length) {
+            throw new ConflictError('STALE_SUBMISSION', 'An uploaded file changed while submitting; retry');
+          }
         }
       }
 
@@ -392,12 +401,10 @@ export class SubmissionsService {
   }
 
   /**
-   * Retire a submission (`task:retire_submission`, requester own-family). Requires a
-   * 5..500-char reason (enforced at the DTO). In one transaction: writes a **task-level
-   * audit message** (`submission_id=NULL` so it survives submission GC), soft-retires
-   * the submission, **cascade-retires** its M1 + every reply (`submission_id=sub.id`),
-   * reverts the claimant slot (`has_submitted=false` → claimable again), recomputes
-   * `status_cache`, and logs the org-level `submission.retired` activity.
+   * Retire a submission (`task:retire_submission`), with a 5–500 character reason
+   * kept on the timeline. Retiring **removes the claimant and opens the seat for
+   * anyone** (intent-vs-reality §6.1); it never offers a redo, which is what a return
+   * is for.
    */
   async retireSubmission(
     submissionId: string,
@@ -447,16 +454,16 @@ export class SubmissionsService {
         },
       });
 
-      // 4. Revert the claimant slot — the spot is claimable again.
+      // 3. The claimant leaves the seat, which opens for anyone.
       await tx.taskClaimant.updateMany({
-        where: { taskId: submission.taskId, userId: submission.claimantUserId },
-        data: { hasSubmitted: false },
+        where: { taskId: submission.taskId, userId: submission.claimantUserId, leftAt: null },
+        data: { leftAt: now, hasSubmitted: false },
       });
 
-      // 5. Recompute status.
+      // 4. Recompute status.
       await this.status.recompute(tx, submission.taskId);
 
-      // 6. Org-level audit. It references the timeline entry rather than copying the
+      // 5. Org-level audit. It references the timeline entry rather than copying the
       //    reason, so free text never enters the append-only log.
       await this.activity.logActivity({
         tx,

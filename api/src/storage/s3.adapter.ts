@@ -50,13 +50,14 @@ export class S3StorageAdapter implements StoragePort {
     });
   }
 
-  async put(key: string, body: Buffer, contentType: string): Promise<void> {
+  async put(key: string, body: Buffer | Readable, contentType: string, byteLength?: number): Promise<void> {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
         Body: body,
         ContentType: contentType,
+        ...(byteLength !== undefined ? { ContentLength: byteLength } : {}),
       }),
     );
   }

@@ -41,11 +41,11 @@ describe('Slice 7.4 — User scrub-in-place', () => {
     }
 
     const writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'Q', required: false, constraints: {} }],
     });
     taskId = (
-      await auth(http().post('/api/tasks')).send({ name: 'Host', divisionId: writingId })
+      await auth(http().post('/api/tasks')).send({ name: 'Host', divisionId: writingId, template: { kind: 'default' } })
     ).body.id;
 
     await auth(http().patch('/api/config')).send({ gracePeriodHours: 0 });

@@ -33,7 +33,7 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
   const auth = (r: request.Test) => as(admin, r);
 
   async function makeTask(divisionId: string, name = 'T'): Promise<string> {
-    const res = await auth(http().post('/api/tasks')).send({ name, divisionId });
+    const res = await auth(http().post('/api/tasks')).send({ name, divisionId, template: { kind: 'default' } });
     expect(res.status).toBe(201);
     return res.body.id as string;
   }
@@ -50,7 +50,7 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
     openId = (await auth(http().post('/api/divisions')).send({ name: 'Open' })).body.id;
     secretId = (await auth(http().post('/api/divisions')).send({ name: 'Secret', restrictClaims: true })).body.id;
     for (const d of [openId, secretId]) {
-      await auth(http().put(`/api/divisions/${d}/request-template`)).send({
+      await auth(http().post(`/api/divisions/${d}/request-templates`)).send({ name: 'Default', isDefault: true,
         questions: [{ type: 'text', prompt: 'Q', required: true, constraints: {} }],
       });
     }
@@ -85,9 +85,9 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
     });
 
     it('a Member can request work in a division they belong to, and only there', async () => {
-      const ok = await as(member.session, http().post('/api/tasks')).send({ name: 'Mine', divisionId: openId });
+      const ok = await as(member.session, http().post('/api/tasks')).send({ name: 'Mine', divisionId: openId, template: { kind: 'default' } });
       expect(ok.status).toBe(201);
-      const no = await as(outsider.session, http().post('/api/tasks')).send({ name: 'Not mine', divisionId: openId });
+      const no = await as(outsider.session, http().post('/api/tasks')).send({ name: 'Not mine', divisionId: openId, template: { kind: 'default' } });
       expect(no.status).toBe(403);
     });
   });

@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { LifecycleState, Prisma, QuestionType, StatusCache } from '@prisma/client';
+import {
+  LifecycleState,
+  Prisma,
+  StatusCache,
+  SubmissionState,
+  Task,
+  TemplateOrigin,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { ACTIONS } from '../access/actions';
@@ -11,8 +18,9 @@ import { EventStore } from '../events/event-store.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
-import { computeStatusCache } from './task-status';
+import { deriveStatus } from './task-status';
 import { TaskStatusService } from './task-status.service';
+import { RequestTemplatesService } from '../request-templates/request-templates.service';
 import {
   ChangeRequesterDto,
   CreateTaskDto,
@@ -29,7 +37,12 @@ export interface TaskView {
   teamId: string | null;
   requesterUserId: string;
   openings: number;
-  statusCache: StatusCache | null;
+  claimsClosed: boolean;
+  statusCache: StatusCache;
+  templateOrigin: TemplateOrigin;
+  sourceTemplateId: string | null;
+  completedAt: Date | null;
+  completedBy: string | null;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
@@ -75,11 +88,11 @@ export interface TaskListResult {
 }
 
 /**
- * Tasks (Slice 4.1). Creation **deep-copies** the division's default request template
- * into a fresh `request_template` row owned by the new task (own copy → editing the
- * division default later never mutates this task). Listing is keyset/cursor paginated
- * (newest-first by the UUIDv7 PK) with index-backed faceted filters. PATCH is pure
- * metadata; lifecycle/authority/structure moves go through named action endpoints.
+ * Tasks. Creation snapshots the chosen questions onto the task, so editing the source
+ * template later never changes it. Listing is keyset paginated (newest first by the
+ * UUIDv7 key) with faceted filters. PATCH is pure metadata; everything else goes
+ * through named actions. Seats follow the settled slot rules (intent-vs-reality §6.1),
+ * and completion is a recorded fact.
  */
 @Injectable()
 export class TasksService {
@@ -92,6 +105,7 @@ export class TasksService {
     private readonly grace: GraceService,
     private readonly access: AccessService,
     private readonly visibility: VisibilityService,
+    private readonly templates: RequestTemplatesService,
   ) {}
 
   /** Attach each task's `allowedActions` for `userId`, in one batch of decisions. */
@@ -107,22 +121,7 @@ export class TasksService {
     }));
   }
 
-  private toView(t: {
-    id: string;
-    name: string;
-    description: string;
-    divisionId: string;
-    teamId: string | null;
-    requesterUserId: string;
-    openings: number;
-    statusCache: StatusCache | null;
-    lifecycleState: LifecycleState;
-    retiredAt: Date | null;
-    version: number;
-    createdAt: Date;
-    updatedAt: Date;
-    claimants?: { userId: string }[];
-  }): TaskView {
+  private toView(t: Task & { claimants?: { userId: string }[] }): TaskView {
     return {
       id: t.id,
       name: t.name,
@@ -131,7 +130,12 @@ export class TasksService {
       teamId: t.teamId,
       requesterUserId: t.requesterUserId,
       openings: t.openings,
+      claimsClosed: t.claimsClosed,
       statusCache: t.statusCache,
+      templateOrigin: t.templateOrigin,
+      sourceTemplateId: t.sourceTemplateId,
+      completedAt: t.completedAt,
+      completedBy: t.completedBy,
       lifecycleState: t.lifecycleState,
       retiredAt: t.retiredAt,
       version: t.version,
@@ -148,15 +152,11 @@ export class TasksService {
   }
 
   /**
-   * Create a task and deep-copy the division's request template into a task-owned row.
-   * Requires the division to have a request template (else `422 NO_DEFAULT_REQUEST_TEMPLATE`
-   * — the empty `question[]` coordination-only case still counts as "has one").
-   * Insertion order is task → request_template(owner_task_id) → questions, all in one tx.
+   * Create a task in a division with a snapshot of the chosen questions: a library
+   * template of that division, its default, or questions the requester writes (which
+   * also needs `task:compose_template` on the division).
    */
-  async create(
-    actorUserId: string,
-    dto: CreateTaskDto,
-  ): Promise<TaskView> {
+  async create(actorUserId: string, dto: CreateTaskDto): Promise<TaskView> {
     const division = await this.prisma.division.findFirst({
       where: { id: dto.divisionId },
       select: { id: true, lifecycleState: true, defaultOpenings: true },
@@ -164,12 +164,12 @@ export class TasksService {
     if (!division) {
       throw new NotFoundError('DIVISION_NOT_FOUND', 'Division not found');
     }
+    const divisionResource = await new EntityLoader(this.prisma).division(division.id);
     // `task:create` targets the division the task is created in.
-    await this.access.assert(
-      actorUserId,
-      ACTIONS.taskCreate.action,
-      await new EntityLoader(this.prisma).division(division.id),
-    );
+    await this.access.assert(actorUserId, ACTIONS.taskCreate.action, divisionResource);
+    if (dto.template.kind === 'custom') {
+      await this.access.assert(actorUserId, ACTIONS.taskComposeTemplate.action, divisionResource);
+    }
     if (division.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('DIVISION_RETIRED', 'Division is retired');
     }
@@ -188,22 +188,12 @@ export class TasksService {
       }
     }
 
-    // The division MUST have a request template to copy (Slice 4 contract).
-    const source = await this.prisma.requestTemplate.findUnique({
-      where: { ownerDivisionId: dto.divisionId },
-      include: { questions: { orderBy: { ordinal: 'asc' } } },
-    });
-    if (!source) {
-      throw new UnprocessableError(
-        'NO_DEFAULT_REQUEST_TEMPLATE',
-        'This division has no request template to copy',
-      );
-    }
-
-    const statusCache = computeStatusCache({
-      activeClaimants: 0,
+    const template = await this.templates.resolveChoice(division.id, dto.template);
+    const statusCache = deriveStatus({
+      completed: false,
       openings: division.defaultOpenings,
       claimsClosed: false,
+      claimantStates: [],
     }) as StatusCache;
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -217,27 +207,11 @@ export class TasksService {
           openings: division.defaultOpenings,
           claimsClosed: false,
           statusCache,
+          templateOrigin: template.origin,
+          sourceTemplateId: template.sourceTemplateId,
         },
       });
-
-      // Deep-copy: a fresh request template row owned by the task, then fresh question
-      // rows (new ids) carrying the source's ordinal/type/prompt/required/constraints.
-      const requestTemplate = await tx.requestTemplate.create({
-        data: { ownerTaskId: task.id },
-        select: { id: true },
-      });
-      if (source.questions.length > 0) {
-        await tx.question.createMany({
-          data: source.questions.map((q) => ({
-            requestTemplateId: requestTemplate.id,
-            ordinal: q.ordinal,
-            type: q.type as QuestionType,
-            prompt: q.prompt,
-            required: q.required,
-            constraints: q.constraints as Prisma.InputJsonValue,
-          })),
-        });
-      }
+      await this.templates.snapshot(tx, task.id, template.questions);
 
       await this.activity.logActivity({
         tx,
@@ -249,11 +223,18 @@ export class TasksService {
           taskId: task.id,
           divisionId: dto.divisionId,
           teamId: dto.teamId ?? null,
-          requestTemplateId: requestTemplate.id,
+          templateOrigin: template.origin,
+          sourceTemplateId: template.sourceTemplateId,
+          questionCount: template.questions.length,
         },
       });
 
-      await this.events.record(tx, { type: 'task.created', taskId: task.id, actorUserId, payload: {} });
+      await this.events.record(tx, {
+        type: 'task.created',
+        taskId: task.id,
+        actorUserId,
+        payload: { templateOrigin: template.origin, sourceTemplateId: template.sourceTemplateId },
+      });
       return task;
     });
 
@@ -456,6 +437,7 @@ export class TasksService {
         claimsClosed: true,
         lifecycleState: true,
         divisionId: true,
+        completedAt: true,
       },
     });
     if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
@@ -465,6 +447,24 @@ export class TasksService {
     return task;
   }
 
+  /** Completion is terminal: claims, openings and submissions stop with it. */
+  private assertNotCompleted(task: { completedAt: Date | null }): void {
+    if (task.completedAt) throw new ConflictError('TASK_COMPLETED', 'The task is complete');
+  }
+
+  /** The claimant's live submissions since they took their seat. */
+  private tenureSubmissions(tx: Prisma.TransactionClient, taskId: string, userId: string, joinedAt: Date) {
+    return tx.submission.findMany({
+      where: {
+        taskId,
+        claimantUserId: userId,
+        lifecycleState: LifecycleState.active,
+        submittedAt: { gte: joinedAt },
+      },
+      select: { id: true, state: true },
+    });
+  }
+
   /**
    * Self-claim (`task:assign`). Eligibility is decided by Cedar before this runs; the
    * service only enforces the operational caps: claims not closed and a free opening.
@@ -472,6 +472,7 @@ export class TasksService {
    */
   async claim(taskId: string, userId: string): Promise<TaskView> {
     const task = await this.loadActiveTask(taskId);
+    this.assertNotCompleted(task);
     if (task.claimsClosed) {
       throw new ConflictError('CLAIMS_CLOSED', 'This task is closed to new claims');
     }
@@ -530,18 +531,26 @@ export class TasksService {
     return view;
   }
 
-  /** Leave a claim (`task:assign`, own slot). Frees the slot (no submits in Slice 4). */
+  /**
+   * Give up your seat (`task:leave`). Only before your first submission: afterwards,
+   * withdrawing is the requester's call (they retire the submission).
+   */
   async leave(taskId: string, userId: string): Promise<TaskView> {
     await this.loadActiveTask(taskId);
     const view = await this.prisma.$transaction(async (tx) => {
-      // Lock the task so the claim_left event_seq computation can't race a sibling.
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
       const slot = await tx.taskClaimant.findUnique({
         where: { taskId_userId: { taskId, userId } },
-        select: { id: true, leftAt: true },
+        select: { id: true, leftAt: true, joinedAt: true },
       });
       if (!slot || slot.leftAt !== null) {
         throw new ConflictError('NOT_CLAIMED', 'You do not hold a slot on this task');
+      }
+      if ((await this.tenureSubmissions(tx, taskId, userId, slot.joinedAt)).length > 0) {
+        throw new ConflictError(
+          'SUBMITTED_CANNOT_LEAVE',
+          'You cannot leave after submitting; the requester can retire your submission',
+        );
       }
       await tx.taskClaimant.update({
         where: { id: slot.id },
@@ -575,8 +584,9 @@ export class TasksService {
 
   /**
    * Requester claim management (`task:manage_claims`): change the opening count
-   * and/or close the task to new claims. Adding openings is blocked when the division
-   * has `openings_locked`. Openings may not drop below the active claimant count.
+   * and/or close the task to new claims. A division's `openings_locked` blocks adding
+   * openings, not removing them. Openings stay at least 1 and at least the number of
+   * seated claimants.
    */
   async manageClaims(
     taskId: string,
@@ -584,6 +594,7 @@ export class TasksService {
     dto: ManageClaimsDto,
   ): Promise<TaskView> {
     const task = await this.loadActiveTask(taskId);
+    this.assertNotCompleted(task);
     const view = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
 
@@ -594,15 +605,15 @@ export class TasksService {
           where: { id: task.divisionId },
           select: { openingsLocked: true },
         });
-        if (division.openingsLocked) {
+        if (division.openingsLocked && dto.openingsDelta > 0) {
           throw new ConflictError('OPENINGS_LOCKED', 'Openings are locked for this division');
         }
         const activeCount = await tx.taskClaimant.count({
           where: { taskId, leftAt: null },
         });
         const newOpenings = task.openings + dto.openingsDelta;
-        if (newOpenings < 0) {
-          throw new ConflictError('INVALID_OPENINGS', 'Openings cannot be negative');
+        if (newOpenings < 1) {
+          throw new ConflictError('INVALID_OPENINGS', 'A task needs at least one opening');
         }
         if (newOpenings < activeCount) {
           throw new ConflictError(
@@ -657,34 +668,51 @@ export class TasksService {
   }
 
   /**
-   * Manually complete a task (`task:complete`, the **Manual Complete** bypass): force
-   * `status_cache` to `approved` regardless of slot/submission state. Outstanding
-   * submissions are left in place (the UI surfaces them as no longer required). Emits a
-   * system message + activity row.
+   * Complete a task (`task:complete`). Completion is a terminal fact: it closes claims,
+   * marks outstanding submissions as no longer required, and makes the task `approved`
+   * for good. Seated claimants are notified.
    */
   async complete(taskId: string, actorUserId: string): Promise<TaskView> {
-    await this.loadActiveTask(taskId);
+    const task = await this.loadActiveTask(taskId);
+    if (task.completedAt) throw new ConflictError('ALREADY_COMPLETED', 'The task is already complete');
     const view = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.task.update({
-        where: { id: taskId },
-        data: { statusCache: StatusCache.approved, version: { increment: 1 } },
-        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
+      await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
+      const { count: notRequired } = await tx.submission.updateMany({
+        where: {
+          taskId,
+          lifecycleState: LifecycleState.active,
+          state: { in: [SubmissionState.review, SubmissionState.revising] },
+        },
+        data: { state: SubmissionState.not_required, version: { increment: 1 } },
       });
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          completedAt: new Date(),
+          completedBy: actorUserId,
+          claimsClosed: true,
+          version: { increment: 1 },
+        },
+      });
+      const status = await this.recomputeStatus(tx, taskId);
       await this.activity.logActivity({
         tx,
         actorUserId,
         subjectType: 'task',
         subjectId: taskId,
         verb: 'task.completed',
-        payload: { taskId, statusCache: StatusCache.approved },
+        payload: { taskId, statusCache: status, submissionsNotRequired: notRequired },
       });
-      // Notify the active claimants their work is accepted.
       await this.events.record(tx, {
         type: 'task.completed',
         taskId,
         actorUserId,
         payload: {},
         notify: { type: 'task.completed', recipients: await this.notifications.activeClaimantIds(tx, taskId) },
+      });
+      const row = await tx.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: { claimants: { where: { leftAt: null }, select: { userId: true } } },
       });
       return this.toView(row);
     });
@@ -693,9 +721,9 @@ export class TasksService {
   }
 
   /**
-   * Admin eviction (`task:manage_claims`): remove a specific claimant from their slot,
-   * leaving the opening available for someone else. Mirrors `leave()` but targets any
-   * named user rather than the caller themselves.
+   * Evict a claimant (`task:manage_claims`). Always allowed. Their submissions from
+   * this tenure stay as a record but are treated as rejected (no resubmission, out of
+   * the roll-up); the seat opens, and the evicted user is told.
    */
   async removeClaimant(
     taskId: string,
@@ -707,10 +735,18 @@ export class TasksService {
       await tx.$queryRaw`SELECT id FROM task WHERE id = ${taskId}::uuid FOR UPDATE`;
       const slot = await tx.taskClaimant.findUnique({
         where: { taskId_userId: { taskId, userId: targetUserId } },
-        select: { id: true, leftAt: true },
+        select: { id: true, leftAt: true, joinedAt: true },
       });
       if (!slot || slot.leftAt !== null) {
         throw new NotFoundError('CLAIMANT_NOT_FOUND', 'User does not hold a slot on this task');
+      }
+      const work = await this.tenureSubmissions(tx, taskId, targetUserId, slot.joinedAt);
+      const set = work.filter((w) => w.state !== SubmissionState.rejected).map((w) => w.id);
+      if (set.length > 0) {
+        await tx.submission.updateMany({
+          where: { id: { in: set } },
+          data: { state: SubmissionState.rejected, version: { increment: 1 } },
+        });
       }
       await tx.taskClaimant.update({
         where: { id: slot.id },
@@ -723,14 +759,14 @@ export class TasksService {
         subjectType: 'task',
         subjectId: taskId,
         verb: 'task.claimant_removed',
-        payload: { taskId, removedUserId: targetUserId, statusCache: status },
+        payload: { taskId, removedUserId: targetUserId, statusCache: status, submissionsRejected: set },
       });
       // An eviction, recorded as one, and the evicted user is told (D17).
       await this.events.record(tx, {
         type: 'task.claimant_evicted',
         taskId,
         actorUserId,
-        payload: { userId: targetUserId },
+        payload: { userId: targetUserId, submissionIds: set },
         notify: { type: 'task.claim_evicted', recipients: [targetUserId] },
       });
       const row = await tx.task.findUniqueOrThrow({

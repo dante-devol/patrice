@@ -47,6 +47,10 @@ export const attachmentTaskResource: ResourceResolver = (req, prisma) =>
 /** `:id` is a division. */
 export const divisionResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).division(param(req));
 /** `:id` is a team. */
+/** A library template's division (templates are authorized on their division). */
+export const requestTemplateDivisionResource: ResourceResolver = (req, prisma) =>
+  new EntityLoader(prisma).requestTemplateDivision(param(req));
+
 export const teamResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).team(param(req));
 /** `:id` is a user. */
 export const userResource: ResourceResolver = (req, prisma) => new EntityLoader(prisma).user(param(req));

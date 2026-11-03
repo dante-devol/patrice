@@ -196,6 +196,18 @@ export function staticPolicies(opts: StaticPolicyOptions): string[] {
       )}, resource) when { resource has owner && resource.owner == principal };`,
   );
 
+  // Custom templates are open to any requester in divisions that allow them. A grant
+  // of `task:compose_template` permits it anyway; a forbid still blocks both.
+  if (opts.registeredActions.includes('task:compose_template')) {
+    policies.push(
+      `@id("static_custom_templates")
+` +
+        `permit(principal, action == ${actionRef(
+          'task:compose_template',
+        )}, resource) when { resource has allowCustomTemplates && resource.allowCustomTemplates };`,
+    );
+  }
+
   // Self-review forbid: when self-review is disabled, a requester may not review a
   // submission they authored. The `task:review` resource carries `claimant` (the
   // reviewed submission's author), so the forbid fires only on their own work.

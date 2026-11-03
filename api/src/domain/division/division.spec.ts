@@ -16,7 +16,7 @@ describe('Division', () => {
   it('creates with defaults and raises a creation event', () => {
     const d = Division.create('  Writing  ');
     expect(d.name).toBe('Writing');
-    expect(d.settings).toEqual({ defaultOpenings: 1, openingsLocked: false, restrictClaims: false });
+    expect(d.settings).toEqual({ defaultOpenings: 1, openingsLocked: false, restrictClaims: false, allowCustomTemplates: false });
     expect(d.pullEvents().map((e) => e.type)).toEqual(['division.created']);
     expect(d.pullEvents()).toEqual([]);
   });
@@ -24,6 +24,7 @@ describe('Division', () => {
   it('rejects an empty name and out-of-range openings', () => {
     expect(codeOf(() => Division.create('   '))).toBe('VALIDATION_FAILED');
     expect(codeOf(() => Division.create('Art', { defaultOpenings: -1 }))).toBe('VALIDATION_FAILED');
+    expect(codeOf(() => Division.create('Art', { defaultOpenings: 0 }))).toBe('VALIDATION_FAILED');
     const d = Division.create('Art');
     expect(codeOf(() => d.update({ defaultOpenings: 1.5 }))).toBe('VALIDATION_FAILED');
   });
@@ -32,7 +33,7 @@ describe('Division', () => {
     const d = Division.create('Art', { restrictClaims: true, defaultOpenings: 3 });
     d.update({ name: 'Visual Art' });
     expect(d.name).toBe('Visual Art');
-    expect(d.settings).toEqual({ defaultOpenings: 3, openingsLocked: false, restrictClaims: true });
+    expect(d.settings).toEqual({ defaultOpenings: 3, openingsLocked: false, restrictClaims: true, allowCustomTemplates: false });
   });
 
   it('retire and revive enforce the grace window; a retired division is read-only', () => {

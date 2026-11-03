@@ -1,52 +1,68 @@
-import { Body, Controller, Get, Param, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { ZodValidationPipe } from '../common/zod.pipe';
-import { NotFoundError } from '../common/errors';
-import { Authorize, divisionResource } from '../access/authorize.decorator';
+import { Authorize, divisionResource, requestTemplateDivisionResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { RequestTemplatesService } from './request-templates.service';
 import {
-  putRequestTemplateSchema,
-  type PutRequestTemplateDto,
+  createRequestTemplateSchema,
+  updateRequestTemplateSchema,
+  type CreateRequestTemplateDto,
+  type UpdateRequestTemplateDto,
 } from './request-templates.dto';
 import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
 import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
 /**
- * Division default request template endpoints (Slice 3). GET is a read (ungated per
- * §2.3 — authenticated only); PUT is gated `division:update` against the *division*
- * resource, so a `specific_division`-scoped admin can edit only their own division.
+ * A division's request template library. Every action is a Cedar decision on the
+ * template's division, so a division admin can be scoped to their own library.
  */
-@Controller('divisions')
+@Controller()
 export class RequestTemplatesController {
   constructor(private readonly requestTemplates: RequestTemplatesService) {}
 
-  @Contract(ROUTES.getDivisionTemplate)
-  @Get(':id/request-template')
+  @Contract(ROUTES.listDivisionTemplates)
+  @Get('divisions/:id/request-templates')
   @Authorize(ACTIONS.requestTemplateRead.action, divisionResource)
-  async get(@Param('id') id: string) {
-    const rt = await this.requestTemplates.getForDivision(id);
-    if (!rt) {
-      throw new NotFoundError(
-        'REQUEST_TEMPLATE_NOT_FOUND',
-        'This division has no request template',
-      );
-    }
-    return rt;
+  list(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.requestTemplates.listForDivision(id, user.id);
   }
 
-  @Contract(ROUTES.putDivisionTemplate)
-  @Put(':id/request-template')
-  @Authorize(ACTIONS.divisionUpdate.action, divisionResource)
-  async put(
+  @Contract(ROUTES.createDivisionTemplate)
+  @Post('divisions/:id/request-templates')
+  @HttpCode(201)
+  @Authorize(ACTIONS.requestTemplateCreate.action, divisionResource)
+  create(
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(putRequestTemplateSchema)) body: PutRequestTemplateDto,
+    @Body(new ZodValidationPipe(createRequestTemplateSchema)) body: CreateRequestTemplateDto,
     @CurrentUser() user: CurrentUserRef,
   ) {
-    return this.requestTemplates.putForDivision(
-      id,
-      user.id,
-      body,
-    );
+    return this.requestTemplates.create(id, user.id, body);
+  }
+
+  @Contract(ROUTES.getRequestTemplate)
+  @Get('request-templates/:id')
+  @Authorize(ACTIONS.requestTemplateRead.action, requestTemplateDivisionResource)
+  get(@Param('id') id: string) {
+    return this.requestTemplates.get(id);
+  }
+
+  @Contract(ROUTES.updateRequestTemplate)
+  @Patch('request-templates/:id')
+  @Authorize(ACTIONS.requestTemplateUpdate.action, requestTemplateDivisionResource)
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateRequestTemplateSchema)) body: UpdateRequestTemplateDto,
+    @CurrentUser() user: CurrentUserRef,
+  ) {
+    return this.requestTemplates.update(id, user.id, body);
+  }
+
+  @Contract(ROUTES.deleteRequestTemplate)
+  @Delete('request-templates/:id')
+  @HttpCode(204)
+  @Authorize(ACTIONS.requestTemplateDelete.action, requestTemplateDivisionResource)
+  async delete(@Param('id') id: string, @CurrentUser() user: CurrentUserRef): Promise<void> {
+    await this.requestTemplates.delete(id, user.id);
   }
 }

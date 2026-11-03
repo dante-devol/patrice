@@ -32,7 +32,7 @@ describe('Lifecycle, events and GC', () => {
     admin = await bootstrapAdmin(booted);
     prisma = new PrismaClient();
     divisionId = (await auth(http().post('/api/divisions')).send({ name: 'Work' })).body.id;
-    await auth(http().put(`/api/divisions/${divisionId}/request-template`)).send({ questions: [] });
+    await auth(http().post(`/api/divisions/${divisionId}/request-templates`)).send({ name: 'Default', isDefault: true, questions: [] });
     // Collect anything retired immediately.
     await auth(http().patch('/api/config')).send({ gracePeriodHours: 0 });
   });
@@ -44,7 +44,7 @@ describe('Lifecycle, events and GC', () => {
 
   it("a retired task's thread and timeline stay readable during grace (D15)", async () => {
     await auth(http().patch('/api/config')).send({ gracePeriodHours: 24 });
-    const taskId = (await auth(http().post('/api/tasks')).send({ name: 'Old', divisionId })).body.id;
+    const taskId = (await auth(http().post('/api/tasks')).send({ name: 'Old', divisionId, template: { kind: 'default' } })).body.id;
     await auth(http().post(`/api/tasks/${taskId}/messages`)).send({ body: 'context' });
     await auth(http().post(`/api/tasks/${taskId}/retire`));
 
@@ -78,7 +78,7 @@ describe('Lifecycle, events and GC', () => {
     await prisma.externalIdentity.create({
       data: { userId, connectionId: conn.id, externalUserId: '43', externalHandle: 'secret-handle' },
     });
-    const taskId = (await auth(http().post('/api/tasks')).send({ name: 'Theirs', divisionId })).body.id;
+    const taskId = (await auth(http().post('/api/tasks')).send({ name: 'Theirs', divisionId, template: { kind: 'default' } })).body.id;
     await prisma.message.create({ data: { taskId, senderUserId: userId, body: 'authored' } });
     await auth(http().post(`/api/users/${userId}/retire`));
     const sweep = await auth(http().post('/api/gc/sweep'));

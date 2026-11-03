@@ -102,6 +102,17 @@ describe('validateSubmission', () => {
     expect(result).toEqual({ ok: true });
   });
 
+  it('a file over maxBytes → file_too_large', async () => {
+    const qn = requestTemplate([
+      { id: 'file', ordinal: 0, type: 'attachment', prompt: 'Small', required: true, constraints: { allowedTypes: [], maxBytes: 10 } },
+    ]);
+    const lookup = stubLookup({ big: { contentType: 'text/plain', kind: 'text', byteSize: 11 } });
+    const result = await validateSubmission(qn, [{ questionId: 'file', attachmentIds: ['big'] }], lookup);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.map((e) => e.code)).toEqual(['file_too_large']);
+  });
+
   it('missing attachment → attachment_not_found', async () => {
     const qn = requestTemplate([
       { id: 'file', ordinal: 0, type: 'attachment', prompt: 'File', required: true, constraints: { allowedTypes: [] } },

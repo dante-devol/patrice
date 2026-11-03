@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { LifecycleState } from '@prisma/client';
@@ -9,17 +10,16 @@ import { ActivityService } from '../activity/activity.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 import { STORAGE_PORT, StoragePort } from '../storage/storage.port';
 import { attachmentKindFor } from './attachment-kind';
+import type { SpooledFile } from './hashing-temp-storage';
 
-export interface UploadFile {
-  originalname: string;
-  mimetype: string;
-  size: number;
-  buffer: Buffer;
-}
+/** Where an upload goes: onto an existing message, or pending on a task. */
+export type UploadTarget = { kind: 'message'; messageId: string } | { kind: 'pending'; taskId: string };
 
 export interface AttachmentMetaView {
   id: string;
+  taskId: string;
   messageId: string | null;
+  answerId: string | null;
   filename: string;
   contentType: string;
   byteSize: number;
@@ -36,10 +36,11 @@ export interface DownloadTarget {
 }
 
 /**
- * Attachments (Slice 4.3). Upload streams the file into the configured StoragePort
- * and records metadata against an **existing** message (the exactly-one-owner CHECK
- * requires the owner at insert). Download is ungated in v1 — served by a pre-signed
- * URL (S3) or by streaming the blob (local-fs).
+ * Attachments. An upload streams (already spooled and hashed by the multipart layer)
+ * into the StoragePort and lands either on an existing message or **pending** on a
+ * task: owned by its uploader and attached to nothing until their own submit claims
+ * it for an answer. Unclaimed pending uploads are collected by the GC. Downloads are
+ * a pre-signed URL (S3) or a streamed blob (local-fs).
  */
 @Injectable()
 export class AttachmentsService {
@@ -54,7 +55,9 @@ export class AttachmentsService {
 
   private toMeta(a: {
     id: string;
+    taskId: string;
     messageId: string | null;
+    answerId: string | null;
     filename: string;
     contentType: string;
     byteSize: bigint;
@@ -65,7 +68,9 @@ export class AttachmentsService {
   }): AttachmentMetaView {
     return {
       id: a.id,
+      taskId: a.taskId,
       messageId: a.messageId,
+      answerId: a.answerId,
       filename: a.filename,
       contentType: a.contentType,
       byteSize: Number(a.byteSize),
@@ -76,65 +81,78 @@ export class AttachmentsService {
     };
   }
 
-  async upload(
-    messageId: string,
-    uploaderUserId: string,
-    file: UploadFile | undefined,
-  ): Promise<AttachmentMetaView> {
+  async upload(target: UploadTarget, uploaderUserId: string, file: SpooledFile | undefined): Promise<AttachmentMetaView> {
     if (!file) {
       throw new UnprocessableError('NO_FILE', 'A file is required');
     }
-    if (file.size > this.env.ATTACHMENT_MAX_BYTES) {
-      throw new UnprocessableError(
-        'FILE_TOO_LARGE',
-        `File exceeds the ${this.env.ATTACHMENT_MAX_BYTES}-byte limit`,
-      );
-    }
-
-    const message = await this.prisma.message.findUnique({
-      where: { id: messageId },
-      select: { id: true, deletedAt: true, task: { select: { lifecycleState: true } } },
-    });
-    if (!message || message.deletedAt) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
-    if (message.task.lifecycleState === LifecycleState.retired) {
-      throw new ConflictError('TASK_RETIRED', 'Task is retired');
-    }
-
-    const storageKey = `attachments/${uuidv7()}`;
-    const checksum = createHash('sha256').update(file.buffer).digest('hex');
-
-    await this.storage.put(storageKey, file.buffer, file.mimetype);
-
     try {
-      const created = await this.prisma.$transaction(async (tx) => {
-        const attachment = await tx.attachment.create({
-          data: {
-            messageId,
-            uploaderUserId,
-            storageKey,
-            filename: file.originalname,
-            contentType: file.mimetype,
-            byteSize: BigInt(file.size),
-            kind: attachmentKindFor(file.mimetype),
-            checksum,
-          },
+      if (file.size > this.env.ATTACHMENT_MAX_BYTES) {
+        throw new UnprocessableError(
+          'FILE_TOO_LARGE',
+          `File exceeds the ${this.env.ATTACHMENT_MAX_BYTES}-byte limit`,
+        );
+      }
+      const taskId = await this.targetTask(target);
+      const storageKey = `attachments/${uuidv7()}`;
+      await this.storage.put(storageKey, createReadStream(file.path), file.mimetype, file.size);
+      try {
+        const created = await this.prisma.$transaction(async (tx) => {
+          const messageId = target.kind === 'message' ? target.messageId : null;
+          const attachment = await tx.attachment.create({
+            data: {
+              taskId,
+              messageId,
+              uploaderUserId,
+              storageKey,
+              filename: file.originalname,
+              contentType: file.mimetype,
+              byteSize: BigInt(file.size),
+              kind: attachmentKindFor(file.mimetype),
+              checksum: file.checksum,
+            },
+          });
+          await this.activity.logActivity({
+            tx,
+            actorUserId: uploaderUserId,
+            subjectType: 'attachment',
+            subjectId: attachment.id,
+            verb: 'attachment.created',
+            payload: { attachmentId: attachment.id, taskId, messageId },
+          });
+          return attachment;
         });
-        await this.activity.logActivity({
-          tx,
-          actorUserId: uploaderUserId,
-          subjectType: 'attachment',
-          subjectId: attachment.id,
-          verb: 'attachment.created',
-          payload: { attachmentId: attachment.id, messageId },
-        });
-        return attachment;
-      });
-      return this.toMeta(created);
-    } catch (err) {
-      // The row didn't land — don't leak the orphaned blob.
-      await this.storage.delete(storageKey).catch(() => undefined);
-      throw err;
+        return this.toMeta(created);
+      } catch (err) {
+        // The row didn't land — don't leak the orphaned blob.
+        await this.storage.delete(storageKey).catch(() => undefined);
+        throw err;
+      }
+    } finally {
+      await rm(file.path, { force: true });
     }
+  }
+
+  /** The task an upload lands on, refusing retired tasks and deleted messages. */
+  private async targetTask(target: UploadTarget): Promise<string> {
+    if (target.kind === 'message') {
+      const message = await this.prisma.message.findUnique({
+        where: { id: target.messageId },
+        select: { deletedAt: true, task: { select: { id: true, lifecycleState: true } } },
+      });
+      if (!message || message.deletedAt) throw new NotFoundError('MESSAGE_NOT_FOUND', 'Message not found');
+      if (message.task.lifecycleState === LifecycleState.retired) {
+        throw new ConflictError('TASK_RETIRED', 'Task is retired');
+      }
+      return message.task.id;
+    }
+    const task = await this.prisma.task.findUnique({
+      where: { id: target.taskId },
+      select: { lifecycleState: true, completedAt: true },
+    });
+    if (!task) throw new NotFoundError('TASK_NOT_FOUND', 'Task not found');
+    if (task.lifecycleState === LifecycleState.retired) throw new ConflictError('TASK_RETIRED', 'Task is retired');
+    if (task.completedAt) throw new ConflictError('TASK_COMPLETED', 'The task is complete');
+    return target.taskId;
   }
 
   /**
@@ -144,15 +162,10 @@ export class AttachmentsService {
   async delete(id: string, actorUserId: string): Promise<void> {
     const att = await this.prisma.attachment.findUnique({
       where: { id },
-      select: {
-        id: true,
-        storageKey: true,
-        message: { select: { taskId: true } },
-        answer: { select: { submission: { select: { taskId: true } } } },
-      },
+      select: { id: true, storageKey: true, taskId: true },
     });
-    const taskId = att?.message?.taskId ?? att?.answer?.submission.taskId;
-    if (!att || !taskId) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
+    if (!att) throw new NotFoundError('ATTACHMENT_NOT_FOUND', 'Attachment not found');
+    const taskId = att.taskId;
     await this.prisma.$transaction(async (tx) => {
       await tx.attachment.delete({ where: { id } });
       await this.activity.logActivity({

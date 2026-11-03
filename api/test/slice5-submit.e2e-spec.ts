@@ -32,7 +32,7 @@ describe('Slice 5.1 — Submit, validation, request template lock', () => {
     const writing = await auth(http().post('/api/divisions')).send({ name: 'Writing' });
     writingId = writing.body.id;
     // A required Detail-Text + an optional Numeric (range 1..10) to exercise validation.
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [
         { type: 'detail_text', prompt: 'Body', required: true, constraints: { minChars: 3 } },
         { type: 'numeric', prompt: 'Rating', required: false, constraints: { kind: 'integer', min: 1, max: 10 } },
@@ -67,7 +67,7 @@ describe('Slice 5.1 — Submit, validation, request template lock', () => {
   const as = (s: AdminSession) => (r: request.Test) => r.set('Cookie', s.cookies).set('x-csrf-token', s.csrf);
 
   async function makeClaimedTask(): Promise<{ taskId: string; questionIds: string[] }> {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId, template: { kind: 'default' } });
     const taskId = res.body.id;
     await as(claimer.session)(http().post(`/api/tasks/${taskId}/claim`));
     const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
@@ -75,7 +75,7 @@ describe('Slice 5.1 — Submit, validation, request template lock', () => {
   }
 
   it('a non-claimant cannot submit (Cedar 403 — own_as_claimant)', async () => {
-    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId });
+    const res = await auth(http().post('/api/tasks')).send({ name: 'T', divisionId: writingId, template: { kind: 'default' } });
     const taskId = res.body.id;
     const qn = await auth(http().get(`/api/tasks/${taskId}/request-template`));
     // claimer holds no slot here → own_as_claimant doesn't match.

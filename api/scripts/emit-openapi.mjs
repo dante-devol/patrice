@@ -1,10 +1,11 @@
-// Regenerates api/openapi.json from the contract (src/contract), then the web client's
+// Regenerates api/openapi.json from the contract (src/contract) and the web's copy of
+// the shared answer validator, then the web client's
 // types from it. Cross-platform: sets the env var for the Jest run that writes the file.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const opts = { stdio: 'inherit', shell: true };
-const jest = spawnSync('npx jest src/contract/openapi.spec.ts', {
+const jest = spawnSync('npx jest src/contract/openapi.spec.ts src/request-templates/shared-validator.spec.ts', {
   ...opts,
   env: { ...process.env, UPDATE_OPENAPI: '1' },
 });

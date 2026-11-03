@@ -38,7 +38,7 @@ describe('Messages, attachments and the task timeline', () => {
     prisma = new PrismaClient();
 
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    await auth(http().put(`/api/divisions/${writingId}/request-template`)).send({
+    await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({ name: 'Default', isDefault: true,
       questions: [{ type: 'text', prompt: 'T', required: false, constraints: {} }],
     });
 
@@ -60,7 +60,7 @@ describe('Messages, attachments and the task timeline', () => {
     await auth(http().post('/api/grants')).send({ roleId: claimerRole.body.id, action: 'task:leave', scopeKind: 'own' });
     claimer = await inviteAndAccept(booted, admin, { email: 'claimer@example.com', intendedRoleIds: [claimerRole.body.id] });
 
-    taskId = (await auth(http().post('/api/tasks')).send({ name: 'Thread host', divisionId: writingId })).body.id;
+    taskId = (await auth(http().post('/api/tasks')).send({ name: 'Thread host', divisionId: writingId, template: { kind: 'default' } })).body.id;
   });
 
   afterAll(async () => {
@@ -205,7 +205,7 @@ describe('Messages, attachments and the task timeline', () => {
     const timeline = async (t: string) => (await auth(http().get(`/api/tasks/${t}/timeline`))).body;
 
     it('records a typed claim event, and the thread holds only comments', async () => {
-      const t = (await auth(http().post('/api/tasks')).send({ name: 'Claim me', divisionId: writingId })).body.id;
+      const t = (await auth(http().post('/api/tasks')).send({ name: 'Claim me', divisionId: writingId, template: { kind: 'default' } })).body.id;
       await as(claimer.session)(http().post(`/api/tasks/${t}/claim`));
       const events = await timeline(t);
       expect(events.map((e: { type: string }) => e.type)).toEqual(['task.created', 'task.claimed']);
@@ -214,7 +214,7 @@ describe('Messages, attachments and the task timeline', () => {
     });
 
     it('records claim then leave', async () => {
-      const t = (await auth(http().post('/api/tasks')).send({ name: 'Leave me', divisionId: writingId })).body.id;
+      const t = (await auth(http().post('/api/tasks')).send({ name: 'Leave me', divisionId: writingId, template: { kind: 'default' } })).body.id;
       await as(claimer.session)(http().post(`/api/tasks/${t}/claim`));
       await as(claimer.session)(http().post(`/api/tasks/${t}/leave`));
       expect((await timeline(t)).map((e: { type: string }) => e.type)).toEqual([
@@ -225,7 +225,7 @@ describe('Messages, attachments and the task timeline', () => {
     });
 
     it('records a requester change with both ends', async () => {
-      const t = (await auth(http().post('/api/tasks')).send({ name: 'Reassign', divisionId: writingId })).body.id;
+      const t = (await auth(http().post('/api/tasks')).send({ name: 'Reassign', divisionId: writingId, template: { kind: 'default' } })).body.id;
       await auth(http().post(`/api/tasks/${t}/requester`)).send({ userId: claimer.userId });
       const change = (await timeline(t)).find((e: { type: string }) => e.type === 'task.requester_changed');
       expect(change.payload.toUserId).toBe(claimer.userId);
