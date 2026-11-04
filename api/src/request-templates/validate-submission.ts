@@ -12,13 +12,13 @@ import {
 } from './request-template.types';
 
 /**
- * `validateSubmission` — the **pure** answer-validation function (Slice 3). It checks
+ * `validateSubmission` — the **pure** answer-validation function. It checks
  * a set of answers against a request template's question constraints and returns a
  * structured error list (never throws on invalid data). Storage is reached only via
- * the injected `AttachmentLookupPort`, so it is unit-testable with a synthetic stub
- * and reused verbatim by Slice 5's `task:submit`.
+ * the injected `AttachmentLookupPort`, so it is unit-testable with a stub. The API
+ * runs it on `task:submit`; the web runs the same code before submitting.
  *
- * Rules (docs/slices/03-questionnaires.md): every `required` question must be
+ * Rules: every `required` question must be
  * answered; each answer must match its type + constraints; an attachment answer must
  * reference an allowed-type attachment. A non-required, unanswered question is fine.
  */

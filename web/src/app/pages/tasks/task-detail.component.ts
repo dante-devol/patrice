@@ -36,7 +36,7 @@ interface ClaimRow {
 }
 
 /**
- * Task detail (Slice 4–5, ui-tailwind). Unified-History main column with inline-editable
+ * Task detail. Unified-History main column with inline-editable
  * title and description, sticky rail with restructured claim strip (Close Claims button,
  * per-slot Claim/Leave icon buttons), facts rail with searchable requester combobox, and
  * a Mark Complete split-button below the Request Template panel. Submit Work is a large

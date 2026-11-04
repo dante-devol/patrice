@@ -21,7 +21,7 @@ type Tab =
   | 'invitations'
   | 'integrations';
 
-/** Admin-area shell (Slice 2). Tabbed host over the dumb editor components. */
+/** Admin-area shell. Tabbed host over the dumb editor components. */
 @Component({
   standalone: true,
   imports: [

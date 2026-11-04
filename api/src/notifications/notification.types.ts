@@ -1,5 +1,5 @@
 /**
- * Notification verb catalog + the recipient matrix (Slice 6, docs/slices/06-notifications.md).
+ * Notification verb catalog + the recipient matrix .
  *
  * `type` is the fixed v1 enumeration. It is stored as free text (no DB enum) so the
  * set can grow without a migration, but the closed union below is the source of truth

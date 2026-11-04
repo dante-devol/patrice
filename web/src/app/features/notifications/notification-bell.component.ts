@@ -6,7 +6,7 @@ import { LookupStore } from '../../core/lookup.store';
 import { Notification } from '../../core/api.types';
 
 /**
- * Header notification bell (Slice 6 web). Shows the live unread badge from
+ * Header notification bell. Shows the live unread badge from
  * {@link NotificationStore} and a dropdown feed; clicking an item marks it read and
  * navigates to its task. Labels join ids to names via {@link LookupStore} — the
  * payload itself is IDs-only (no PII rides the wire).

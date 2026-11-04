@@ -12,10 +12,10 @@ import {
 } from './helpers';
 
 /**
- * Slice 8 — Integrations (Discord): connection CRUD, account linking, role mapping,
+ * Integrations (Discord): connection CRUD, account linking, role mapping,
  * sync trigger, GC extension, requireDiscordLink gate, auth isolation.
  */
-describe('Slice 8 — Integrations', () => {
+describe('Integrations', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

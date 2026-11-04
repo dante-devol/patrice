@@ -1,5 +1,7 @@
 # Patrice: The Existing Architecture
 
+> **Historical.** This describes Patrice *before* the redesign (November 2026) and is kept for the record; the line references point at code that has since changed. For the system as it is now, see [architecture.md](architecture.md), the ADRs in [adr/](adr/) and the [redesign plan](redesign-plan.md).
+
 > **What this is.** A description of Patrice **as the code actually builds it**, written as groundwork for a redesign. It was put together only from the source, the schema, the migrations, the deploy files and code comments. The earlier design documents (now in [`docs/old/`](old/)) were deliberately not used.
 >
 > **What this is not.** A judgement. The problems, risks and failings are in the companion document, [current-design-problems.md](current-design-problems.md). Whether each design decision has a strong use case is graded in [current-design-decisions.md](current-design-decisions.md). How the code compares with the original design docs, and the direction decided for the redesign, is in [intent-vs-reality.md](intent-vs-reality.md). The resulting work is ordered in [redesign-plan.md](redesign-plan.md). This document describes the design and says what it assumes and what it limits. It doesn't argue about whether those choices were right.

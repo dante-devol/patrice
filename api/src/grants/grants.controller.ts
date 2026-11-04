@@ -25,7 +25,7 @@ import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
 import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
-/** Permission-matrix surface (Slice 2.3). Governance-scoped → `orgResource`. */
+/** Permission-matrix surface. Governance-scoped → `orgResource`. */
 @Controller()
 export class GrantsController {
   constructor(private readonly grants: GrantsService) {}

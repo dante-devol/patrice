@@ -37,7 +37,7 @@ export function isChoiceType(t: QuestionType): boolean {
  * from the presentational renderer. **Authoring** builds a `FormArray` of
  * question-definition groups (one flat group per question, all constraint controls
  * present; `serialize` emits only the keys relevant to a question's type).
- * **Answer** mode (Slice 5) maps a request template's questions to value controls with
+ * **Answer** mode maps a request template's questions to value controls with
  * the per-type validators. Holds no component state, so it is unit-testable headless.
  */
 @Injectable({ providedIn: 'root' })
@@ -132,7 +132,7 @@ export class RequestTemplateFormService {
     return prune({ allowedTypes, maxFiles: num('maxFiles') });
   }
 
-  // ---- Answer mode (consumed by Slice 5; renderer proves all 7 here) -------
+  // ---- Answer mode ---------------------------------------------------------
 
   /** A FormGroup keyed by question id, each control carrying its type validators. */
   answerForm(questions: Question[]): FormGroup {

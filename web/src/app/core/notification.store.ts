@@ -11,7 +11,7 @@ import { AuthStore } from './auth.store';
 import { Notification } from './api.types';
 
 /**
- * Live notifications (Slice 6 web). An `EventSource` on `/api/notifications/stream`
+ * Live notifications. An `EventSource` on `/api/notifications/stream`
  * carries content-free **sync** pings; on each ping (and on connect/reconnect) the
  * store **reconciles** by pulling the durable rows from `GET /notifications` — the
  * stream never carries payloads, so the table is always the source of truth. Exposes

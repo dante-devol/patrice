@@ -13,7 +13,7 @@ import { stampLabel, stampStatus } from './task-presentation';
 const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approved'];
 
 /**
- * Tasks "work board" (Slice 4). The faceted list — division and status switchers, a team
+ * Tasks "work board". The faceted list — division and status switchers, a team
  * filter — over keyset "load more" paging. Tasks sit as rows on one ruled sheet
  * (`task-row`, see web/DESIGN.md). "Request a task" reveals the inline create form (a task
  * is created by its requester). The API re-authorizes every create.

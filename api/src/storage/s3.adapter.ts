@@ -22,7 +22,7 @@ export interface S3Config {
 }
 
 /**
- * S3-compatible storage driver (Slice 4.3) — AWS S3 or MinIO. The production default:
+ * S3-compatible storage driver — AWS S3 or MinIO. The production default:
  * uploads stream to the bucket; downloads are served by a time-limited pre-signed URL
  * (so the API never proxies blob bytes), keeping multi-instance deployments correct.
  */

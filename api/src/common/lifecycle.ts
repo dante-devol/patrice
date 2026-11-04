@@ -21,7 +21,7 @@ export function isRevivable(row: RevivableRow, graceMs: number): boolean {
 }
 
 /**
- * The soft-retire default list filter (Slice 7.2): list queries exclude retired
+ * The soft-retire default list filter: list queries exclude retired
  * rows unless retired rows are explicitly opted in (`?include=retired`). Deactivated
  * rows stay visible — the filter targets *retired* only, so deactivated users remain
  * listable for reactivation. Returns a partial Prisma `where` fragment.

@@ -13,8 +13,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 2.4 — Membership, administrability invariant, org settings (issue #11). */
-describe('Slice 2.4 — Membership + administrability + config', () => {
+/** Membership, administrability invariant, org settings (issue #11). */
+describe('Membership + administrability + config', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;
@@ -250,7 +250,7 @@ describe('Slice 2.4 — Membership + administrability + config', () => {
       });
 
       // Self-review = reviewing a submission you AUTHORED, so the forbid keys off the
-      // reviewed submission's `claimant` (Slice 5), not the requester. This task carries
+      // reviewed submission's `claimant`, not the requester. This task carries
       // the reviewer as the claimant of the submission under review.
       const ownTask = {
         type: 'Task' as const,

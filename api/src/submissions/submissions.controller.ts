@@ -19,7 +19,7 @@ import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
 /**
- * Submission endpoints (Slice 5). `task:submit` is gated against the Task resource
+ * Submission endpoints. `task:submit` is gated against the Task resource
  * with the actor as `own_as_claimant`; reads are authenticated-only (§2.3). The
  * review/retire endpoints live on `/submissions/:id` in {@link SubmissionsReviewController}.
  */

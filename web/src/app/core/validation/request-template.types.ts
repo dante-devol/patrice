@@ -1,10 +1,8 @@
 // GENERATED from api/src/request-templates by `npm run contract:emit`. Do not edit.
 /**
- * Shared request template domain types (Slice 3). These mirror the `request_template`/
- * `question` schema and the per-type `constraints` jsonb shapes documented in
- * docs/slices/03-questionnaires.md. They are framework-free on purpose: the pure
- * `validateSubmission` (Slice 3, reused verbatim by Slice 5) and the API boundary
- * both speak this vocabulary.
+ * Request template domain types: questions and the per-type `constraints` shapes.
+ * Framework-free on purpose — the pure `validateSubmission` and the API boundary both
+ * speak this vocabulary, and the web keeps a generated copy (`contract:emit`).
  */
 
 export type QuestionType =
@@ -72,8 +70,8 @@ export interface RequestTemplateDef {
 /**
  * A single answer. Exactly one value field is populated per question type; an
  * absent/empty field is treated as "unanswered" by the validator. Kept as a flat
- * optional shape so synthetic answers are trivial to construct in tests (Slice 3)
- * and Slice 5 can map a submission row onto it without a discriminated wrapper.
+ * optional shape so answers are simple to build in tests and from a submission
+ * row, with no discriminated wrapper.
  */
 export interface Answer {
   questionId: string;
@@ -94,9 +92,9 @@ export interface AttachmentMeta {
 }
 
 /**
- * Port resolving an attachment id to its metadata (or null if absent). Slice 3
- * unit-tests with a synthetic stub; Slice 4 implements the storage-backed adapter;
- * Slice 5 wires it through `task:submit`. May be sync or async.
+ * Port resolving an attachment id to its metadata (or null if absent). The
+ * submit path resolves only the submitter's own pending uploads; tests use a stub.
+ * May be sync or async.
  */
 export type AttachmentLookupPort = (
   id: string,

@@ -22,9 +22,8 @@ export interface RoleView {
 }
 
 /**
- * Standalone-role CRUD + the retire ↔ revive state machine (Slice 2.1). Inherent
- * roles (`kind='division'|'team'`) are created/retired/revived through their parent
- * division/team (Slice 2.2) — direct lifecycle edits here are refused with 422.
+ * Role CRUD + the retire ↔ revive state machine. Roles carry no unit: belonging
+ * to a division or team is a membership.
  *
  * Retire/revive flip a role's `lifecycle_state`, which the access projector reads
  * (`role.lifecycleState='active'`), so each bumps `config_version` and drops the

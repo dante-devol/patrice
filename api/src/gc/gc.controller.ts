@@ -6,7 +6,7 @@ import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
 /**
- * GC admin surface (Slice 7.3). Gated by `config:update` — an Effective-Admin global
+ * GC admin surface. Gated by `config:update` — an Effective-Admin global
  * capability (the seeded Admin holds it). `/gc/sweep` runs the sweep immediately;
  * `/gc/sweep/dry-run` reports what it *would* collect without deleting anything.
  * (The scheduled run is the pg-boss job in {@link GcModule}; these are the manual hooks.)

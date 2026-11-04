@@ -2,9 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { avatarColor, initials } from './task-presentation';
 
 /**
- * A user avatar for the Tasks slice. Today it renders the initials fallback on a stable
- * per-user colour; once Slice 8 (Discord) lands, `imageUrl` carries the CDN avatar and
- * the initials become the load/empty fallback. An empty (`unclaimed`) state renders the
+ * A user avatar: the Discord CDN avatar when `imageUrl` is set, otherwise initials on a
+ * stable per-user colour. An empty (`unclaimed`) state renders the
  * dashed open-slot circle. Kept presentational — no data fetching.
  */
 @Component({

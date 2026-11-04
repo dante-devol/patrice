@@ -10,8 +10,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 7.3 — GC sweep: aggregate deletion, RESTRICT deferral, orphaned blobs (#30). */
-describe('Slice 7.3 — GC sweep', () => {
+/** GC sweep: aggregate deletion, RESTRICT deferral, orphaned blobs (#30). */
+describe('GC sweep', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

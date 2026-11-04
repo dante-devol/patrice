@@ -1,5 +1,7 @@
 # Patrice: Structural Problems in the Existing Design
 
+> **Historical.** This describes Patrice *before* the redesign (November 2026) and is kept for the record; the line references point at code that has since changed. For the system as it is now, see [architecture.md](architecture.md), the ADRs in [adr/](adr/) and the [redesign plan](redesign-plan.md).
+
 > **Companion to [current-architecture.md](current-architecture.md).** That document describes what exists. This one lists what is wrong with it: structural failings, defects found while mapping the code, and the root causes behind them. A third document, [current-design-decisions.md](current-design-decisions.md), grades every design decision by whether it has a strong use case. Like the other two, this one was written only from the source code, with no reference to the old design documents. It was updated after a second, API-focused sweep (D19–D27). [intent-vs-reality.md](intent-vs-reality.md) compares all of this against the old design docs and records the owner's direction decisions; where it marks something as intended, that takes precedence over the framing here.
 >
 > Snapshot: `main` at `c322ae2` (November 2026). Every item here is assigned to a phase in [redesign-plan.md](redesign-plan.md) §6.

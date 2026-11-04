@@ -11,8 +11,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 5.2 — task:review (approve/return/reject), state-machine + version guard, min-rule (#22). */
-describe('Slice 5.2 — Review lifecycle', () => {
+/** task:review (approve/return/reject), state-machine + version guard, min-rule (#22). */
+describe('Review lifecycle', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

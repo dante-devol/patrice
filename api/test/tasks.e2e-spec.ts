@@ -11,8 +11,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 4.1 — task schema + creation + request template deep-copy + list + PATCH (#17). */
-describe('Slice 4.1 — Tasks: creation, deep-copy, list, PATCH', () => {
+/** task schema + creation + request template deep-copy + list + PATCH (#17). */
+describe('Tasks: creation, deep-copy, list, PATCH', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

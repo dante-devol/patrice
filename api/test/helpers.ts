@@ -155,7 +155,7 @@ export interface AdminSession {
 /**
  * Redeem the bootstrap invite to mint the first effective admin and return its
  * session artefacts (cookie header + CSRF token). The shared starting point for
- * every Slice 2+ test that needs an authenticated admin.
+ * every test that needs an authenticated admin.
  */
 export async function bootstrapAdmin(
   booted: BootedApp,

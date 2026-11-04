@@ -3,8 +3,7 @@ import { CEDAR_NAMESPACE } from './schema';
 /**
  * Projection of `grant` rows + static policies into Cedar policy **text**.
  *
- * Design note (faithful to docs/slices/01 "template library + one link per grant",
- * adapted to Cedar's constraints): Cedar templates can only slot `?principal` /
+ * Design note (one policy per grant, adapted to Cedar's constraints): Cedar templates can only slot `?principal` /
  * `?resource` entities — not the *action* or scalar scope values. So instead of a
  * literal template-link per grant, we keep a fixed set of **per-scope-shape policy
  * generators** and emit one annotated static policy per grant. This preserves the

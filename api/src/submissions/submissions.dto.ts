@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Submission DTOs (Slice 5). A submit carries one entry per answered question — a
+ * Submission DTOs. A submit carries one entry per answered question — a
  * polymorphic scalar `value` (text/number/choice) and/or `attachmentIds` for an
  * attachment question; the service maps `value` onto the validator's typed answer
  * shape using the question's type. Review takes a decision (+ optional reviewer

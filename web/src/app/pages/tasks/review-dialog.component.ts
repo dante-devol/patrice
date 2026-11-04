@@ -15,7 +15,7 @@ export interface ReviewDialogData {
 }
 
 /**
- * View / review-a-submission dialog (Slice 5). Opened from the "submitted vN" History
+ * View / review-a-submission dialog. Opened from the "submitted vN" History
  * event: shows the answers, and — while the submission is in review — the approve /
  * return / reject controls with an optional comment (the API re-authorizes `task:review`;
  * self-review is server-gated). Returns 'changed' when a decision lands so the opener

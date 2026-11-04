@@ -25,7 +25,7 @@ export interface UserView {
 }
 
 /**
- * Users + membership (Slice 2.4). `user:grant_role` / `user:revoke_role` are scoped
+ * Users + membership. `user:grant_role` / `user:revoke_role` are scoped
  * by the *granted* role: the AuthorizeGuard checks the actor's authority at the
  * boundary, and these methods **re-validate at apply time** (privilege bounds must
  * not drift between guard and write). Revoking a role or deactivating a user can
@@ -81,7 +81,7 @@ export class UsersService {
     const canRead = (i: number) => decisions[2 * i];
     const canEdit = new Set(all.filter((_, i) => decisions[2 * i + 1]).map((u) => u.id));
     const users = all.filter((_, i) => canRead(i));
-    // anonymizeLabel (Slice 7.4): render a retired (scrubbed) user's stored display
+    // anonymizeLabel: render a retired (scrubbed) user's stored display
     // name as "Former member" without mutating the tombstone label in the DB.
     return users.map((u) => ({
       id: u.id,

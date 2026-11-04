@@ -11,8 +11,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 5.1 — task:submit + answers + validateSubmission + first-submission lock + M1 (#21). */
-describe('Slice 5.1 — Submit, validation, request template lock', () => {
+/** task:submit + answers + validateSubmission + first-submission lock + M1 (#21). */
+describe('Submit, validation, request template lock', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

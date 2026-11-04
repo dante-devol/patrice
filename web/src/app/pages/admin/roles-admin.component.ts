@@ -14,7 +14,7 @@ interface RoleMapping {
   isBroken: boolean;
 }
 
-/** Standalone-role list/editor (Slice 2.1). Inherent roles are read-only here. */
+/** Role list/editor. */
 @Component({
   selector: 'roles-admin',
   standalone: true,

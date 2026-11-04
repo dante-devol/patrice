@@ -8,8 +8,7 @@ import { z } from 'zod';
  * `.strict()`, so a stray `email`/`displayName` key is rejected at the write, not
  * just discouraged. PII is rendered by joining to current state at read time.
  *
- * Slice 1 registers: invite.created, invite.redeemed, invite.revoked,
- * bootstrap.completed, user.registered. Each later slice extends this catalog.
+ * Every verb the system audits is registered here.
  */
 const uuid = z.string().uuid();
 
@@ -63,7 +62,7 @@ export const activityPayloadSchemas = {
     })
     .strict(),
 
-  // Slice 2 — org configuration. IDs-only (no names/PII; render by joining at read).
+  // org configuration. IDs-only (no names/PII; render by joining at read).
   'role.created': z.object({ roleId: uuid }).strict(),
   'role.updated': z.object({ roleId: uuid, changes }).strict(),
   'role.retired': z.object({ roleId: uuid }).strict(),
@@ -107,7 +106,7 @@ export const activityPayloadSchemas = {
   'user.updated': z.object({ userId: uuid }).strict(),
   'user.deactivated': z.object({ userId: uuid }).strict(),
   'user.reactivated': z.object({ userId: uuid }).strict(),
-  // Slice 7 — user retirement lifecycle. IDs only.
+  // user retirement lifecycle. IDs only.
   'user.retired': z.object({ userId: uuid }).strict(),
   'user.revived': z.object({ userId: uuid }).strict(),
   'config.updated': z
@@ -169,7 +168,7 @@ export const activityPayloadSchemas = {
   'task.updated': z.object({ taskId: uuid }).strict(),
   'task.retired': z.object({ taskId: uuid }).strict(),
   'task.revived': z.object({ taskId: uuid }).strict(),
-  // Slice 4.2 — claiming / openings / requester. IDs + the new status only.
+  // claiming / openings / requester. IDs + the new status only.
   'task.claimed': z
     .object({ taskId: uuid, userId: uuid, statusCache: z.string() })
     .strict(),
@@ -182,7 +181,7 @@ export const activityPayloadSchemas = {
   'task.requester_changed': z
     .object({ taskId: uuid, requesterUserId: uuid })
     .strict(),
-  // Slice 4.3 — messages + attachments. IDs only.
+  // messages + attachments. IDs only.
   'message.created': z
     .object({ messageId: uuid, taskId: uuid, parentMessageId: uuid.nullable() })
     .strict(),
@@ -194,11 +193,11 @@ export const activityPayloadSchemas = {
   'attachment.created': z
     .object({ attachmentId: uuid, taskId: uuid, messageId: uuid.nullable() })
     .strict(),
-  // Slice 7 — attachment lifecycle (independent retire/revive of a single file).
+  // attachment lifecycle (independent retire/revive of a single file).
   'attachment.retired': z.object({ attachmentId: uuid }).strict(),
   'attachment.revived': z.object({ attachmentId: uuid }).strict(),
   'attachment.deleted': z.object({ attachmentId: uuid, taskId: uuid }).strict(),
-  // Slice 5 — submission lifecycle. IDs + the (non-PII) submission_no/decision/status.
+  // submission lifecycle. IDs + the (non-PII) submission_no/decision/status.
   'submission.submitted': z
     .object({
       taskId: uuid,
@@ -231,7 +230,7 @@ export const activityPayloadSchemas = {
   'task.completed': z
     .object({ taskId: uuid, statusCache: z.string(), submissionsNotRequired: z.number().int() })
     .strict(),
-  // Slice 7.3 — GC sweep. System-actored (actor_user_id NULL), IDs-only. One row per
+  // GC sweep. System-actored (actor_user_id NULL), IDs-only. One row per
   // collected aggregate/entity; `gc.blocked` records a RESTRICT backstop hit (a live
   // reference left the row in place); `gc.blob_reconciled` records orphaned-blob cleanup.
   'gc.task_collected': z.object({ taskId: uuid }).strict(),
@@ -240,7 +239,7 @@ export const activityPayloadSchemas = {
   'gc.team_collected': z.object({ teamId: uuid }).strict(),
   'gc.blocked': z.object({ entityType: z.string(), entityId: uuid }).strict(),
   'gc.blob_reconciled': z.object({ blobCount: z.number().int() }).strict(),
-  // Slice 7.4 — user GC. Scrub keeps the row (tombstone); collect deletes a
+  // user GC. Scrub keeps the row (tombstone); collect deletes a
   // history-less user outright. The auto-revoke of invitations issued by a scrubbed
   // user is system-actored (actor_user_id NULL), one row per invite.
   'gc.user_scrubbed': z.object({ userId: uuid }).strict(),
@@ -253,7 +252,7 @@ export const activityPayloadSchemas = {
   'last_admin_refused': z
     .object({ path: z.string(), subjectId: uuid })
     .strict(),
-  // Slice 8 — integration lifecycle.
+  // integration lifecycle.
   'integration.connected': z.object({ connectionId: uuid }).strict(),
   'integration.updated': z.object({ connectionId: uuid }).strict(),
   // `grants` is applied to what the connection granted when it's collected.

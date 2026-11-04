@@ -23,7 +23,7 @@ import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
 /**
- * Standalone-role configuration surface (Slice 2.1). Every route is governance-
+ * Standalone-role configuration surface. Every route is governance-
  * scoped: the resource is the singleton org, so all use `orgResource`. Lifecycle
  * transitions are named action endpoints (retire/revive), not PATCH.
  */

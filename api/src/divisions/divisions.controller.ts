@@ -48,7 +48,7 @@ export class DivisionsController {
   @Patch(':id')
   // division:update resolves the Division itself (not the org): carries `retired` so
   // the Retired-as-Hard-Deny forbid blocks edits to a retired division, and the
-  // division self-ref so specific_division/own_division grants can scope (Slice 7.2).
+  // division self-ref so specific_division/own_division grants can scope.
   @Authorize(ACTIONS.divisionUpdate.action, divisionResource)
   async update(
     @Param('id') id: string,

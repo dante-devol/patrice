@@ -84,7 +84,7 @@ export class AdministrabilityService {
    * Call **inside a guarded transaction, after the candidate mutation** has been
    * applied to `tx`: if the post-write Effective Admin count is zero, throw
    * `LastAdminError` to roll the whole transaction back. The administrability
-   * invariant in predict-by-applying-then-checking form (docs/slices/02).
+   * invariant in predict-by-applying-then-checking form.
    */
   async assertFloorWithinTx(
     path: string,

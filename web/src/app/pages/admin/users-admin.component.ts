@@ -7,7 +7,7 @@ import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from '../tasks/user-avatar.component';
 import { avatarColor, initials } from '../tasks/task-presentation';
 
-/** Users list + per-user role-assignment panel (Slice 2.4). */
+/** Users list + per-user role-assignment panel. */
 @Component({
   selector: 'users-admin',
   standalone: true,

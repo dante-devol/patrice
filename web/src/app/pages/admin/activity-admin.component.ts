@@ -92,7 +92,7 @@ const VERB_LABELS: Record<string, string> = {
   'gc.user_collected': 'deleted a user',
   'gc.blocked': 'GC blocked (live reference)',
   'gc.blob_reconciled': 'reconciled orphaned blobs',
-  // Slice 8 — integrations, links, gateway + sync lifecycle.
+  // integrations, links, gateway + sync lifecycle.
   'integration.connected': 'connected an integration',
   'integration.updated': 'updated an integration',
   'integration.retired': 'disconnected an integration',

@@ -1,5 +1,7 @@
 # Patrice: Documented Intent vs. Built Reality
 
+> **Historical.** This describes Patrice *before* the redesign (November 2026) and is kept for the record; the line references point at code that has since changed. For the system as it is now, see [architecture.md](architecture.md), the ADRs in [adr/](adr/) and the [redesign plan](redesign-plan.md).
+
 > **Fourth companion** to [current-architecture.md](current-architecture.md), [current-design-problems.md](current-design-problems.md) and [current-design-decisions.md](current-design-decisions.md). Those three were written from the code alone. This one compares them against the original design documents (now in [`docs/old/`](old/)): the PRD, `ARCHITECTURE.md`, ADRs 0001–0006, the slice plans and the Discord bot sketch.
 >
 > **The old docs are evidence of intent, not the source of truth.** Where intent and code disagree, neither side wins automatically. Small gaps are classified below. **Wide gaps were taken to the project owner**, and the resulting direction decisions are recorded in §1.

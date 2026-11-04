@@ -130,7 +130,7 @@ tests, and running the tiers without Docker) is in **[CONTRIBUTING.md](CONTRIBUT
   (SSE), the GC sweep, the pg-boss queue, and the integrations adapter + Gateway listener. See
   [`api/CONTEXT.md`](api/CONTEXT.md).
 - `web/` — Angular frontend (standalone components, signals-first). See [`web/CONTEXT.md`](web/CONTEXT.md).
-- `docs/` — the [architecture](docs/ARCHITECTURE.md), [ADRs](docs/adr/), the ordered build
+- `docs/` — the [architecture](docs/architecture.md), [ADRs](docs/adr/), the ordered build
   [slices](docs/slices/) (the project's construction history), and agent guides.
 - [`CONTEXT-MAP.md`](CONTEXT-MAP.md) / [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) — the
   cross-tier domain language.

@@ -10,8 +10,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 7.1 — revive endpoints + the grace-window state-machine guard (#28). */
-describe('Slice 7.1 — Revive endpoints', () => {
+/** revive endpoints + the grace-window state-machine guard (#28). */
+describe('Revive endpoints', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

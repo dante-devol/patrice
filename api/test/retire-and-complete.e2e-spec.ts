@@ -11,8 +11,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 5.3 — retire_submission, complete, Empty Contributing Set Floor (#23). */
-describe('Slice 5.3 — Retire-submission & manual complete', () => {
+/** retire_submission, complete, Empty Contributing Set Floor (#23). */
+describe('Retire-submission & manual complete', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

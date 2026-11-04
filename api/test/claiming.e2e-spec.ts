@@ -11,8 +11,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 4.2 — claiming, openings, change-requester; eligibility enforced in Cedar (#18). */
-describe('Slice 4.2 — Claiming, openings, requester', () => {
+/** claiming, openings, change-requester; eligibility enforced in Cedar (#18). */
+describe('Claiming, openings, requester', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

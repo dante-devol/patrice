@@ -25,7 +25,7 @@ import { ROUTES } from '../contract/routes';
 const HEARTBEAT_MS = 25_000;
 
 /**
- * Notification delivery + read endpoints (Slice 6.2). Reads are ungated (§2.3) but
+ * Notification delivery + read endpoints. Reads are ungated (§2.3) but
  * scoped to the caller's own rows — every method keys on `req.user.id`. The stream
  * emits thin `sync` pings; the durable rows are always pulled from `GET /notifications`.
  */

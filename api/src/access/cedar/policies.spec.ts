@@ -3,11 +3,11 @@ import { grantToPolicy, ProjectableGrant, staticPolicies, supportsOwnScope } fro
 import { ALL_ACTION_STRINGS } from '../actions';
 
 /**
- * Projection-level checks for the Slice 4 task grants — especially the Claim
+ * Projection-level checks for the task grants — especially the Claim
  * Eligibility AND-Composition clause, whose `has`-guarded boolean shape must both
  * parse and pass strict schema validation (validate-before-activate).
  */
-describe('grantToPolicy — Slice 4 task scopes', () => {
+describe('grantToPolicy — task scopes', () => {
   const engine = new CedarEngine();
 
   const baseGrant = (over: Partial<ProjectableGrant>): ProjectableGrant => ({
@@ -94,7 +94,7 @@ describe('grantToPolicy — Slice 4 task scopes', () => {
   });
 });
 
-describe('staticPolicies — self-review forbid (Slice 5)', () => {
+describe('staticPolicies — self-review forbid', () => {
   const engine = new CedarEngine();
 
   it('emits a claimant-keyed task:review forbid when self-review is disabled', () => {

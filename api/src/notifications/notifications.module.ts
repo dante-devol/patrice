@@ -6,7 +6,7 @@ import { InProcessPubSub } from './in-process-pubsub.adapter';
 import { EventStore } from '../events/event-store.service';
 
 /**
- * Notifications (Slice 6). Binds the v1 in-process {@link PubSubPort} adapter, exposes
+ * Notifications. Binds the v1 in-process {@link PubSubPort} adapter, exposes
  * {@link NotificationsService} to the domain modules that emit events (tasks,
  * submissions, messages), and serves the SSE stream + read/mark-read endpoints.
  */

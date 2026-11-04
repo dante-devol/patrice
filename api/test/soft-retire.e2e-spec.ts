@@ -11,10 +11,10 @@ import {
 } from './helpers';
 
 /**
- * Slice 7.2 — soft-retire default filter + Grace Period from org settings +
+ * soft-retire default filter + Grace Period from org settings +
  * Retired-as-Hard-Deny exercised for real (#29).
  */
-describe('Slice 7.2 — Soft-retire filter, grace config, hard-deny', () => {
+describe('Soft-retire filter, grace config, hard-deny', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

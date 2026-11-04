@@ -7,7 +7,7 @@ import { Logger } from '@nestjs/common';
 import { StoragePort } from './storage.port';
 
 /**
- * Local-filesystem storage driver (Slice 4.3). Blobs land under a base directory,
+ * Local-filesystem storage driver. Blobs land under a base directory,
  * keyed by their storage key. **Single-instance only** — an upload on one instance's
  * disk is invisible to a download on another (see the slice doc's multi-instance
  * caveat); multi-instance deployments must use the S3 driver. Downloads stream

@@ -1,5 +1,5 @@
 /**
- * The fan-out seam for live notification delivery (Slice 6). A domain event inserts
+ * The fan-out seam for live notification delivery. A domain event inserts
  * durable `notification` rows, then `publish(userId, ev)` pushes a thin **sync** ping
  * to that user's open SSE streams. The client reacts by pulling the durable rows —
  * **durability never rides the stream** (the ping carries no payload).

@@ -94,14 +94,30 @@ export class BootstrapService implements OnApplicationBootstrap {
 
       const settings = await tx.systemSettings.findUniqueOrThrow({ where: { id: 1 } });
       if (!settings.memberRoleSeeded) {
-        const member = await tx.role.create({ data: { name: MEMBER_ROLE_NAME }, select: { id: true } });
+        // An upgraded install may already have a role by that name: adopt it rather
+        // than create a second one, and top up its starter grants.
+        const member =
+          (await tx.role.findFirst({
+            where: { name: { equals: MEMBER_ROLE_NAME, mode: 'insensitive' }, lifecycleState: 'active' },
+            select: { id: true },
+          })) ?? (await tx.role.create({ data: { name: MEMBER_ROLE_NAME }, select: { id: true } }));
+        const held = await tx.grant.findMany({ where: { roleId: member.id }, select: { action: true, scopeKind: true } });
+        const have = new Set(held.map((g) => `${g.action}|${g.scopeKind}`));
         await tx.grant.createMany({
-          data: MEMBER_SEED_GRANTS.map((g) => ({
+          data: MEMBER_SEED_GRANTS.filter((g) => !have.has(`${g.action}|${g.scopeKind}`)).map((g) => ({
             roleId: member.id,
             action: g.action,
             effect: GrantEffect.permit,
             scopeKind: g.scopeKind,
           })),
+        });
+        // Before Member existed, reads needed no grant. Everyone already here gets it,
+        // so an upgrade doesn't take their tasks out of sight; new users get it from
+        // their invitation.
+        const users = await tx.appUser.findMany({ where: { lifecycleState: 'active' }, select: { id: true } });
+        await tx.userRole.createMany({
+          data: users.map((u) => ({ userId: u.id, roleId: member.id })),
+          skipDuplicates: true,
         });
         await tx.systemSettings.update({
           where: { id: 1 },

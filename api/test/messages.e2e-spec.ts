@@ -14,7 +14,7 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 4.3 — messages, threading, attachments (local-fs), system messages (#19). */
+/** messages, threading, attachments (local-fs), system messages (#19). */
 describe('Messages, attachments and the task timeline', () => {
   let booted: BootedApp;
   let app: INestApplication;

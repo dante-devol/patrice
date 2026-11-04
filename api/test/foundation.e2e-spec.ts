@@ -12,10 +12,9 @@ import {
 } from './helpers';
 
 /**
- * Slice 1 acceptance + authz + invitation + session tests
- * (docs/slices/01 "Tests (must pass)").
+ * Foundation: auth, authorization, invitations, sessions and bootstrap.
  */
-describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
+describe('Foundation, Auth, Engine & Bootstrap', () => {
   let booted: BootedApp;
   let app: INestApplication;
 
@@ -342,7 +341,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
     expect(res.status).toBe(404);
   });
 
-  // --- Slice 1.4: email verification + password reset (issue #6) ---------------
+  // --- Email verification + password reset ----------------------------------
   //
   // Tokens are stored only as sha256(pepper + token), so these flows are driven
   // through the captured plaintext (see helpers#createEmailCapture). NB: never run

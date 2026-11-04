@@ -52,7 +52,7 @@ function isForeignKeyViolation(err: unknown): boolean {
 }
 
 /**
- * The lazy GC sweep (Slice 7.3). For each entity retired **past the Grace Period**,
+ * The lazy GC sweep. For each entity retired **past the Grace Period**,
  * it checks the static referrer set (`EXISTS` over known FKs) and permanently deletes
  * those with no live references — task aggregates as a unit, roles/divisions/teams
  * individually. `ON DELETE RESTRICT` is the DB backstop: a still-referenced row's
@@ -396,7 +396,7 @@ export class GcService {
     await tx.notification.deleteMany({ where: { recipientUserId: userId } });
     await tx.userRole.deleteMany({ where: { userId } });
     await tx.membership.deleteMany({ where: { userId } });
-    // Slice 8: purge integration account links (external_identity rows name user as PII).
+    // purge integration account links (external_identity rows name user as PII).
     const identities = await tx.externalIdentity.findMany({
       where: { userId },
       select: { externalUserId: true, connectionId: true },

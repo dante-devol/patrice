@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ConfigUpdate, OrgSettings } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 
-/** Structured organization.settings editor (Slice 2.4) — not a JSON textarea. */
+/** Structured organization.settings editor — not a JSON textarea. */
 @Component({
   selector: 'settings-admin',
   standalone: true,

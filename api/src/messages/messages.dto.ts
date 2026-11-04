@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Message DTOs (Slice 4.3). A comment carries markdown `body` and, optionally, a
+ * Message DTOs. A comment carries markdown `body` and, optionally, a
  * `parentMessageId` making it a one-level reply (the parent must be top-level — the
  * service guards it and a DB trigger backs it up). Attachments are uploaded against
  * an existing message via `POST /attachments` (the attachment exactly-one-owner CHECK

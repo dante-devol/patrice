@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { questionListSchema } from '../request-templates/request-templates.dto';
 
 /**
- * Task DTOs (Slice 4.1). Creation takes name/description + the target division (and
+ * Task DTOs. Creation takes name/description + the target division (and
  * optional team). PATCH is **pure metadata** — only `name`/`description`; `.strict()`
  * turns any other field (e.g. `divisionId`, `openings`, `requesterUserId`) into a 422
  * rather than a silent ignore (overview PATCH convention). Authority/structure changes
@@ -73,7 +73,7 @@ export const listTasksQuerySchema = z
     claimant: multiFacet(uuid),
     after: uuid.optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
-    // Soft-retire opt-in (Slice 7.2): `?include=retired` lifts the active-only default
+    // Soft-retire opt-in: `?include=retired` lifts the active-only default
     // so admin/history views see retired tasks too.
     include: z.enum(['retired']).optional(),
   })
@@ -82,7 +82,7 @@ export const listTasksQuerySchema = z
 export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
 
 /**
- * Claiming DTOs (Slice 4.2). `/claims` (task:manage_claims) takes an openings delta
+ * Claiming DTOs. `/claims` (task:manage_claims) takes an openings delta
  * and/or a claims-closed toggle — at least one must be present. `/requester`
  * (task:change_requester) reassigns the requester to another user.
  */

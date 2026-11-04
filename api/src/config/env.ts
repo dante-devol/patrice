@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Startup configuration. Loaded and validated once on boot; an invalid environment
- * fails the process fast (per Slice 1 "Startup config" — load + validate on boot).
+ * fails the process fast.
  */
 const boolFromString = z
   .enum(['true', 'false', '1', '0'])
@@ -39,7 +39,7 @@ export const envSchema = z.object({
   // sessions tracked.
   INTEGRATION_GATEWAY_ENABLED: boolFromString.default('true'),
 
-  // Object storage (Slice 4.3). `local` writes blobs to STORAGE_LOCAL_DIR (single
+  // Object storage. `local` writes blobs to STORAGE_LOCAL_DIR (single
   // instance only — see the slice doc's multi-instance caveat); `s3` uses an
   // S3-compatible store (AWS/MinIO) and serves downloads via pre-signed URLs.
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

@@ -79,7 +79,7 @@ export class InvitationsService {
   }
 
   /**
-   * Privilege bound (ARCHITECTURE.md §2.13): an invite's pre-assigned roles must be a
+   * Privilege bound: an invite's pre-assigned roles must be a
    * subset of what the actor may grant (`user:grant_role` scope). Enforced at creation
    * AND re-validated at redemption against the issuer's *current* scope, so a leaked or
    * pre-minted invite can never confer a role the issuer couldn't grant directly (the
@@ -411,8 +411,8 @@ export class InvitationsService {
         data: { invitationId: inv.id, createdUserId: user.id },
       });
 
-      // Grant the pre-assigned roles (⊆ creator's grantable set; trivially so in
-      // Slice 1). Bootstrap grants the Admin role.
+      // Grant the pre-assigned roles (checked against the creator's grantable set
+      // when the invitation was made). Bootstrap grants the Admin role.
       for (const roleId of inv.intendedRoleIds) {
         await tx.userRole.create({
           data: { userId: user.id, roleId, grantedBy: inv.createdBy },

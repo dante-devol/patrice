@@ -1,7 +1,7 @@
 import { AttachmentKind } from '@prisma/client';
 
 /**
- * Map a MIME content type to the coarse `AttachmentKind` bucket (Slice 4.3). Kept
+ * Map a MIME content type to the coarse `AttachmentKind` bucket. Kept
  * pure so the classification is unit-testable. `model` covers 3D assets (glTF/OBJ/STL)
  * which lack a stable top-level MIME family; everything unrecognised falls to `other`.
  */

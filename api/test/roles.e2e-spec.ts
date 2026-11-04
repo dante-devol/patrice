@@ -10,8 +10,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 2.1 — Roles CRUD + Revive (docs/slices/02; issue #8). */
-describe('Slice 2.1 — Roles CRUD + Revive', () => {
+/** Roles CRUD + Revive. */
+describe('Roles CRUD + Revive', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

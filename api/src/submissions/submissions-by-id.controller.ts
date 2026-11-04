@@ -21,7 +21,7 @@ import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
 /**
- * Single-submission endpoints (Slice 5) keyed by `/submissions/:id` — the review and
+ * Single-submission endpoints keyed by `/submissions/:id` — the review and
  * retire actions (gated by `task:review` / `task:retire_submission`) plus the
  * authenticated read. Kept apart from the task-scoped collection controller so each
  * route group owns one base path.

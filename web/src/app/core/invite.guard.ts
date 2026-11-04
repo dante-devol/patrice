@@ -4,7 +4,7 @@ import { AuthStore } from './auth.store';
 
 /**
  * Reflects invite-management permission for the route. Only users who may manage
- * invitations (in Slice 1, `invite:create`) can reach the page; everyone else is
+ * invitations (`invite:create`) can reach the page; everyone else is
  * sent home. UX only — the API re-authorizes every invitation endpoint regardless.
  */
 export const inviteManageGuard: CanActivateFn = async () => {

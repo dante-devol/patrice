@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 
 /**
- * The object-storage seam (Slice 4.3). Two drivers implement it — S3-compatible
+ * The object-storage seam. Two drivers implement it — S3-compatible
  * (production default) and local-fs (lightweight self-host) — so the attachment
  * service never knows which store backs it. Uploads stream in; downloads are served
  * either by a pre-signed URL (S3) or by streaming the blob back (local-fs).
@@ -30,7 +30,7 @@ export interface StoragePort {
 
   /**
    * List every stored object key under `prefix` (default: all). Used by the GC
-   * orphaned-blob reconciliation pass (Slice 7.3) to compare the store against the
+   * orphaned-blob reconciliation pass to compare the store against the
    * surviving `attachment` rows. Returns absolute storage keys.
    */
   list(prefix?: string): Promise<string[]>;

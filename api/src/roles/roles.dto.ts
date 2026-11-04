@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * Role DTOs. The PATCH endpoint accepts **only pure metadata** (`name`) per the
- * Slice 2 PATCH convention — `.strict()` makes any other field a 422 rather than a
+ * The PATCH convention — `.strict()` makes any other field a 422 rather than a
  * silent ignore. Lifecycle (retire/revive) goes through the named action endpoints.
  */
 export const createRoleSchema = z

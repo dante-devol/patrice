@@ -9,11 +9,11 @@ Patrice ships as two strictly-bound tiers in one monorepo. The split is a **laye
 
 ## Relationships
 
-- **Web → API**: HTTP over OpenAPI. Web holds no domain logic — it reflects API state and re-authorizes every action server-side. No shared TypeScript types couple the tiers (the OpenAPI spec is the contract, not TS types — see `docs/ARCHITECTURE.md §4.1`).
+- **Web → API**: HTTP over OpenAPI. Web holds no domain logic — it reflects API state and re-authorizes every action server-side. No shared TypeScript types couple the tiers (the OpenAPI spec generated from the API's Zod contract is the shared artifact; the web's types are generated from it — see `docs/architecture.md §3`).
 
 ## Where the canonical glossary lives today
 
-`docs/ARCHITECTURE.md §2.1` still carries the canonical domain glossary, and `docs/slices/00-overview.md` adds project-level load-bearing terms (Effective Admin, the `scope_kind` shapes, etc.). Per-tier `CONTEXT.md` files extend that glossary with tier-specific vocabulary and will gradually absorb cross-cutting terms as code lands and `docs/ARCHITECTURE.md` is decomposed.
+[`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) is the cross-tier glossary and [`docs/architecture.md`](docs/architecture.md) the system description. Per-tier `CONTEXT.md` files add tier-specific vocabulary.
 
 ## System-wide architectural decisions
 

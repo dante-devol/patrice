@@ -41,7 +41,7 @@ import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
 /**
- * Task endpoints (Slice 4.1). Reads (GET) are ungated (authenticated only, per §2.3);
+ * Task endpoints. Reads (GET) are ungated (authenticated only, per §2.3);
  * mutations declare their `task:*` action against the prospective/loaded Task resource
  * so scoped grants (specific/own division, own_as_requester) are enforced by Cedar.
  */

@@ -1,10 +1,10 @@
 # Web
 
-The Angular frontend tier. Renders Patrice's domain state, drives user flows over the OpenAPI client, and **reflects** API permissions for UX (never enforces them — every action is re-authorized server-side, per `docs/ARCHITECTURE.md §2.3`).
+The Angular frontend tier. Renders Patrice's domain state, drives user flows over the OpenAPI client, and **reflects** API permissions for UX (never enforces them — every action is re-authorized server-side; see `docs/architecture.md`).
 
 ## Language
 
-This file holds *web-tier-specific* vocabulary. Cross-cutting domain terms (Task, Submission, Division, Role, Status, Effective Admin, etc.) live in `docs/ARCHITECTURE.md §2.1` and the API CONTEXT today; this file extends them only where the web tier needs its own precise word.
+This file holds *web-tier-specific* vocabulary. Cross-cutting domain terms (Task, Submission, Division, Role, Status, Effective Admin, etc.) live in `UBIQUITOUS_LANGUAGE.md` and the API CONTEXT; this file extends them only where the web tier needs its own precise word.
 
 **Request Template Renderer**:
 The single component family that walks the seven question types (Detail Text, Multiline, Text, Numeric, Dropdown, Radio, Attachment) to draw controls. Operates in two modes — *Authoring* (an admin or testing requester builds the question set) and *Answer* (a claimant fills it in for submission). The mode is a top-level prop on the renderer; the type-per-question switch is identical in both.

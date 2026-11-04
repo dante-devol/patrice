@@ -8,7 +8,7 @@ import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
 import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
-/** GET/PATCH the typed system settings (Slice 2.4). */
+/** GET/PATCH the typed system settings. */
 @Controller('config')
 export class ConfigController {
   constructor(private readonly config: ConfigService) {}

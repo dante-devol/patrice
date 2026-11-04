@@ -30,7 +30,7 @@ import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 
 /**
- * Message endpoints (Slice 4.3). Listing is an ungated read; creation/edit/retire
+ * Message endpoints. Listing is an ungated read; creation/edit/retire
  * declare their `message:*` action against the prospective/loaded Message resource so
  * scoped grants (division/team, own_as_sender) are enforced by Cedar.
  */

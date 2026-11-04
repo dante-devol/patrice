@@ -12,8 +12,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 7.4 — user Scrub-in-Place, invitation auto-revoke, anonymizeLabel (#31). */
-describe('Slice 7.4 — User scrub-in-place', () => {
+/** user Scrub-in-Place, invitation auto-revoke, anonymizeLabel (#31). */
+describe('User scrub-in-place', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

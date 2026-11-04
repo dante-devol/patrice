@@ -21,7 +21,7 @@ export type OrgSettings = {
 };
 
 /**
- * The settings editor (Slice 2.4). Flipping `selfReviewAllowed` changes the projected
+ * The settings editor. Flipping `selfReviewAllowed` changes the projected
  * static policy set (the conditional self-review forbid), so every config write bumps
  * `config_version` and drops the projection cache. Flipping
  * `requireVerifiedEmailToLogIn` only gates **new** logins; it never invalidates

@@ -14,10 +14,10 @@ import { EventStore } from '../src/events/event-store.service';
 import { PUBSUB_PORT, PubSubPort } from '../src/notifications/pubsub.port';
 
 /**
- * Slice 6 — Notifications (#24/#25/#26). Recipient matrix + sender suppression +
+ * Notifications (#24/#25/#26). Recipient matrix + sender suppression +
  * idempotent insertion (6.1); SSE fan-out, reconcile pull, and read-state (6.2).
  */
-describe('Slice 6 — Notifications', () => {
+describe('Notifications', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession; // the requester for every task here

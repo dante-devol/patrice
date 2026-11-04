@@ -1,5 +1,7 @@
 # Patrice: Redesign Implementation Plan
 
+> **Status: implemented** (Phases 0–8, November 2026). The result is described in [architecture.md](architecture.md), with decisions in [adr/](adr/) and the cutover rehearsal in [cutover-rehearsal.md](cutover-rehearsal.md).
+
 > **What this is.** The single plan for re-architecting Patrice. It turns the findings and decisions in the four review documents into ordered, concrete work:
 > - [current-architecture.md](current-architecture.md): how the system is built today
 > - [current-design-problems.md](current-design-problems.md): root causes R1–R11 and defects D1–D29

@@ -53,7 +53,7 @@ interface ScopeFields {
 }
 
 /**
- * Grants = permission-matrix cells (Slice 2.3). Every write **validates before it
+ * Grants = permission-matrix cells. Every write **validates before it
  * activates**: the candidate grant is projected with the rest of the active set and
  * schema-validated; a structurally impossible action/scope combination is refused
  * `422` and never written. Each successful write bumps `config_version` and drops

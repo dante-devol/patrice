@@ -4,7 +4,7 @@ The NestJS backend tier. Owns the domain model (via Prisma), the Cedar access en
 
 ## Language
 
-Cross-cutting domain entities (Task, Submission, Division, Role, Team, User, Request Template, Message, Attachment, Invitation, Activity) are defined in `docs/ARCHITECTURE.md §2.1`. Below are the API-tier load-bearing terms that the grilling crystallized — the ones that are dense enough to need their own precise word.
+Cross-cutting domain entities (Task, Submission, Division, Role, Team, User, Template Library, Message, Timeline Entry, Attachment, Invitation, Activity) are defined in [`UBIQUITOUS_LANGUAGE.md`](../UBIQUITOUS_LANGUAGE.md). Below are the API-tier load-bearing terms that the grilling crystallized — the ones that are dense enough to need their own precise word.
 
 ### Authorization
 
@@ -13,7 +13,7 @@ An *active* user holding at least one `permit` grant on one of `{grant:create/up
 _Avoid_: Admin, Org Admin (those refer to the role, not the predicate)
 
 **Action**:
-A closed `resource:verb` string from the fixed vocabulary in `docs/ARCHITECTURE.md §2.3`. Admins grant actions to roles; they cannot invent new ones. Reads are not gated in v1 (no `read`/`view` action).
+A closed `resource:verb` string from the fixed vocabulary in `src/access/actions.ts`. Admins grant actions to roles; they cannot invent new ones. Reads are gated like everything else (`task:read`, `user:read`, …).
 _Avoid_: Permission (that's the granted/denied verdict), Capability
 
 **Grant**:
@@ -138,7 +138,7 @@ Which root module a process boots, chosen by `PROCESS_ROLE` in `main.ts`: `ApiMo
 _Avoid_: Process Type, Mode, Web/Worker Dyno
 
 **Claim Eligibility AND-Composition**:
-The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: if either is true the claimant must hold the corresponding inherent role. Evaluated in Cedar via the `task:assign @ own_as_claimant` template; reads `principal.memberDivisions` and `principal.memberTeams`.
+The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: if either is true the claimant must be a member of that unit. Evaluated in Cedar for `task:assign` at `own`; reads `principal.memberDivisions` and `principal.memberTeams`.
 _Avoid_: Membership Check, Eligibility Rule
 
 ### Integrations & external sync

@@ -22,7 +22,7 @@ interface ConnectionRow extends IntegrationConnection {
 }
 
 /**
- * Discord integration management (Slice 8). Admins connect guild(s), manage
+ * Discord integration management. Admins connect guild(s), manage
  * role↔group mappings, and trigger syncs. Users link their own Discord account
  * from profile settings (not here).
  */

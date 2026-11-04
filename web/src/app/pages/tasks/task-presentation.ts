@@ -8,7 +8,7 @@
 // Backend gaps this file papers over (flagged in web/design/README.md):
 //  - Division/team colours have no `color` column yet, so we derive a stable hue from
 //    the entity's name (canonical-name overrides + a hash fallback) client-side.
-//  - Discord avatars (Slice 8) aren't wired, so avatars fall back to initials on a
+//  - Discord avatars aren't wired, so avatars fall back to initials on a
 //    deterministic colour.
 
 import { Message, Task, TaskStatus, TimelineEntry } from '../../core/api.types';

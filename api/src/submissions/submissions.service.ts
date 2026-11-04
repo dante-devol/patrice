@@ -64,7 +64,7 @@ type SubmissionRow = Prisma.SubmissionGetPayload<{
 }>;
 
 /**
- * Submission lifecycle (Slice 5): `task:submit` (validated answer capture + system
+ * Submission lifecycle: `task:submit` (validated answer capture + system
  * message M1 + status recompute), `task:review` (approve/return/reject under a
  * state-machine guard + version-guarded UPDATE), and `task:retire_submission`. Cedar
  * has already gated *who* may act before any method here runs; the service enforces

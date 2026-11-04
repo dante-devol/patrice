@@ -5,7 +5,7 @@ import { LocalFsStorageAdapter } from './local-fs.adapter';
 import { S3StorageAdapter } from './s3.adapter';
 
 /**
- * Wires the configured StoragePort driver (Slice 4.3). `STORAGE_DRIVER=s3` requires
+ * Wires the configured StoragePort driver. `STORAGE_DRIVER=s3` requires
  * the S3_* settings; `local` (default) writes under STORAGE_LOCAL_DIR. Global so the
  * attachments module (and later submission answers) can inject the port directly.
  */

@@ -12,8 +12,8 @@ import {
   resetDatabase,
 } from './helpers';
 
-/** Slice 2.3 — Permission Matrix + Grants + Cedar re-projection (issue #10). */
-describe('Slice 2.3 — Permission Matrix + Grants', () => {
+/** Permission Matrix + Grants + Cedar re-projection (issue #10). */
+describe('Permission Matrix + Grants', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

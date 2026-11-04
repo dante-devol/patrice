@@ -47,7 +47,7 @@ function mockDiscordFetch(user: DiscordUser = DISCORD_USER): void {
   }) as unknown as typeof fetch;
 }
 
-describe('Slice 8 — Discord auth (login / register / link)', () => {
+describe('Discord auth (login / register / link)', () => {
   let booted: BootedApp;
   let app: INestApplication;
   let admin: AdminSession;

@@ -1,5 +1,7 @@
 # Patrice API: Design Decision Register
 
+> **Historical.** This describes Patrice *before* the redesign (November 2026) and is kept for the record; the line references point at code that has since changed. For the system as it is now, see [architecture.md](architecture.md), the ADRs in [adr/](adr/) and the [redesign plan](redesign-plan.md).
+
 > **Third companion** to [current-architecture.md](current-architecture.md) (what exists) and [current-design-problems.md](current-design-problems.md) (what is broken). This register asks a different question about every significant design decision in the API: **what real use case does it serve, and is that use case strong enough to justify what it costs?**
 >
 > It is based on a full read of `api/` (source, DTOs, migrations, scripts). Code comments were used as evidence of intent. The old design documents were not.

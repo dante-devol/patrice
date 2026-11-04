@@ -7,7 +7,7 @@ import { errorMessage } from '../../core/errors';
 import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
 import { divisionColor as computeDivColor } from '../tasks/task-presentation';
 
-/** Divisions editor (Slice 2.2): name, default openings, openings-locked, restrict-claims. */
+/** Divisions editor: name, default openings, openings-locked, restrict-claims. */
 @Component({
   selector: 'divisions-admin',
   standalone: true,
@@ -85,7 +85,7 @@ export class DivisionsAdminComponent {
   private async refresh(): Promise<void> {
     try {
       // Admin view opts into retired rows so retired divisions (and their Revive
-      // action) remain visible (Slice 7.2 admin/history opt-out).
+      // action) remain visible (the admin/history opt-in).
       this.divisions.set(await firstValueFrom(this.orgApi.listDivisions(true)));
     } catch (e) {
       this.error.set(errorMessage(e));

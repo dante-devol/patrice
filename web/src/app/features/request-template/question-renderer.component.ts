@@ -12,7 +12,7 @@ import {
  * Request Template Renderer (web CONTEXT.md): the single component that walks the seven
  * question types to draw controls, in two modes. **Authoring** binds to a
  * question-definition `FormGroup` (the builder); **Answer** binds a value control to
- * a question definition (Slice 5 submissions). The type switch is identical in both —
+ * a question definition. The type switch is identical in both —
  * only the controls drawn differ.
  */
 @Component({
@@ -100,7 +100,7 @@ import {
           }
           @case ('attachment') {
             <input type="file" disabled [multiple]="(question.constraints.maxFiles ?? 1) > 1" />
-            <span class="muted">Upload wired in Slice 5</span>
+            <span class="muted">Files are attached in the submit dialog</span>
           }
         }
       </div>

@@ -416,7 +416,7 @@ export class TasksService {
   }
 
   /**
-   * Recompute and persist `status_cache` via the full Status Min-Rule (Slice 5),
+   * Recompute and persist `status_cache` via the full Status Min-Rule,
    * which also accounts for claimant submissions. Runs inside the caller's tx so the
    * status moves atomically with the claim/leave/openings change that triggered it.
    */
