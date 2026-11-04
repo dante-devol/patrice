@@ -1,5 +1,6 @@
+import { AuthApi } from './api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { ApiService } from './api.service';
 import { CurrentUser } from './api.types';
 
 /**
@@ -8,7 +9,7 @@ import { CurrentUser } from './api.types';
  */
 @Injectable({ providedIn: 'root' })
 export class AuthStore {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
 
   private readonly _user = signal<CurrentUser | null>(null);
   private readonly _loaded = signal(false);
@@ -42,7 +43,7 @@ export class AuthStore {
 
   async refresh(): Promise<void> {
     try {
-      this._user.set(await this.api.me());
+      this._user.set(await firstValueFrom(this.authApi.me()));
     } catch {
       this._user.set(null);
     } finally {
@@ -56,7 +57,7 @@ export class AuthStore {
   }
 
   async logout(): Promise<void> {
-    await this.api.logout().catch(() => undefined);
+    await firstValueFrom(this.authApi.logout()).catch(() => undefined);
     this._user.set(null);
   }
 }

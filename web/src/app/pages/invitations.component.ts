@@ -1,7 +1,8 @@
+import { AdminApi } from '../core/api/org.api';
+import { firstValueFrom } from 'rxjs';
 import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../core/api.service';
 import { AuthStore } from '../core/auth.store';
 import { InvitationListItem } from '../core/api.types';
 import { errorMessage } from '../core/errors';
@@ -51,7 +52,7 @@ import { errorMessage } from '../core/errors';
   `,
 })
 export class InvitationsComponent {
-  private readonly api = inject(ApiService);
+  private readonly adminApi = inject(AdminApi);
   readonly auth = inject(AuthStore);
 
   email = '';
@@ -66,7 +67,7 @@ export class InvitationsComponent {
 
   private async refresh(): Promise<void> {
     try {
-      this.invites.set(await this.api.listInvitations());
+      this.invites.set(await firstValueFrom(this.adminApi.listInvitations()));
     } catch (e) {
       this.error.set(errorMessage(e));
     }
@@ -76,9 +77,9 @@ export class InvitationsComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const created = await this.api.createInvitation({
+      const created = await firstValueFrom(this.adminApi.createInvitation({
         email: this.email || undefined,
-      });
+      }));
       this.lastUrl.set(created.url);
       this.email = '';
       await this.refresh();
@@ -100,7 +101,7 @@ export class InvitationsComponent {
 
   async revoke(id: string): Promise<void> {
     try {
-      await this.api.revokeInvitation(id);
+      await firstValueFrom(this.adminApi.revokeInvitation(id));
       await this.refresh();
     } catch (e) {
       this.error.set(errorMessage(e));

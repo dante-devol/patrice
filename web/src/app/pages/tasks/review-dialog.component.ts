@@ -1,7 +1,8 @@
+import { TasksApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
-import { ApiService } from '../../core/api.service';
 import { ToastService } from '../../core/toast.service';
 import { LookupStore } from '../../core/lookup.store';
 import { Question, Submission, SubmissionState } from '../../core/api.types';
@@ -76,7 +77,7 @@ export interface ReviewDialogData {
   ],
 })
 export class ReviewDialogComponent {
-  private readonly api = inject(ApiService);
+  private readonly tasksApi = inject(TasksApi);
   private readonly toast = inject(ToastService);
   readonly lookup = inject(LookupStore);
   private readonly ref = inject<DialogRef<'changed' | undefined>>(DialogRef);
@@ -114,7 +115,7 @@ export class ReviewDialogComponent {
   async review(decision: 'approve' | 'return' | 'reject'): Promise<void> {
     this.busy.set(true);
     try {
-      await this.api.reviewSubmission(this.s.id, decision, this.comment.trim() || undefined);
+      await firstValueFrom(this.tasksApi.reviewSubmission(this.s.id, decision, this.comment.trim() || undefined));
       this.toast.success(
         decision === 'approve' ? 'Submission approved' : decision === 'return' ? 'Returned for revision' : 'Submission rejected',
       );
@@ -134,7 +135,7 @@ export class ReviewDialogComponent {
     }
     this.busy.set(true);
     try {
-      await this.api.retireSubmission(this.s.id, reason);
+      await firstValueFrom(this.tasksApi.retireSubmission(this.s.id, reason));
       this.toast.success('Submission retired');
       this.ref.close('changed');
     } catch (e) {

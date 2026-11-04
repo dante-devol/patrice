@@ -46,7 +46,8 @@ export type QuestionConstraints = Schemas['QuestionConstraints'];
 export type Question = Schemas['Question'];
 /** An authored question before it is saved (the server derives `ordinal`). The PUT
  *  body is stricter per type; the server validates the per-type constraint keys. */
-export type QuestionInput = Pick<Question, 'type' | 'prompt' | 'required' | 'constraints'>;
+/** A question as the API accepts it (typed per question type). */
+export type QuestionInput = JsonBody<'createDivisionTemplate'>['questions'][number];
 export type RequestTemplate = Schemas['RequestTemplate'];
 export type RequestTemplateLibrary = Schemas['RequestTemplateLibrary'];
 export type TaskTemplate = Schemas['TaskTemplate'];

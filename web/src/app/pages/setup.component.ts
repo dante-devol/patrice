@@ -1,7 +1,8 @@
+import { AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { ApiService } from '../core/api.service';
 import { AuthStore } from '../core/auth.store';
 import { errorMessage } from '../core/errors';
 
@@ -39,7 +40,7 @@ import { errorMessage } from '../core/errors';
   `,
 })
 export class SetupComponent {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
 
@@ -60,7 +61,7 @@ export class SetupComponent {
 
   private async load(): Promise<void> {
     try {
-      const status = await this.api.bootstrapStatus();
+      const status = await firstValueFrom(this.authApi.bootstrapStatus());
       this.open.set(status.open);
       this.token = status.inviteToken;
     } finally {
@@ -76,12 +77,12 @@ export class SetupComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const user = await this.api.acceptInvite(this.token, {
+      const user = await firstValueFrom(this.authApi.acceptInvite(this.token, {
         passcode: this.passcode,
         email: this.email,
         password: this.password,
         displayName: this.displayName,
-      });
+      }));
       this.auth.setUser(user);
       void this.router.navigate(['/home']);
     } catch (e) {

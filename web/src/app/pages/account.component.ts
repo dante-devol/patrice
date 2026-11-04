@@ -1,9 +1,14 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { AccountApi, AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { toast } from 'ngx-sonner';
-import { ApiService } from '../core/api.service';
 import { AuthStore } from '../core/auth.store';
 import { errorMessage } from '../core/errors';
+import type { components } from '../core/api/schema';
+
+type Session = components['schemas']['Session'];
 
 const LINK_ERRORS: Record<string, string> = {
   discord_session: 'The Discord connect link expired or the session changed. Please try again.',
@@ -14,13 +19,14 @@ const LINK_ERRORS: Record<string, string> = {
 };
 
 /**
- * The user's own account / connections page. Discord here is **user-driven**: the
- * user connects or disconnects *their* Discord account (sign-in method + role-sync
- * link). Role↔role mapping is admin-driven and lives in the admin area.
+ * The user's own account: profile, password, email, signed-in sessions, and their
+ * Discord connection (sign-in method plus role-sync link; mapping roles is the
+ * admins' business and lives in the admin area).
  */
 @Component({
   selector: 'account-page',
   standalone: true,
+  imports: [FormsModule],
   styles: [`
     .section-label { font-family:var(--font-display); font-weight:700; font-size:15px; color:var(--ink); margin-bottom:6px; }
     .conn-card { display:flex; align-items:center; gap:14px; border:1px solid var(--border); border-radius:2px; padding:16px; margin-top:8px; }
@@ -53,6 +59,36 @@ const LINK_ERRORS: Record<string, string> = {
             <span class="badge">{{ methodLabel(m) }}</span>
           }
         </div>
+
+        <div class="section-label" style="margin-top:20px">Password</div>
+        <form class="row" style="gap:8px;flex-wrap:wrap" (ngSubmit)="changePassword()">
+          @if (hasPassword()) {
+            <input type="password" name="currentPassword" [(ngModel)]="pw.current" placeholder="Current password" autocomplete="current-password" />
+          }
+          <input type="password" name="newPassword" [(ngModel)]="pw.next" placeholder="New password" autocomplete="new-password" />
+          <button type="submit" class="secondary" [disabled]="busy() || !pw.next">{{ hasPassword() ? 'Change password' : 'Add a password' }}</button>
+        </form>
+
+        <div class="section-label" style="margin-top:20px">Email</div>
+        <form class="row" style="gap:8px;flex-wrap:wrap" (ngSubmit)="changeEmail()">
+          <input type="email" name="newEmail" [(ngModel)]="mail.next" placeholder="New email address" autocomplete="email" />
+          @if (hasPassword()) {
+            <input type="password" name="emailPassword" [(ngModel)]="mail.password" placeholder="Current password" autocomplete="current-password" />
+          }
+          <button type="submit" class="secondary" [disabled]="busy() || !mail.next">Send confirmation</button>
+        </form>
+        <p class="muted" style="margin:4px 0 0;font-size:12.5px">The change takes effect once you confirm it from the new address.</p>
+
+        <div class="section-label" style="margin-top:20px">Sessions</div>
+        @for (s of sessions(); track s.id) {
+          <div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding:8px 0">
+            <div>
+              <div style="font-size:13px">{{ s.userAgent || 'Unknown device' }}@if (s.current) { <span class="badge">This device</span> }</div>
+              <div class="muted" style="font-size:12.5px">{{ methodLabel(s.authMethod) }} · last active {{ when(s.lastSeenAt) }}@if (s.ip) { · {{ s.ip }}}</div>
+            </div>
+            @if (!s.current) { <button class="quiet danger" [disabled]="busy()" (click)="revoke(s)">Sign out</button> }
+          </div>
+        }
 
         <div class="section-label" style="margin-top:20px">Discord</div>
         @if (error()) { <p class="error">{{ error() }}</p> }
@@ -95,14 +131,20 @@ const LINK_ERRORS: Record<string, string> = {
     </div>
   `,
 })
-export class AccountComponent {
-  private readonly api = inject(ApiService);
+export class AccountComponent implements OnInit {
+  private readonly authApi = inject(AuthApi);
+  private readonly accountApi = inject(AccountApi);
   private readonly auth = inject(AuthStore);
   private readonly route = inject(ActivatedRoute);
 
   readonly user = this.auth.user;
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+
+  readonly sessions = signal<Session[]>([]);
+  readonly hasPassword = computed(() => this.user()?.authMethods.includes('password') === true);
+  pw = { current: '', next: '' };
+  mail = { next: '', password: '' };
 
   readonly connected = computed(
     () => this.user()?.hasDiscordLink === true || this.user()?.authMethods.includes('discord') === true,
@@ -118,6 +160,62 @@ export class AccountComponent {
     if (err) this.error.set(LINK_ERRORS[err] ?? LINK_ERRORS['discord_error']);
   }
 
+  async ngOnInit(): Promise<void> {
+    await this.loadSessions();
+  }
+
+  private async loadSessions(): Promise<void> {
+    try {
+      this.sessions.set(await firstValueFrom(this.accountApi.listSessions()));
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    }
+  }
+
+  when(iso: string): string {
+    return new Date(iso).toLocaleString();
+  }
+
+  async changePassword(): Promise<void> {
+    await this.run(async () => {
+      await firstValueFrom(
+        this.accountApi.setPassword({ newPassword: this.pw.next, ...(this.pw.current ? { currentPassword: this.pw.current } : {}) }),
+      );
+      this.pw = { current: '', next: '' };
+      toast.success('Password saved');
+      await this.auth.refresh();
+    });
+  }
+
+  async changeEmail(): Promise<void> {
+    await this.run(async () => {
+      await firstValueFrom(
+        this.accountApi.requestEmailChange({ newEmail: this.mail.next, ...(this.mail.password ? { currentPassword: this.mail.password } : {}) }),
+      );
+      this.mail = { next: '', password: '' };
+      toast.success('Check the new address for a confirmation link');
+    });
+  }
+
+  async revoke(s: Session): Promise<void> {
+    await this.run(async () => {
+      await firstValueFrom(this.accountApi.revokeSession(s.id));
+      await this.loadSessions();
+    });
+  }
+
+  private async run(fn: () => Promise<void>): Promise<void> {
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      await fn();
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   methodLabel(m: string): string {
     return m === 'password' ? 'Email & password' : m.charAt(0).toUpperCase() + m.slice(1);
   }
@@ -126,7 +224,7 @@ export class AccountComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const updated = await this.api.unlinkDiscord();
+      const updated = await firstValueFrom(this.authApi.unlinkDiscord());
       this.auth.setUser(updated);
       toast.success('Discord disconnected');
     } catch (e) {

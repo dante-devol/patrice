@@ -1,9 +1,11 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
+import { TasksApi, TemplatesApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
+import { Component, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
-import { Task, TaskFilters, TaskStatus } from '../../core/api.types';
+import { RequestTemplateLibrary, Task, TaskFilters, TaskStatus, TemplateChoice } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { TaskRowComponent } from './task-row.component';
 import { stampLabel, stampStatus } from './task-presentation';
@@ -19,7 +21,7 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
 @Component({
   selector: 'task-list',
   standalone: true,
-  imports: [FormsModule, TaskRowComponent],
+  imports: [FormsModule, TaskRowComponent, RequestTemplateBuilderComponent],
   template: `
     @if (discordGated()) {
       <div class="discord-gate">
@@ -55,7 +57,7 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
               </label>
               <label class="block">
                 <span class="text-[13px] text-ink-soft">Division</span>
-                <select [(ngModel)]="newTask.divisionId" (ngModelChange)="newTask.teamId = ''" class="field mt-1">
+                <select [(ngModel)]="newTask.divisionId" (ngModelChange)="divisionChosen($event)" class="field mt-1">
                   <option [ngValue]="''">Select a division</option>
                   @for (d of lookup.divisionList(); track d.id) { <option [ngValue]="d.id">{{ d.name }}</option> }
                 </select>
@@ -70,15 +72,34 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
                   }
                 </select>
               </label>
+              @if (newTask.divisionId) {
+                <label class="block sm:col-span-2">
+                  <span class="text-[13px] text-ink-soft">Request template</span>
+                  <select [(ngModel)]="templateChoice" class="field mt-1" aria-label="Request template">
+                    @for (t of library()?.items ?? []; track t.id) {
+                      <option [ngValue]="t.id">{{ t.name }}@if (t.isDefault) { (default)} · {{ t.questionCount }} question@if (t.questionCount !== 1) {s}</option>
+                    }
+                    @if (canCompose()) { <option [ngValue]="'custom'">Write my own</option> }
+                  </select>
+                  @if (library() && !library()!.items.length && !canCompose()) {
+                    <span class="text-[13px] text-rust">This division has no templates yet; ask an admin to add one.</span>
+                  }
+                </label>
+                @if (templateChoice === 'custom') {
+                  <div class="sm:col-span-2">
+                    <request-template-builder #customBuilder mode="local" />
+                  </div>
+                }
+              }
             </div>
             @if (createError()) { <p class="text-[13px] text-rust mt-2">{{ createError() }}</p> }
             <div class="flex items-center gap-4 mt-4">
               <button class="rounded bg-accent text-paper font-bold text-[13px] px-3.5 py-2 hover:bg-accent-ink disabled:opacity-50"
-                      (click)="create()" [disabled]="busy() || !newTask.name.trim() || !newTask.divisionId">Request task</button>
+                      (click)="create()" [disabled]="busy() || !newTask.name.trim() || !newTask.divisionId || !templateChoice">Request task</button>
               <button class="text-[13px] text-ink-soft hover:text-ink hover:underline" (click)="showCreate.set(false)">Cancel</button>
             </div>
             @if (lookup.divisionList().length === 0) {
-              <p class="text-[13px] text-ink-soft mt-2">Division options are visible to org admins. You can still open a task by URL.</p>
+              <p class="text-[13px] text-ink-soft mt-2">You can't request work in any division yet.</p>
             }
           </div>
         }
@@ -148,7 +169,8 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
   ],
 })
 export class TaskListComponent {
-  private readonly api = inject(ApiService);
+  private readonly tasksApi = inject(TasksApi);
+  private readonly templatesApi = inject(TemplatesApi);
   private readonly auth = inject(AuthStore);
   readonly lookup = inject(LookupStore);
 
@@ -166,6 +188,12 @@ export class TaskListComponent {
 
   filters: TaskFilters = {};
   newTask = { name: '', description: '', divisionId: '', teamId: '' };
+  /** The chosen library template's id, or 'custom' for "Write my own". */
+  templateChoice: string | null = null;
+  readonly library = signal<RequestTemplateLibrary | null>(null);
+  /** Composing your own questions is offered when the division permits it for you. */
+  readonly canCompose = computed(() => this.library()?.allowedActions.includes('task:compose_template') === true);
+  @ViewChild('customBuilder') customBuilder?: RequestTemplateBuilderComponent;
 
   /** The API enforces requireDiscordLink; this only explains the empty board. */
   readonly discordGated = this.auth.taskAccessBlockedByDiscord;
@@ -201,7 +229,7 @@ export class TaskListComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const res = await this.api.listTasks(this.cleanFilters(), { limit: 20 });
+      const res = await firstValueFrom(this.tasksApi.listTasks(this.cleanFilters(), { limit: 20 }));
       this.tasks.set(res.items);
       this.nextCursor.set(res.nextCursor);
     } catch (e) {
@@ -216,7 +244,7 @@ export class TaskListComponent {
     if (!after) return;
     this.busy.set(true);
     try {
-      const res = await this.api.listTasks(this.cleanFilters(), { after, limit: 20 });
+      const res = await firstValueFrom(this.tasksApi.listTasks(this.cleanFilters(), { after, limit: 20 }));
       this.tasks.update((cur) => [...cur, ...res.items]);
       this.nextCursor.set(res.nextCursor);
     } catch (e) {
@@ -226,17 +254,47 @@ export class TaskListComponent {
     }
   }
 
+  /** Load the division's library for the picker, preselecting its default. */
+  async divisionChosen(divisionId: string): Promise<void> {
+    this.newTask.teamId = '';
+    this.library.set(null);
+    this.templateChoice = null;
+    if (!divisionId) return;
+    try {
+      const lib = await firstValueFrom(this.templatesApi.listRequestTemplates(divisionId));
+      this.library.set(lib);
+      this.templateChoice = lib.items.find((t) => t.isDefault)?.id ?? lib.items[0]?.id ?? (this.canCompose() ? 'custom' : null);
+    } catch (e) {
+      this.createError.set(errorMessage(e));
+    }
+  }
+
+  private chosenTemplate(): TemplateChoice | null {
+    if (this.templateChoice === 'custom') {
+      return this.customBuilder?.valid ? { kind: 'custom', questions: this.customBuilder.value() } : null;
+    }
+    return this.templateChoice ? { kind: 'library', templateId: this.templateChoice } : null;
+  }
+
   async create(): Promise<void> {
+    const template = this.chosenTemplate();
+    if (!template) {
+      this.createError.set('Finish the questions first.');
+      return;
+    }
     this.busy.set(true);
     this.createError.set(null);
     try {
-      await this.api.createTask({
+      await firstValueFrom(this.tasksApi.createTask({
         name: this.newTask.name.trim(),
         description: this.newTask.description || undefined,
         divisionId: this.newTask.divisionId,
         teamId: this.newTask.teamId || undefined,
-      });
+        template,
+      }));
       this.newTask = { name: '', description: '', divisionId: '', teamId: '' };
+      this.library.set(null);
+      this.templateChoice = null;
       this.showCreate.set(false);
       await this.reload();
     } catch (e) {

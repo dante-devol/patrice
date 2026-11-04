@@ -1,6 +1,7 @@
+import { OrgApi } from '../../core/api/org.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { Division } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
@@ -26,7 +27,7 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
         <tbody>
           @for (d of divisions(); track d.id) {
             <tr [class.row--retired]="d.lifecycleState === 'retired'" [class.row--deactivated]="d.lifecycleState === 'deactivated'">
-              <td class="name-cell" [style.--c]="d.color ?? computeColor(d)"><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" aria-label="Name" /></td>
+              <td class="name-cell" [style.--c]="computeColor(d)"><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" aria-label="Name" /></td>
               <td>
                 <span [style.background]="computeColor(d)" title="Computed from the name"
                       style="display:inline-block;width:26px;height:20px;border-radius:3px"></span>
@@ -61,7 +62,7 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
   `,
 })
 export class DivisionsAdminComponent {
-  readonly api = inject(ApiService);
+  readonly orgApi = inject(OrgApi);
   readonly divisions = signal<Division[]>([]);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -85,7 +86,7 @@ export class DivisionsAdminComponent {
     try {
       // Admin view opts into retired rows so retired divisions (and their Revive
       // action) remain visible (Slice 7.2 admin/history opt-out).
-      this.divisions.set(await this.api.listDivisions(true));
+      this.divisions.set(await firstValueFrom(this.orgApi.listDivisions(true)));
     } catch (e) {
       this.error.set(errorMessage(e));
     }
@@ -95,7 +96,7 @@ export class DivisionsAdminComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.api.createDivision({ name: this.newName.trim() });
+      await firstValueFrom(this.orgApi.createDivision({ name: this.newName.trim() }));
       this.newName = '';
       await this.refresh();
     } catch (e) {
@@ -108,7 +109,7 @@ export class DivisionsAdminComponent {
   async save(d: Division, patch: Partial<Division>): Promise<void> {
     this.error.set(null);
     try {
-      await this.api.updateDivision(d.id, patch);
+      await firstValueFrom(this.orgApi.updateDivision(d.id, patch));
     } catch (e) {
       this.error.set(errorMessage(e));
       await this.refresh();
@@ -116,10 +117,10 @@ export class DivisionsAdminComponent {
   }
 
   async retire(d: Division): Promise<void> {
-    await this.guard(() => this.api.retireDivision(d.id));
+    await this.guard(() => firstValueFrom(this.orgApi.retireDivision(d.id)));
   }
   async revive(d: Division): Promise<void> {
-    await this.guard(() => this.api.reviveDivision(d.id));
+    await this.guard(() => firstValueFrom(this.orgApi.reviveDivision(d.id)));
   }
 
   private async guard(fn: () => Promise<unknown>): Promise<void> {

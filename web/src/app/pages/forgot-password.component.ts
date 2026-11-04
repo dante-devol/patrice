@@ -1,7 +1,8 @@
+import { AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService } from '../core/api.service';
 
 @Component({
   standalone: true,
@@ -23,7 +24,7 @@ import { ApiService } from '../core/api.service';
   `,
 })
 export class ForgotPasswordComponent {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
   email = '';
   readonly busy = signal(false);
   readonly sent = signal(false);
@@ -31,7 +32,7 @@ export class ForgotPasswordComponent {
   async submit(): Promise<void> {
     this.busy.set(true);
     try {
-      await this.api.requestPasswordReset(this.email);
+      await firstValueFrom(this.authApi.requestPasswordReset(this.email));
       this.sent.set(true); // success is unconditional (no enumeration oracle)
     } finally {
       this.busy.set(false);

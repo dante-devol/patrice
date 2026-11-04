@@ -1,8 +1,9 @@
+import { AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ActivatedRoute } from '@angular/router';
-import { ApiService } from '../core/api.service';
 import { errorMessage } from '../core/errors';
 
 /**
@@ -35,7 +36,7 @@ import { errorMessage } from '../core/errors';
   `,
 })
 export class VerifyEmailComponent {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
   private readonly route = inject(ActivatedRoute);
 
   token = this.route.snapshot.queryParamMap.get('token') ?? '';
@@ -53,7 +54,7 @@ export class VerifyEmailComponent {
   private async confirm(): Promise<void> {
     this.confirming.set(true);
     try {
-      await this.api.confirmVerification(this.token);
+      await firstValueFrom(this.authApi.confirmVerification(this.token));
       this.confirmed.set(true);
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -65,7 +66,7 @@ export class VerifyEmailComponent {
   async resend(): Promise<void> {
     this.busy.set(true);
     try {
-      await this.api.resendVerification(this.email);
+      await firstValueFrom(this.authApi.resendVerification(this.email));
       this.sent.set(true);
     } finally {
       this.busy.set(false);

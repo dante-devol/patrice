@@ -1,6 +1,8 @@
+import { OrgApi } from '../../core/api/org.api';
+import { IntegrationsApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { Role, SyncDirection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 
@@ -77,7 +79,8 @@ interface RoleMapping {
   `,
 })
 export class RolesAdminComponent {
-  private readonly api = inject(ApiService);
+  private readonly integrationsApi = inject(IntegrationsApi);
+  private readonly orgApi = inject(OrgApi);
   readonly roles = signal<Role[]>([]);
   readonly mappingsByRole = signal<Map<string, RoleMapping[]>>(new Map());
   readonly busy = signal(false);
@@ -90,7 +93,7 @@ export class RolesAdminComponent {
 
   private async refresh(): Promise<void> {
     try {
-      this.roles.set(await this.api.listRoles(true));
+      this.roles.set(await firstValueFrom(this.orgApi.listRoles(true)));
       void this.loadMappings();
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -104,10 +107,10 @@ export class RolesAdminComponent {
    */
   private async loadMappings(): Promise<void> {
     try {
-      const conns = await this.api.listIntegrations(false);
+      const conns = await firstValueFrom(this.integrationsApi.listIntegrations(false));
       const byRole = new Map<string, RoleMapping[]>();
       for (const c of conns) {
-        const maps = await this.api.listMappings(c.id).catch(() => []);
+        const maps = await firstValueFrom(this.integrationsApi.listMappings(c.id)).catch(() => []);
         for (const m of maps) {
           if (!m.roleId) continue; // a membership mapping
           const list = byRole.get(m.roleId) ?? [];
@@ -157,7 +160,7 @@ export class RolesAdminComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.api.createRole(this.newName.trim());
+      await firstValueFrom(this.orgApi.createRole(this.newName.trim()));
       this.newName = '';
       await this.refresh();
     } catch (e) {
@@ -170,7 +173,7 @@ export class RolesAdminComponent {
   async rename(r: Role): Promise<void> {
     this.error.set(null);
     try {
-      await this.api.updateRole(r.id, { name: r.name });
+      await firstValueFrom(this.orgApi.updateRole(r.id, { name: r.name }));
     } catch (e) {
       this.error.set(errorMessage(e));
       await this.refresh();
@@ -179,10 +182,10 @@ export class RolesAdminComponent {
 
 
   async retire(r: Role): Promise<void> {
-    await this.guard(() => this.api.retireRole(r.id));
+    await this.guard(() => firstValueFrom(this.orgApi.retireRole(r.id)));
   }
   async revive(r: Role): Promise<void> {
-    await this.guard(() => this.api.reviveRole(r.id));
+    await this.guard(() => firstValueFrom(this.orgApi.reviveRole(r.id)));
   }
 
   private async guard(fn: () => Promise<unknown>): Promise<void> {

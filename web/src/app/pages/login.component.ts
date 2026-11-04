@@ -1,7 +1,8 @@
+import { AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { ApiService } from '../core/api.service';
 import { AuthStore } from '../core/auth.store';
 import { errorMessage } from '../core/errors';
 
@@ -54,7 +55,7 @@ const DISCORD_ERRORS: Record<string, string> = {
   `,
 })
 export class LoginComponent {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -75,7 +76,7 @@ export class LoginComponent {
 
   private async redirectToSetupIfBootstrapping(): Promise<void> {
     try {
-      const status = await this.api.bootstrapStatus();
+      const status = await firstValueFrom(this.authApi.bootstrapStatus());
       if (status.open) void this.router.navigate(['/setup']);
     } catch {
       // Ignore — stay on the login form.
@@ -86,7 +87,7 @@ export class LoginComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const user = await this.api.login(this.email, this.password);
+      const user = await firstValueFrom(this.authApi.login(this.email, this.password));
       this.auth.setUser(user);
       void this.router.navigate(['/home']);
     } catch (e) {

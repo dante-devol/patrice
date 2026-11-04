@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ApiService } from './api.service';
+import { of, throwError } from 'rxjs';
+import { NotificationsApi } from './api/work.api';
 import { AuthStore } from './auth.store';
 import { Notification } from './api.types';
 import { NotificationStore } from './notification.store';
@@ -36,7 +37,7 @@ describe('NotificationStore', () => {
     TestBed.configureTestingModule({
       providers: [
         NotificationStore,
-        { provide: ApiService, useValue: api },
+        { provide: NotificationsApi, useValue: api },
         // Unauthenticated → the SSE stream stays closed; we drive reconcile directly.
         { provide: AuthStore, useValue: { isAuthenticated: signal(false) } },
       ],
@@ -45,11 +46,11 @@ describe('NotificationStore', () => {
   });
 
   it('reconcile pulls the durable feed + unread count from the table', async () => {
-    api.listNotifications.mockResolvedValue({
+    api.listNotifications.mockReturnValue(of({
       items: [notif('a'), notif('b', '2026-01-02T00:00:00.000Z')],
       unreadCount: 1,
       nextCursor: null,
-    });
+    }));
 
     await store.reconcile();
 
@@ -60,27 +61,27 @@ describe('NotificationStore', () => {
   });
 
   it('reconcile swallows a transient pull failure, keeping last-known state', async () => {
-    api.listNotifications.mockResolvedValueOnce({
+    api.listNotifications.mockReturnValueOnce(of({
       items: [notif('a')],
       unreadCount: 1,
       nextCursor: null,
-    });
+    }));
     await store.reconcile();
 
-    api.listNotifications.mockRejectedValueOnce(new Error('network'));
+    api.listNotifications.mockReturnValueOnce(throwError(() => new Error('network')));
     await expect(store.reconcile()).resolves.toBeUndefined();
     expect(store.feed().map((n) => n.id)).toEqual(['a']); // unchanged
   });
 
   it('markRead flips only the matching unread row and updates the count', async () => {
-    api.listNotifications.mockResolvedValue({
+    api.listNotifications.mockReturnValue(of({
       items: [notif('a'), notif('b')],
       unreadCount: 2,
       nextCursor: null,
-    });
+    }));
     await store.reconcile();
 
-    api.markNotificationRead.mockResolvedValue({ unreadCount: 1 });
+    api.markNotificationRead.mockReturnValue(of({ unreadCount: 1 }));
     await store.markRead('a');
 
     expect(store.unreadCount()).toBe(1);
@@ -89,14 +90,14 @@ describe('NotificationStore', () => {
   });
 
   it('markAllRead clears unread across the feed', async () => {
-    api.listNotifications.mockResolvedValue({
+    api.listNotifications.mockReturnValue(of({
       items: [notif('a'), notif('b')],
       unreadCount: 2,
       nextCursor: null,
-    });
+    }));
     await store.reconcile();
 
-    api.markAllNotificationsRead.mockResolvedValue({ unreadCount: 0 });
+    api.markAllNotificationsRead.mockReturnValue(of({ unreadCount: 0 }));
     await store.markAllRead();
 
     expect(store.unreadCount()).toBe(0);

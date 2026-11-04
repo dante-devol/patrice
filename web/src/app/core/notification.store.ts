@@ -1,3 +1,5 @@
+import { NotificationsApi } from './api/work.api';
+import { firstValueFrom } from 'rxjs';
 import {
   Injectable,
   computed,
@@ -5,7 +7,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ApiService } from './api.service';
 import { AuthStore } from './auth.store';
 import { Notification } from './api.types';
 
@@ -21,7 +22,7 @@ import { Notification } from './api.types';
  */
 @Injectable({ providedIn: 'root' })
 export class NotificationStore {
-  private readonly api = inject(ApiService);
+  private readonly notificationsApi = inject(NotificationsApi);
   private readonly auth = inject(AuthStore);
 
   private readonly _feed = signal<Notification[]>([]);
@@ -46,7 +47,7 @@ export class NotificationStore {
   /** Open the SSE stream (idempotent). Reconciles on connect and on every ping. */
   private connect(): void {
     if (this.source || typeof EventSource === 'undefined') return;
-    const es = new EventSource(this.api.notificationStreamUrl, {
+    const es = new EventSource(this.notificationsApi.notificationStreamUrl, {
       withCredentials: true,
     });
     // The server names new-notification events `sync`; on connect it sends one
@@ -66,7 +67,7 @@ export class NotificationStore {
   /** Pull the durable rows + unread count. Safe to call repeatedly. */
   async reconcile(): Promise<void> {
     try {
-      const res = await this.api.listNotifications({ limit: 50 });
+      const res = await firstValueFrom(this.notificationsApi.listNotifications({ limit: 50 }));
       this._feed.set(res.items);
       this._unreadCount.set(res.unreadCount);
     } catch {
@@ -75,7 +76,7 @@ export class NotificationStore {
   }
 
   async markRead(id: string): Promise<void> {
-    const res = await this.api.markNotificationRead(id);
+    const res = await firstValueFrom(this.notificationsApi.markNotificationRead(id));
     this._unreadCount.set(res.unreadCount);
     this._feed.update((items) =>
       items.map((n) =>
@@ -87,7 +88,7 @@ export class NotificationStore {
   }
 
   async markAllRead(): Promise<void> {
-    const res = await this.api.markAllNotificationsRead();
+    const res = await firstValueFrom(this.notificationsApi.markAllNotificationsRead());
     this._unreadCount.set(res.unreadCount);
     const now = new Date().toISOString();
     this._feed.update((items) =>

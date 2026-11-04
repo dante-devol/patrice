@@ -1,6 +1,7 @@
+import { AdminApi } from '../../core/api/org.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { ConfigUpdate, OrgSettings } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 
@@ -65,7 +66,7 @@ import { errorMessage } from '../../core/errors';
   `,
 })
 export class SettingsAdminComponent {
-  private readonly api = inject(ApiService);
+  private readonly adminApi = inject(AdminApi);
   readonly settings = signal<OrgSettings | null>(null);
   readonly busy = signal(false);
   readonly saved = signal(false);
@@ -82,7 +83,7 @@ export class SettingsAdminComponent {
 
   private async load(): Promise<void> {
     try {
-      this.settings.set(await this.api.getConfig());
+      this.settings.set(await firstValueFrom(this.adminApi.getConfig()));
     } catch (e) {
       this.error.set(errorMessage(e));
     }
@@ -107,7 +108,7 @@ export class SettingsAdminComponent {
     if (this.clearSecret) body.discordClientSecret = '';
     else if (this.newSecret.trim()) body.discordClientSecret = this.newSecret.trim();
     try {
-      this.settings.set(await this.api.updateConfig(body));
+      this.settings.set(await firstValueFrom(this.adminApi.updateConfig(body)));
       this.newSecret = '';
       this.clearSecret = false;
       this.saved.set(true);

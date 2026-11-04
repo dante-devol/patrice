@@ -1,7 +1,8 @@
+import { AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { ApiService } from '../core/api.service';
 import { errorMessage } from '../core/errors';
 
 @Component({
@@ -27,7 +28,7 @@ import { errorMessage } from '../core/errors';
   `,
 })
 export class ResetPasswordComponent {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
   private readonly route = inject(ActivatedRoute);
 
   token = this.route.snapshot.queryParamMap.get('token') ?? '';
@@ -40,7 +41,7 @@ export class ResetPasswordComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.api.confirmPasswordReset(this.token, this.password);
+      await firstValueFrom(this.authApi.confirmPasswordReset(this.token, this.password));
       this.done.set(true);
     } catch (e) {
       this.error.set(errorMessage(e));

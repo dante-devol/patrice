@@ -1,6 +1,9 @@
+import { LookupStore } from '../../core/lookup.store';
+import { OrgApi } from '../../core/api/org.api';
+import { IntegrationsApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { ExternalGroupMapping, IntegrationConnection, Role, SyncDirection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 
@@ -8,9 +11,14 @@ interface ConnectionRow extends IntegrationConnection {
   mappings: ExternalGroupMapping[];
   expanded: boolean;
   syncBusy: boolean;
+  /** The new mapping's target: `role:<id>`, `division:<id>` or `team:<id>`. */
   _newRoleId: string;
   _newGroupId: string;
   _newDirection: SyncDirection | '';
+  /** A mapping awaiting the keep-or-revoke choice before removal. */
+  _deleting: ExternalGroupMapping | null;
+  /** Retiring: awaiting the keep-or-revoke choice. */
+  _retiring: boolean;
 }
 
 /**
@@ -211,7 +219,7 @@ interface ConnectionRow extends IntegrationConnection {
               } @else {
                 @for (m of c.mappings; track m.id) {
                   <div class="mapping-row">
-                    <span style="flex:1">{{ roleName(m.roleId) }}</span>
+                    <span style="flex:1">{{ targetName(m) }}</span>
                     <span class="muted">↔</span>
                     <span class="mapping-ids">{{ m.externalGroupId }}</span>
                     <span class="badge">{{ m.syncDirection }}</span>
@@ -220,20 +228,42 @@ interface ConnectionRow extends IntegrationConnection {
                       <button class="secondary retry-pill" (click)="retryMapping(c, m)">Retry</button>
                     }
                     <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px"
-                            (click)="deleteMapping(c, m)">Remove</button>
+                            (click)="askDelete(c, m)">Remove</button>
                   </div>
+                  @if (c._deleting?.id === m.id) {
+                    <div class="mapping-row" style="flex-wrap:wrap;gap:8px">
+                      @if (m.grantedCount > 0) {
+                        <span style="flex:1 1 100%;font-size:13px">
+                          This mapping granted {{ m.grantedCount }} {{ m.grantedCount === 1 ? 'person' : 'people' }} {{ targetName(m) }}.
+                          Keep those as regular grants, or take them away?
+                        </span>
+                        <button class="secondary" (click)="deleteMapping(c, m, 'keep')">Remove, keep {{ m.grantedCount }}</button>
+                        <button class="quiet danger" (click)="deleteMapping(c, m, 'revoke')">Remove and revoke</button>
+                      } @else {
+                        <span style="flex:1">Remove this mapping?</span>
+                        <button class="quiet danger" (click)="deleteMapping(c, m, 'keep')">Remove</button>
+                      }
+                      <button class="quiet" (click)="c._deleting = null">Cancel</button>
+                    </div>
+                  }
                 }
               }
 
               <!-- Add mapping form -->
               <div class="add-mapping-form">
-                <select [(ngModel)]="c._newRoleId">
-                  <option value="">Patrice role…</option>
-                  @for (r of roles(); track r.id) {
-                    @if (r.lifecycleState === 'active') {
-                      <option [value]="r.id">{{ r.name }}</option>
+                <select [(ngModel)]="c._newRoleId" aria-label="What the Discord role grants">
+                  <option value="">Grants…</option>
+                  <optgroup label="Role">
+                    @for (r of roles(); track r.id) {
+                      @if (r.lifecycleState === 'active') { <option [value]="'role:' + r.id">{{ r.name }}</option> }
                     }
-                  }
+                  </optgroup>
+                  <optgroup label="Division membership">
+                    @for (d of lookup.divisionList(); track d.id) { <option [value]="'division:' + d.id">{{ d.name }}</option> }
+                  </optgroup>
+                  <optgroup label="Team membership">
+                    @for (t of lookup.teamList(); track t.id) { <option [value]="'team:' + t.id">{{ t.name }}</option> }
+                  </optgroup>
                 </select>
                 <input [(ngModel)]="c._newGroupId" placeholder="Discord role snowflake ID"
                        style="font-family:monospace" />
@@ -255,8 +285,13 @@ interface ConnectionRow extends IntegrationConnection {
                         (click)="sync(c)">
                   {{ c.syncBusy ? 'Queued…' : 'Sync now' }}
                 </button>
-                @if (c.lifecycleState === 'active') {
-                  <button class="secondary" (click)="retire(c)">Disconnect</button>
+                @if (c.lifecycleState === 'active' && !c._retiring) {
+                  <button class="secondary" (click)="c._retiring = true">Disconnect</button>
+                } @else if (c._retiring) {
+                  <span style="font-size:13px">When this connection is removed after the grace period, what happens to the roles and memberships it granted?</span>
+                  <button class="secondary" (click)="retire(c, 'keep')">Keep them</button>
+                  <button class="quiet danger" (click)="retire(c, 'revoke')">Revoke them</button>
+                  <button class="quiet" (click)="c._retiring = false">Cancel</button>
                 } @else if (c.lifecycleState === 'retired') {
                   <button class="secondary" (click)="revive(c)">Reconnect</button>
                 }
@@ -270,7 +305,9 @@ interface ConnectionRow extends IntegrationConnection {
   `,
 })
 export class IntegrationsAdminComponent {
-  private readonly api = inject(ApiService);
+  private readonly integrationsApi = inject(IntegrationsApi);
+  readonly lookup = inject(LookupStore);
+  private readonly orgApi = inject(OrgApi);
 
   readonly connections = signal<ConnectionRow[]>([]);
   readonly roles = signal<Role[]>([]);
@@ -280,19 +317,20 @@ export class IntegrationsAdminComponent {
   readonly form = { displayName: '', guildId: '', botToken: '' };
 
   constructor() {
+    void this.lookup.ensureLoaded();
     void this.refresh();
   }
 
   private async refresh(): Promise<void> {
     try {
       const [conns, roles] = await Promise.all([
-        this.api.listIntegrations(true),
-        this.api.listRoles(false),
+        firstValueFrom(this.integrationsApi.listIntegrations(true)),
+        firstValueFrom(this.orgApi.listRoles(false)),
       ]);
       const rows: ConnectionRow[] = await Promise.all(
         conns.map(async (c) => {
           const existing = this.connections().find((r) => r.id === c.id);
-          const mappings = existing?.mappings ?? (await this.api.listMappings(c.id).catch(() => []));
+          const mappings = existing?.mappings ?? (await firstValueFrom(this.integrationsApi.listMappings(c.id)).catch(() => []));
           return {
             ...c,
             mappings,
@@ -301,6 +339,8 @@ export class IntegrationsAdminComponent {
             _newRoleId: '',
             _newGroupId: '',
             _newDirection: 'inbound',
+            _deleting: null,
+            _retiring: false,
           } as ConnectionRow;
         }),
       );
@@ -315,12 +355,12 @@ export class IntegrationsAdminComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.api.connectIntegration({
+      await firstValueFrom(this.integrationsApi.connectIntegration({
         provider: 'discord',
         externalWorkspaceId: this.form.guildId.trim(),
         displayName: this.form.displayName.trim(),
         ...(this.form.botToken.trim() ? { botToken: this.form.botToken.trim() } : {}),
-      });
+      }));
       this.form.displayName = '';
       this.form.guildId = '';
       this.form.botToken = '';
@@ -336,7 +376,7 @@ export class IntegrationsAdminComponent {
     c.expanded = !c.expanded;
     if (c.expanded && c.mappings.length === 0) {
       try {
-        c.mappings = await this.api.listMappings(c.id);
+        c.mappings = await firstValueFrom(this.integrationsApi.listMappings(c.id));
         this.connections.update((cs) => [...cs]);
       } catch (e) {
         this.error.set(errorMessage(e));
@@ -348,11 +388,12 @@ export class IntegrationsAdminComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const m = await this.api.createMapping(c.id, {
-        roleId: c._newRoleId,
+      const [kind, targetId] = c._newRoleId.split(':');
+      const m = await firstValueFrom(this.integrationsApi.createMapping(c.id, {
+        ...(kind === 'role' ? { roleId: targetId } : kind === 'division' ? { divisionId: targetId } : { teamId: targetId }),
         externalGroupId: c._newGroupId,
         syncDirection: c._newDirection as SyncDirection,
-      });
+      }));
       c.mappings = [...c.mappings, m];
       c._newRoleId = '';
       c._newGroupId = '';
@@ -364,11 +405,17 @@ export class IntegrationsAdminComponent {
     }
   }
 
-  async deleteMapping(c: ConnectionRow, m: ExternalGroupMapping): Promise<void> {
+  askDelete(c: ConnectionRow, m: ExternalGroupMapping): void {
+    c._deleting = m;
+    this.connections.update((cs) => [...cs]);
+  }
+
+  async deleteMapping(c: ConnectionRow, m: ExternalGroupMapping, grants: 'keep' | 'revoke'): Promise<void> {
     this.error.set(null);
     try {
-      await this.api.deleteMapping(c.id, m.id);
+      await firstValueFrom(this.integrationsApi.deleteMapping(c.id, m.id, grants));
       c.mappings = c.mappings.filter((x) => x.id !== m.id);
+      c._deleting = null;
       this.connections.update((cs) => [...cs]);
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -379,7 +426,7 @@ export class IntegrationsAdminComponent {
     c.syncBusy = true;
     this.connections.update((cs) => [...cs]);
     try {
-      await this.api.triggerSync(c.id);
+      await firstValueFrom(this.integrationsApi.triggerSync(c.id));
     } catch (e) {
       this.error.set(errorMessage(e));
     } finally {
@@ -390,10 +437,10 @@ export class IntegrationsAdminComponent {
     }
   }
 
-  async retire(c: ConnectionRow): Promise<void> {
+  async retire(c: ConnectionRow, grants: 'keep' | 'revoke'): Promise<void> {
     this.error.set(null);
     try {
-      await this.api.retireIntegration(c.id);
+      await firstValueFrom(this.integrationsApi.retireIntegration(c.id, grants));
       await this.refresh();
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -403,7 +450,7 @@ export class IntegrationsAdminComponent {
   async revive(c: ConnectionRow): Promise<void> {
     this.error.set(null);
     try {
-      await this.api.reviveIntegration(c.id);
+      await firstValueFrom(this.integrationsApi.reviveIntegration(c.id));
       await this.refresh();
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -413,7 +460,7 @@ export class IntegrationsAdminComponent {
   async retryMapping(c: ConnectionRow, m: ExternalGroupMapping): Promise<void> {
     this.error.set(null);
     try {
-      const updated = await this.api.retryMapping(c.id, m.id);
+      const updated = await firstValueFrom(this.integrationsApi.retryMapping(c.id, m.id));
       c.mappings = c.mappings.map((x) => (x.id === updated.id ? updated : x));
       this.connections.update((cs) => [...cs]);
     } catch (e) {
@@ -436,8 +483,15 @@ export class IntegrationsAdminComponent {
     this.connections.update((cs) => [...cs]);
   }
 
+  /** What a mapping grants, by name. */
+  targetName(m: ExternalGroupMapping): string {
+    if (m.target.kind === 'division') return `${this.lookup.divisionName(m.target.id)} (division)`;
+    if (m.target.kind === 'team') return `${this.lookup.teamName(m.target.id)} (team)`;
+    return this.roleName(m.target.id);
+  }
+
   roleName(roleId: string): string {
-    return this.roles().find((r) => r.id === roleId)?.name ?? roleId;
+    return this.roles().find((r) => r.id === roleId)?.name ?? 'Unknown role';
   }
 
   /** Connections worth surfacing in the health panel (active, non-retired). */

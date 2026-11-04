@@ -1,25 +1,23 @@
+import { AccessApi, OrgApi } from './api/org.api';
+import { firstValueFrom } from 'rxjs';
 import { Injectable, inject, signal } from '@angular/core';
-import { ApiService } from './api.service';
 import { Division, Team } from './api.types';
 import {
   divisionColor as computeDivColor,
   teamColor as computeTeamColor,
 } from '../pages/tasks/task-presentation';
 
-/** Shorten an id for display when its name can't be resolved. */
-function short(id: string): string {
-  return id.length > 8 ? `${id.slice(0, 8)}…` : id;
-}
 
 /**
- * Best-effort name resolution for divisions/teams/users (Slice 4 web). The list
- * endpoints are admin-gated, so for non-admins these calls 403 and we fall back to
- * shortened ids — Permission Reflection: the UI degrades, it never enforces. Loaded
- * once and cached for the session.
+ * Names for divisions, teams and users, from the read endpoints every member may
+ * call (`division:read`, `team:read`, `user:read`). Loaded once and cached for the
+ * session. A name that can't be resolved (the thing was collected, or the caller
+ * may not see it) reads as "Unknown …", never as a raw id.
  */
 @Injectable({ providedIn: 'root' })
 export class LookupStore {
-  private readonly api = inject(ApiService);
+  private readonly accessApi = inject(AccessApi);
+  private readonly orgApi = inject(OrgApi);
 
   readonly divisionList = signal<Division[]>([]);
   readonly teamList = signal<Team[]>([]);
@@ -49,9 +47,9 @@ export class LookupStore {
 
   private async load(): Promise<void> {
     const [divs, teams, users] = await Promise.all([
-      this.api.listDivisions().catch(() => [] as Division[]),
-      this.api.listTeams().catch(() => [] as Team[]),
-      this.api.listUsers().catch(() => []),
+      firstValueFrom(this.orgApi.listDivisions()).catch(() => [] as Division[]),
+      firstValueFrom(this.orgApi.listTeams()).catch(() => [] as Team[]),
+      firstValueFrom(this.accessApi.listUsers()).catch(() => []),
     ]);
     this.divisionList.set(divs);
     this.teamList.set(teams);
@@ -62,22 +60,18 @@ export class LookupStore {
   }
 
   divisionName(id: string): string {
-    return this.divisionNames().get(id) ?? short(id);
+    return this.divisionNames().get(id) ?? 'Unknown division';
   }
   teamName(id: string | null): string {
-    return id ? (this.teamNames().get(id) ?? short(id)) : '—';
+    return id ? (this.teamNames().get(id) ?? 'Unknown team') : '—';
   }
-  /** A senderless (null) id renders as "System" — for system messages. */
+  /** A null id (an action no person took) reads as "System". */
   userName(id: string | null): string {
     if (!id) return 'System';
-    return this.userNames().get(id) ?? short(id);
+    return this.userNames().get(id) ?? 'Unknown user';
   }
 
-  /**
-   * Discord avatar URL for a user, or null (→ initials fallback). Sourced from the
-   * admin-gated user list like {@link userName}, so for non-admins it degrades to
-   * the initials avatar — Permission Reflection, never enforcement (#52).
-   */
+  /** Discord avatar URL for a user, or null (→ initials). */
   userAvatar(id: string | null): string | null {
     if (!id) return null;
     return this.userAvatars().get(id) ?? null;

@@ -1,7 +1,8 @@
+import { AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ActivatedRoute } from '@angular/router';
-import { ApiService } from '../core/api.service';
 import { errorMessage } from '../core/errors';
 
 /** Confirms an email-change token from the link mailed to the new address. */
@@ -21,7 +22,7 @@ import { errorMessage } from '../core/errors';
   `,
 })
 export class ConfirmEmailChangeComponent {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
   private readonly route = inject(ActivatedRoute);
 
   readonly confirming = signal(true);
@@ -34,7 +35,7 @@ export class ConfirmEmailChangeComponent {
 
   private async confirm(token: string): Promise<void> {
     try {
-      await this.api.confirmEmailChange(token);
+      await firstValueFrom(this.authApi.confirmEmailChange(token));
       this.confirmed.set(true);
     } catch (e) {
       this.error.set(errorMessage(e));

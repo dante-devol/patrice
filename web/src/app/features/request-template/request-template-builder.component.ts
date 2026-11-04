@@ -1,3 +1,5 @@
+import { TemplatesApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -7,17 +9,19 @@ import {
   signal,
 } from '@angular/core';
 import { FormArray, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { errorMessage } from '../../core/errors';
 import { RequestTemplateFormService } from './request-template-form.service';
+import type { QuestionInput } from '../../core/api.types';
 import { QuestionRendererComponent } from './question-renderer.component';
 
 /**
- * Request template builder (authoring host, Slice 3). Loads a division's default
- * request template, drives add/reorder/remove of questions through the
- * RequestTemplateFormService, and the QuestionRenderer (authoring mode) draws each
- * question's controls. Saving PUTs the whole replace-in-place question set. An empty
- * set is valid (a coordination-only division).
+ * Request template builder (the authoring host). Drives add/reorder/remove of
+ * questions through the RequestTemplateFormService; the QuestionRenderer (authoring
+ * mode) draws each question's controls. An empty set is valid (coordination only).
+ *
+ * - `division` mode loads and saves a division's default template.
+ * - `local` mode edits questions in place for a custom task template; the host reads
+ *   them with {@link value} when it creates the task.
  */
 @Component({
   selector: 'request-template-builder',
@@ -26,7 +30,7 @@ import { QuestionRendererComponent } from './question-renderer.component';
   imports: [ReactiveFormsModule, QuestionRendererComponent],
   template: `
     <div class="qn-builder">
-      <h3>Default request template</h3>
+      @if (mode === 'division') { <h3>Default request template</h3> }
       @if (error()) { <p class="error">{{ error() }}</p> }
       @if (saved()) { <p class="ok">Saved.</p> }
 
@@ -49,7 +53,9 @@ import { QuestionRendererComponent } from './question-renderer.component';
 
       <div class="row">
         <button type="button" class="secondary" (click)="add()">Add question</button>
-        <button type="button" (click)="save()" [disabled]="busy() || form.invalid">Save request template</button>
+        @if (mode === 'division') {
+          <button type="button" (click)="save()" [disabled]="busy() || form.invalid">Save request template</button>
+        }
       </div>
     </div>
   `,
@@ -62,10 +68,12 @@ import { QuestionRendererComponent } from './question-renderer.component';
   ],
 })
 export class RequestTemplateBuilderComponent implements OnInit {
-  private readonly api = inject(ApiService);
+  private readonly templatesApi = inject(TemplatesApi);
   private readonly forms = inject(RequestTemplateFormService);
 
-  @Input({ required: true }) divisionId!: string;
+  @Input() mode: 'division' | 'local' = 'division';
+  /** The division whose default template is edited (division mode). */
+  @Input() divisionId = '';
 
   form = new FormGroup({ questions: new FormArray<FormGroup>([]) });
   readonly busy = signal(false);
@@ -79,9 +87,20 @@ export class RequestTemplateBuilderComponent implements OnInit {
     return c as FormGroup;
   }
 
+  /** The questions as authored (local mode). */
+  value(): QuestionInput[] {
+    return this.forms.serialize(this.questions);
+  }
+
+  /** Whether every question is complete. */
+  get valid(): boolean {
+    return this.form.valid;
+  }
+
   async ngOnInit(): Promise<void> {
+    if (this.mode === 'local') return;
     try {
-      const rt = await this.api.getRequestTemplate(this.divisionId);
+      const rt = await firstValueFrom(this.templatesApi.getRequestTemplate(this.divisionId));
       this.form = new FormGroup({
         questions: this.forms.authoringForm(rt?.questions ?? []) as FormArray<FormGroup>,
       });
@@ -116,7 +135,7 @@ export class RequestTemplateBuilderComponent implements OnInit {
     this.saved.set(false);
     try {
       const payload = this.forms.serialize(this.questions);
-      await this.api.putRequestTemplate(this.divisionId, payload);
+      await firstValueFrom(this.templatesApi.putRequestTemplate(this.divisionId, payload));
       this.saved.set(true);
     } catch (e) {
       this.error.set(errorMessage(e));

@@ -1,7 +1,8 @@
+import { TasksApi } from '../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthStore } from '../core/auth.store';
-import { ApiService } from '../core/api.service';
 import { LookupStore } from '../core/lookup.store';
 import { Task, TaskStatus } from '../core/api.types';
 import { errorMessage } from '../core/errors';
@@ -100,7 +101,7 @@ const LEDGER_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising', 'approve
         }
       }
 
-      @if (auth.canManageOrg()) {
+      @if (auth.canInvite() && auth.canManageOrg()) {
         <div class="mt-8">
           <a routerLink="/admin" class="text-[13px] text-ink-soft hover:text-ink hover:underline">Manage invitations</a>
         </div>
@@ -110,7 +111,7 @@ const LEDGER_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising', 'approve
 })
 export class HomeComponent implements OnInit {
   readonly auth = inject(AuthStore);
-  private readonly api = inject(ApiService);
+  private readonly tasksApi = inject(TasksApi);
   readonly lookup = inject(LookupStore);
 
   readonly tasks = signal<Task[]>([]);
@@ -152,7 +153,7 @@ export class HomeComponent implements OnInit {
     this.loading.set(true);
     try {
       await this.lookup.ensureLoaded();
-      const result = await this.api.listTasks({ claimant: userId });
+      const result = await firstValueFrom(this.tasksApi.listTasks({ claimant: userId }));
       this.tasks.set(result.items);
     } catch (e) {
       this.error.set(errorMessage(e));

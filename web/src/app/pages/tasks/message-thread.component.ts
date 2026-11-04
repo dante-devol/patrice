@@ -1,8 +1,9 @@
+import { MessagesApi, TasksApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, EventEmitter, Input, OnInit, Output, computed, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Dialog } from '@angular/cdk/dialog';
-import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
 import { ToastService } from '../../core/toast.service';
@@ -139,7 +140,7 @@ import { HistoryEvent, buildHistory, relativeTime } from './task-presentation';
           }
           @for (a of m.attachments; track a.id) {
             <a class="block mt-1 text-[13px] font-bold underline decoration-faint underline-offset-2 hover:decoration-ink"
-               [href]="api.attachmentUrl(a.id)" target="_blank" rel="noopener">{{ a.filename }}</a>
+               [href]="messagesApi.attachmentUrl(a.id)" target="_blank" rel="noopener">{{ a.filename }}</a>
           }
         </div>
       </div>
@@ -157,7 +158,9 @@ export class MessageThreadComponent implements OnInit {
   /** Fires after a review decision lands so the parent refreshes the task + claim strip. */
   @Output() changed = new EventEmitter<void>();
 
-  readonly api = inject(ApiService);
+  readonly messagesApi = inject(MessagesApi);
+
+  readonly tasksApi = inject(TasksApi);
   readonly lookup = inject(LookupStore);
   private readonly auth = inject(AuthStore);
   private readonly dialog = inject(Dialog);
@@ -236,10 +239,10 @@ export class MessageThreadComponent implements OnInit {
     this.busy.set(true);
     try {
       // A comment on a submission names it; any other reply names its parent comment.
-      await this.api.createMessage(
+      await firstValueFrom(this.messagesApi.createMessage(
         this.taskId,
         ev.submission ? { body, submissionId: ev.submission.submissionId } : { body, parentMessageId: ev.message!.id },
-      );
+      ));
       this.replyDraft = '';
       this.openReply.set(null);
       await this.reload();
@@ -255,8 +258,8 @@ export class MessageThreadComponent implements OnInit {
     this.busy.set(true);
     try {
       const [res, timeline] = await Promise.all([
-        this.api.listMessages(this.taskId, { limit: 50 }),
-        this.api.getTimeline(this.taskId),
+        firstValueFrom(this.messagesApi.listMessages(this.taskId, { limit: 50 })),
+        firstValueFrom(this.tasksApi.getTimeline(this.taskId)),
       ]);
       this.messages.set(res.items);
       this.timeline.set(timeline);
@@ -272,7 +275,7 @@ export class MessageThreadComponent implements OnInit {
     const after = this.nextCursor();
     if (!after) return;
     try {
-      const res = await this.api.listMessages(this.taskId, { after, limit: 50 });
+      const res = await firstValueFrom(this.messagesApi.listMessages(this.taskId, { after, limit: 50 }));
       this.messages.update((cur) => [...cur, ...res.items]);
       this.nextCursor.set(res.nextCursor);
     } catch (e) {
@@ -290,8 +293,8 @@ export class MessageThreadComponent implements OnInit {
     if (!this.draft.trim()) return;
     this.busy.set(true);
     try {
-      const msg = await this.api.createMessage(this.taskId, { body: this.draft.trim() });
-      if (this.pendingFile) await this.api.uploadAttachment(msg.id, this.pendingFile);
+      const msg = await firstValueFrom(this.messagesApi.createMessage(this.taskId, { body: this.draft.trim() }));
+      if (this.pendingFile) await firstValueFrom(this.messagesApi.uploadAttachment(msg.id, this.pendingFile));
       this.draft = '';
       this.pendingFile = null;
       this.pendingName.set(null);
@@ -310,7 +313,7 @@ export class MessageThreadComponent implements OnInit {
 
   async saveEdit(m: Message): Promise<void> {
     try {
-      await this.api.updateMessage(m.id, this.editBody.trim());
+      await firstValueFrom(this.messagesApi.updateMessage(m.id, this.editBody.trim()));
       this.editingId.set(null);
       await this.reload();
     } catch (e) {
@@ -320,7 +323,7 @@ export class MessageThreadComponent implements OnInit {
 
   async remove(m: Message): Promise<void> {
     try {
-      await this.api.deleteMessage(m.id);
+      await firstValueFrom(this.messagesApi.deleteMessage(m.id));
       await this.reload();
     } catch (e) {
       this.toast.error(errorMessage(e));

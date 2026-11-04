@@ -1,7 +1,8 @@
+import { AuthApi } from '../core/api/auth.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ApiService } from '../core/api.service';
 import { AuthStore } from '../core/auth.store';
 import { InviteView } from '../core/api.types';
 import { errorMessage } from '../core/errors';
@@ -89,7 +90,7 @@ type Step = 'register' | 'link-discord' | 'done';
   `,
 })
 export class AcceptInviteComponent {
-  private readonly api = inject(ApiService);
+  private readonly authApi = inject(AuthApi);
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -116,7 +117,7 @@ export class AcceptInviteComponent {
 
   private async load(): Promise<void> {
     try {
-      const view = await this.api.viewInvite(this.token);
+      const view = await firstValueFrom(this.authApi.viewInvite(this.token));
       this.invite.set(view);
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -129,12 +130,12 @@ export class AcceptInviteComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const user = await this.api.acceptInvite(this.token, {
+      const user = await firstValueFrom(this.authApi.acceptInvite(this.token, {
         passcode: this.invite()!.requiresPasscode ? this.passcode : undefined,
         email: this.email,
         password: this.password,
         displayName: this.displayName,
-      });
+      }));
       this.auth.setUser(user);
 
       // Admin-only reads (settings, integrations) aren't available to a new member, so

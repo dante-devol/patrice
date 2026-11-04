@@ -1,7 +1,8 @@
+import { AccessApi, AdminApi } from '../../core/api/org.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService } from '../../core/api.service';
 import { LookupStore } from '../../core/lookup.store';
 import { ActivityFilters, ActivityItem, AdminUser } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
@@ -231,7 +232,8 @@ interface Target {
   ],
 })
 export class ActivityAdminComponent {
-  private readonly api = inject(ApiService);
+  private readonly accessApi = inject(AccessApi);
+  private readonly adminApi = inject(AdminApi);
   private readonly lookup = inject(LookupStore);
 
   readonly categories = CATEGORIES;
@@ -254,7 +256,7 @@ export class ActivityAdminComponent {
 
   private async init(): Promise<void> {
     await this.lookup.ensureLoaded();
-    this.users.set(await this.api.listUsers(true).catch(() => []));
+    this.users.set(await firstValueFrom(this.accessApi.listUsers(true)).catch(() => []));
     await this.apply();
   }
 
@@ -273,7 +275,7 @@ export class ActivityAdminComponent {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const res = await this.api.listActivity(this.filters(), { limit: 50 });
+      const res = await firstValueFrom(this.adminApi.listActivity(this.filters(), { limit: 50 }));
       // The "System" pseudo-filter is applied client-side (actorUserId is null).
       const items =
         this.actorUserId === '__system__'
@@ -293,7 +295,7 @@ export class ActivityAdminComponent {
     if (!after) return;
     this.loading.set(true);
     try {
-      const res = await this.api.listActivity(this.filters(), { after, limit: 50 });
+      const res = await firstValueFrom(this.adminApi.listActivity(this.filters(), { after, limit: 50 }));
       const more =
         this.actorUserId === '__system__'
           ? res.items.filter((a) => a.actorUserId === null)

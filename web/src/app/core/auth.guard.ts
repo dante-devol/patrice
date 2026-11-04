@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { ApiService } from './api.service';
+import { firstValueFrom } from 'rxjs';
+import { AuthApi } from './api/auth.api';
 import { AuthStore } from './auth.store';
 
 /**
@@ -10,14 +11,14 @@ import { AuthStore } from './auth.store';
  */
 export const authGuard: CanActivateFn = async () => {
   const auth = inject(AuthStore);
-  const api = inject(ApiService);
+  const api = inject(AuthApi);
   const router = inject(Router);
 
   await auth.ensureLoaded();
   if (auth.isAuthenticated()) return true;
 
   try {
-    const status = await api.bootstrapStatus();
+    const status = await firstValueFrom(api.bootstrapStatus());
     if (status.open) return router.createUrlTree(['/setup']);
   } catch {
     // If the status check fails, fall through to login.

@@ -1,6 +1,7 @@
+import { AccessApi, OrgApi } from '../../core/api/org.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { AdminUser, Role } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from '../tasks/user-avatar.component';
@@ -65,7 +66,8 @@ import { avatarColor, initials } from '../tasks/task-presentation';
   `,
 })
 export class UsersAdminComponent {
-  readonly api = inject(ApiService);
+  readonly accessApi = inject(AccessApi);
+  readonly orgApi = inject(OrgApi);
   readonly users = signal<AdminUser[]>([]);
   readonly roles = signal<Role[]>([]);
   readonly error = signal<string | null>(null);
@@ -79,8 +81,8 @@ export class UsersAdminComponent {
       const [users, roles] = await Promise.all([
         // Include retired users so scrubbed tombstones (rendered "Former member"
         // when anonymizeLabel is set) stay visible in the admin roster.
-        this.api.listUsers(true),
-        this.api.listRoles(),
+        firstValueFrom(this.accessApi.listUsers(true)),
+        firstValueFrom(this.orgApi.listRoles()),
       ]);
       this.users.set(users);
       this.roles.set(roles);
@@ -105,22 +107,22 @@ export class UsersAdminComponent {
 
   async grant(u: AdminUser, roleId: string): Promise<void> {
     if (!roleId) return;
-    await this.guard(() => this.api.grantUserRole(u.id, roleId));
+    await this.guard(() => firstValueFrom(this.accessApi.grantUserRole(u.id, roleId)));
   }
   async revoke(u: AdminUser, roleId: string): Promise<void> {
-    await this.guard(() => this.api.revokeUserRole(u.id, roleId));
+    await this.guard(() => firstValueFrom(this.accessApi.revokeUserRole(u.id, roleId)));
   }
   async deactivate(u: AdminUser): Promise<void> {
-    await this.guard(() => this.api.deactivateUser(u.id));
+    await this.guard(() => firstValueFrom(this.accessApi.deactivateUser(u.id)));
   }
   async reactivate(u: AdminUser): Promise<void> {
-    await this.guard(() => this.api.reactivateUser(u.id));
+    await this.guard(() => firstValueFrom(this.accessApi.reactivateUser(u.id)));
   }
   async retire(u: AdminUser): Promise<void> {
-    await this.guard(() => this.api.retireUser(u.id));
+    await this.guard(() => firstValueFrom(this.accessApi.retireUser(u.id)));
   }
   async revive(u: AdminUser): Promise<void> {
-    await this.guard(() => this.api.reviveUser(u.id));
+    await this.guard(() => firstValueFrom(this.accessApi.reviveUser(u.id)));
   }
 
   async guard(fn: () => Promise<unknown>): Promise<void> {

@@ -1,6 +1,7 @@
+import { OrgApi } from '../../core/api/org.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { Division, Team } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { teamColor as computeTeamColor } from '../tasks/task-presentation';
@@ -27,7 +28,7 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
         <tbody>
           @for (t of teams(); track t.id) {
             <tr [class.row--retired]="t.lifecycleState === 'retired'" [class.row--deactivated]="t.lifecycleState === 'deactivated'">
-              <td class="name-cell" [style.--c]="t.color ?? computeColor(t)"><input [(ngModel)]="t.name" (blur)="save(t, { name: t.name })" aria-label="Name" /></td>
+              <td class="name-cell" [style.--c]="computeColor(t)"><input [(ngModel)]="t.name" (blur)="save(t, { name: t.name })" aria-label="Name" /></td>
               <td>
                 <span [style.background]="computeColor(t)" title="Computed from the name"
                       style="display:inline-block;width:26px;height:20px;border-radius:3px"></span>
@@ -50,7 +51,7 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
   `,
 })
 export class TeamsAdminComponent {
-  readonly api = inject(ApiService);
+  readonly orgApi = inject(OrgApi);
   readonly teams = signal<Team[]>([]);
   readonly divisions = signal<Division[]>([]);
   readonly busy = signal(false);
@@ -68,7 +69,7 @@ export class TeamsAdminComponent {
 
   private async refresh(): Promise<void> {
     try {
-      const [teams, divisions] = await Promise.all([this.api.listTeams(true), this.api.listDivisions()]);
+      const [teams, divisions] = await Promise.all([firstValueFrom(this.orgApi.listTeams(true)), firstValueFrom(this.orgApi.listDivisions())]);
       this.teams.set(teams);
       this.divisions.set(divisions);
     } catch (e) {
@@ -80,7 +81,7 @@ export class TeamsAdminComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.api.createTeam({ name: this.newName.trim(), divisionId: this.newDivisionId });
+      await firstValueFrom(this.orgApi.createTeam({ name: this.newName.trim(), divisionId: this.newDivisionId }));
       this.newName = '';
       await this.refresh();
     } catch (e) {
@@ -93,7 +94,7 @@ export class TeamsAdminComponent {
   async save(t: Team, patch: Partial<Team>): Promise<void> {
     this.error.set(null);
     try {
-      await this.api.updateTeam(t.id, patch);
+      await firstValueFrom(this.orgApi.updateTeam(t.id, patch));
     } catch (e) {
       this.error.set(errorMessage(e));
       await this.refresh();
@@ -101,10 +102,10 @@ export class TeamsAdminComponent {
   }
 
   async retire(t: Team): Promise<void> {
-    await this.guard(() => this.api.retireTeam(t.id));
+    await this.guard(() => firstValueFrom(this.orgApi.retireTeam(t.id)));
   }
   async revive(t: Team): Promise<void> {
-    await this.guard(() => this.api.reviveTeam(t.id));
+    await this.guard(() => firstValueFrom(this.orgApi.reviveTeam(t.id)));
   }
 
   private async guard(fn: () => Promise<unknown>): Promise<void> {

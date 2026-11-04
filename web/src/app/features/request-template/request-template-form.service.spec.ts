@@ -48,8 +48,9 @@ describe('RequestTemplateFormService', () => {
   });
 
   describe('serialize emits only type-relevant constraints', () => {
+    // Read back as the loose bag so a test can check keys that must NOT be present.
     const serializeOne = (question: Question) =>
-      svc.serialize(svc.authoringForm([question]))[0];
+      svc.serialize(svc.authoringForm([question]))[0] as unknown as Question;
 
     it('text → min/maxChars only', () => {
       const out = serializeOne(q('text', { minChars: 2, maxChars: 120 }));

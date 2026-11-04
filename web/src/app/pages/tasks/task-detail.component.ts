@@ -1,10 +1,12 @@
+import { AccessApi } from '../../core/api/org.api';
+import { TasksApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import { Component, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Dialog } from '@angular/cdk/dialog';
 import { CdkMenu, CdkMenuItem, CdkMenuTrigger } from '@angular/cdk/menu';
-import { ApiService } from '../../core/api.service';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
 import { ToastService } from '../../core/toast.service';
@@ -57,7 +59,7 @@ interface ClaimRow {
                [style.--c]="divColor(t.divisionId)" [style.--tc]="teamCol(t.teamId)">
             <span class="spine"></span>
             <div class="min-w-0 flex-1 py-4">
-              @if (canEdit()) {
+              @if (can(t, 'task:update')) {
                 <input [(ngModel)]="editName" (blur)="saveName(t)" aria-label="Task name"
                        class="w-full font-display font-bold text-[28px] leading-[1.15]
                               border border-transparent rounded px-1 -mx-1 outline-none
@@ -75,8 +77,10 @@ interface ClaimRow {
             </div>
             <div class="flex items-start gap-2 pt-5 shrink-0">
               <span class="stamp stamp--lg" [class]="stampMod(t)">{{ stamp(t) }}</span>
-              <button class="rounded border border-line bg-paper text-[15px] leading-none px-2 py-[5px] text-ink-soft hover:text-ink hover:border-faint"
-                      [cdkMenuTriggerFor]="manageMenu" aria-label="More options">⋯</button>
+              @if (can(t, 'task:retire')) {
+                <button class="rounded border border-line bg-paper text-[15px] leading-none px-2 py-[5px] text-ink-soft hover:text-ink hover:border-faint"
+                        [cdkMenuTriggerFor]="manageMenu" aria-label="More options">⋯</button>
+              }
             </div>
           </div>
 
@@ -85,7 +89,7 @@ interface ClaimRow {
             <div class="min-w-0">
               <!-- Description: inline-editable or read-only -->
               <div class="paper p-4 mb-4">
-                @if (canEdit()) {
+                @if (can(t, 'task:update')) {
                   <textarea [(ngModel)]="editDescription" (blur)="saveDesc(t)" rows="3" aria-label="Description"
                             class="w-full resize-y border border-transparent rounded p-1 -m-1 text-[15px] leading-[1.55] outline-none
                                    hover:border-line focus:border-ink transition-colors duration-150 placeholder:text-faint"
@@ -123,9 +127,9 @@ interface ClaimRow {
                     @if (c.state) {
                       <span class="text-ink-soft shrink-0">@if (c.version !== null) {v{{ c.version }} }{{ c.state }}</span>
                     }
-                    @if (isCurrentUser(c.userId)) {
+                    @if (isCurrentUser(c.userId) && can(t, 'task:leave')) {
                       <button class="text-ink-soft hover:text-rust hover:underline shrink-0" (click)="leave(t)">Leave</button>
-                    } @else if (canEdit()) {
+                    } @else if (!isCurrentUser(c.userId) && can(t, 'task:manage_claims')) {
                       <button class="text-ink-soft hover:text-rust hover:underline shrink-0" (click)="evict(t, c.userId)"
                               [attr.aria-label]="'Remove ' + c.name">Remove</button>
                     }
@@ -136,14 +140,16 @@ interface ClaimRow {
                   <div class="flex items-center gap-2.5 px-3 py-2">
                     <user-avatar [empty]="true" [size]="22" />
                     <span class="flex-1 text-ink-soft">Open slot</span>
-                    <button class="font-bold hover:underline shrink-0" (click)="claim(t)">Claim</button>
-                    @if (canEdit()) {
+                    @if (can(t, 'task:assign') && !t.claimsClosed) {
+                      <button class="font-bold hover:underline shrink-0" (click)="claim(t)">Claim</button>
+                    }
+                    @if (can(t, 'task:manage_claims') && t.openings > 1) {
                       <button class="text-ink-soft hover:text-rust hover:underline shrink-0" (click)="removeSlot(t)">Remove</button>
                     }
                   </div>
                 }
 
-                @if (canEdit()) {
+                @if (can(t, 'task:manage_claims') && !t.completedAt) {
                   <div class="px-3 py-2">
                     <button class="text-ink-soft hover:text-ink hover:underline" (click)="addOpening(t)">Add slot</button>
                   </div>
@@ -154,7 +160,7 @@ interface ClaimRow {
                   <div class="flex items-center justify-between gap-2 px-3 py-2">
                     <span class="text-ink-soft shrink-0">Requester</span>
                     <div class="min-w-0 flex-1 flex justify-end">
-                      @if (canEdit()) {
+                      @if (can(t, 'task:change_requester')) {
                         <div class="relative">
                           <input [(ngModel)]="requesterQuery" aria-label="Requester"
                                  (focus)="requesterDropOpen.set(true)"
@@ -218,6 +224,9 @@ interface ClaimRow {
               </div>
 
               <!-- Mark complete + force/retire menu -->
+              @if (t.completedAt) {
+                <p class="text-[13px] text-ink-soft">Completed {{ rel(t.completedAt) }} ago by {{ lookup.userName(t.completedBy) }}.</p>
+              } @else if (can(t, 'task:complete')) {
               <div class="flex rounded border border-line bg-paper overflow-hidden text-[13px]">
                 <button class="flex-1 font-bold py-2.5 px-4 transition-colors"
                         [class]="allApproved() ? 'bg-accent text-paper hover:bg-accent-ink' : 'text-ink-soft cursor-not-allowed'"
@@ -226,6 +235,7 @@ interface ClaimRow {
                 <button class="border-l border-line px-3 text-ink-soft hover:bg-paper-hover hover:text-ink transition-colors"
                         [cdkMenuTriggerFor]="completeMenu" aria-label="More completion options">▾</button>
               </div>
+              }
             </aside>
           </div>
         } @else if (!error()) {
@@ -245,7 +255,9 @@ interface ClaimRow {
     <ng-template #completeMenu>
       <div class="menu-card" cdkMenu>
         <button cdkMenuItem (click)="complete(task()!)">Force complete</button>
-        <button cdkMenuItem class="danger" (click)="confirmRetireOpen.set(true)">Retire task…</button>
+        @if (task() && can(task()!, 'task:retire')) {
+          <button cdkMenuItem class="danger" (click)="confirmRetireOpen.set(true)">Retire task…</button>
+        }
       </div>
     </ng-template>
 
@@ -270,7 +282,8 @@ interface ClaimRow {
   `,
 })
 export class TaskDetailComponent implements OnInit {
-  readonly api = inject(ApiService);
+  readonly accessApi = inject(AccessApi);
+  readonly tasksApi = inject(TasksApi);
   readonly lookup = inject(LookupStore);
   private readonly auth = inject(AuthStore);
   private readonly route = inject(ActivatedRoute);
@@ -292,8 +305,10 @@ export class TaskDetailComponent implements OnInit {
   editName = '';
   editDescription = '';
 
-  /** Whether the current user can edit task metadata (name, description, requester). */
-  readonly canEdit = computed(() => this.auth.canManageOrg());
+  /** Whether the caller may do `action` to the task — from the task's `allowedActions`. */
+  can(t: Task, action: string): boolean {
+    return t.allowedActions?.includes(action) === true;
+  }
 
   /** One row per active claimant (from task.claimantUserIds), submission state overlaid. */
   readonly claims = computed<ClaimRow[]>(() => {
@@ -350,20 +365,20 @@ export class TaskDetailComponent implements OnInit {
     void this.lookup.ensureLoaded();
     const id = this.route.snapshot.paramMap.get('id')!;
     void this.load(id);
-    if (this.auth.canManageOrg()) {
-      void this.api.listUsers().then((u) => this.allUsers.set(u)).catch(() => {});
-    }
   }
 
   private async load(id: string): Promise<void> {
     this.error.set(null);
     try {
-      const t = await this.api.getTask(id);
+      const t = await firstValueFrom(this.tasksApi.getTask(id));
       this.task.set(t);
+      if (this.can(t, 'task:change_requester') && this.allUsers().length === 0) {
+        void firstValueFrom(this.accessApi.listUsers()).then((u) => this.allUsers.set(u)).catch(() => {});
+      }
       this.editName = t.name;
       this.editDescription = t.description ?? '';
       this.requesterQuery.set(this.lookup.userName(t.requesterUserId));
-      this.requestTemplate.set(await this.api.getTaskRequestTemplate(id));
+      this.requestTemplate.set(await firstValueFrom(this.tasksApi.getTaskRequestTemplate(id)));
       await this.loadSubmissions(id);
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -373,7 +388,7 @@ export class TaskDetailComponent implements OnInit {
   /** Submissions feed the claim strip; tolerate a 403 (non-reviewers) with an empty strip. */
   private async loadSubmissions(id: string): Promise<void> {
     try {
-      this.submissions.set(await this.api.listSubmissions(id));
+      this.submissions.set(await firstValueFrom(this.tasksApi.listSubmissions(id)));
     } catch {
       this.submissions.set([]);
     }
@@ -402,13 +417,13 @@ export class TaskDetailComponent implements OnInit {
   async saveName(t: Task): Promise<void> {
     const name = this.editName.trim();
     if (!name || name === t.name) return;
-    await this.run(this.api.updateTask(t.id, { name }));
+    await this.run(firstValueFrom(this.tasksApi.updateTask(t.id, { name })));
   }
 
   async saveDesc(t: Task): Promise<void> {
     const description = this.editDescription;
     if (description === (t.description ?? '')) return;
-    await this.run(this.api.updateTask(t.id, { description }));
+    await this.run(firstValueFrom(this.tasksApi.updateTask(t.id, { description })));
   }
 
   // ---- requester combobox ----
@@ -419,20 +434,20 @@ export class TaskDetailComponent implements OnInit {
   async selectRequester(t: Task, u: AdminUser): Promise<void> {
     this.requesterQuery.set(u.displayName);
     this.requesterDropOpen.set(false);
-    await this.run(this.api.changeRequester(t.id, u.id), 'Requester changed');
+    await this.run(firstValueFrom(this.tasksApi.changeRequester(t.id, u.id)), 'Requester changed');
   }
 
   // ---- claim-strip actions ----
-  claim(t: Task): void { void this.run(this.api.claimTask(t.id), 'Claimed an opening'); }
-  leave(t: Task): void { void this.run(this.api.leaveTask(t.id), 'Left the task'); }
-  evict(t: Task, userId: string): void { void this.run(this.api.removeClaimant(t.id, userId), 'Claimant removed'); }
-  addOpening(t: Task): void { void this.run(this.api.manageClaims(t.id, { openingsDelta: 1 }), 'Slot added'); }
-  removeSlot(t: Task): void { void this.run(this.api.manageClaims(t.id, { openingsDelta: -1 }), 'Slot removed'); }
-  complete(t: Task): void { void this.run(this.api.completeTask(t.id), 'Task marked complete'); }
+  claim(t: Task): void { void this.run(firstValueFrom(this.tasksApi.claimTask(t.id)), 'Claimed an opening'); }
+  leave(t: Task): void { void this.run(firstValueFrom(this.tasksApi.leaveTask(t.id)), 'Left the task'); }
+  evict(t: Task, userId: string): void { void this.run(firstValueFrom(this.tasksApi.removeClaimant(t.id, userId)), 'Claimant removed'); }
+  addOpening(t: Task): void { void this.run(firstValueFrom(this.tasksApi.manageClaims(t.id, { openingsDelta: 1 })), 'Slot added'); }
+  removeSlot(t: Task): void { void this.run(firstValueFrom(this.tasksApi.manageClaims(t.id, { openingsDelta: -1 })), 'Slot removed'); }
+  complete(t: Task): void { void this.run(firstValueFrom(this.tasksApi.completeTask(t.id)), 'Task marked complete'); }
 
   confirmRetire(t: Task): void {
     this.confirmRetireOpen.set(false);
-    void this.run(this.api.retireTask(t.id), 'Task retired');
+    void this.run(firstValueFrom(this.tasksApi.retireTask(t.id)), 'Task retired');
   }
 
   /** Open the submit-work dialog; refresh task + History when a submission lands. */
@@ -451,7 +466,7 @@ export class TaskDetailComponent implements OnInit {
     const id = this.task()?.id;
     if (!id) return;
     try {
-      this.task.set(await this.api.getTask(id));
+      this.task.set(await firstValueFrom(this.tasksApi.getTask(id)));
       await this.loadSubmissions(id);
       await this.thread()?.reload();
     } catch (e) {

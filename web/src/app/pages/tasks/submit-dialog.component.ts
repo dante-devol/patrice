@@ -1,11 +1,21 @@
+import { TasksApi } from '../../core/api/work.api';
+import { firstValueFrom } from 'rxjs';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
-import { ApiService } from '../../core/api.service';
 import { ToastService } from '../../core/toast.service';
 import { Question, SubmitAnswer } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { isChoiceType, isTextType } from '../../features/request-template/request-template-form.service';
+import { validateSubmission } from '../../core/validation/validate-submission';
+import type { Answer, AttachmentMeta, QuestionDef } from '../../core/validation/request-template.types';
+
+/** A file uploaded for an answer, waiting for the submit to claim it. */
+interface Upload {
+  id: string;
+  filename: string;
+  meta: AttachmentMeta;
+}
 
 export interface SubmitDialogData {
   taskId: string;
@@ -13,9 +23,10 @@ export interface SubmitDialogData {
 }
 
 /**
- * Submit-your-work dialog (Slice 5). Replaces the always-open answer form: a claimant
- * fills the request template and submits/resubmits here. The API re-authorizes `task:submit`
- * (a non-claimant gets a 403 → error toast). Returns 'submitted' so the opener refreshes.
+ * Submit-your-work dialog. A claimant answers the task's questions — files included:
+ * each is uploaded as it's chosen and claimed by the submit — and the answers are
+ * checked by the same validator the API runs before they're sent. The API
+ * re-authorizes `task:submit`. Returns 'submitted' so the opener refreshes.
  */
 @Component({
   selector: 'submit-dialog',
@@ -58,8 +69,20 @@ export interface SubmitDialogData {
                     }
                   </div>
                 }
-                @case ('attachment') { <span class="text-[13px] text-ink-soft">File answers can't be edited here yet.</span> }
+                @case ('attachment') {
+                  <div>
+                    <input [id]="'q-' + q.id" type="file" [multiple]="(q.constraints.maxFiles ?? 1) > 1"
+                           [attr.accept]="accept(q)" (change)="addFiles(q, $event)" [disabled]="busy()" />
+                    @for (u of uploads[q.id!] ?? []; track u.id) {
+                      <div class="flex items-center gap-2 mt-1 text-[13px]">
+                        <span class="truncate">{{ u.filename }}</span>
+                        <button class="text-ink-soft hover:text-rust hover:underline" (click)="removeFile(q, u)">Remove</button>
+                      </div>
+                    }
+                  </div>
+                }
               }
+              @for (e of errorsFor(q); track e) { <span class="text-[12.5px] text-rust">{{ e }}</span> }
             </div>
           }
         }
@@ -78,17 +101,56 @@ export interface SubmitDialogData {
   ],
 })
 export class SubmitDialogComponent {
-  private readonly api = inject(ApiService);
+  private readonly tasksApi = inject(TasksApi);
   private readonly toast = inject(ToastService);
   private readonly ref = inject<DialogRef<'submitted' | undefined>>(DialogRef);
   readonly data = inject<SubmitDialogData>(DIALOG_DATA);
 
   readonly busy = signal(false);
+  readonly errors = signal<Record<string, string[]>>({});
   /** ngModel bag keyed by question id. */
   model: Record<string, unknown> = {};
+  /** Uploaded files per attachment question. */
+  uploads: Record<string, Upload[]> = {};
 
   answerable(): Question[] {
-    return this.data.questions.filter((q) => q.type !== 'attachment');
+    return this.data.questions;
+  }
+
+  errorsFor(q: Question): string[] {
+    return this.errors()[q.id!] ?? [];
+  }
+
+  /** The file picker's filter, from the question's allowed types (coarse kinds pass). */
+  accept(q: Question): string | null {
+    const types = q.constraints.allowedTypes ?? [];
+    return types.length ? types.map((t) => (t.includes('/') ? t : `${t}/*`)).join(',') : null;
+  }
+
+  async addFiles(q: Question, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    this.busy.set(true);
+    try {
+      for (const file of files) {
+        const meta = await firstValueFrom(this.tasksApi.uploadForAnswer(this.data.taskId, file));
+        const list = this.uploads[q.id!] ?? [];
+        this.uploads[q.id!] = [
+          ...list,
+          { id: meta.id, filename: meta.filename, meta: { contentType: meta.contentType, kind: meta.kind, byteSize: meta.byteSize } },
+        ];
+      }
+    } catch (e) {
+      this.toast.error(errorMessage(e));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** Drop a file from the answer; the unclaimed upload is collected later. */
+  removeFile(q: Question, u: Upload): void {
+    this.uploads[q.id!] = (this.uploads[q.id!] ?? []).filter((x) => x.id !== u.id);
   }
 
   close(): void {
@@ -96,12 +158,13 @@ export class SubmitDialogComponent {
   }
 
   async submit(): Promise<void> {
+    const answers = this.answerable()
+      .map((q) => this.toAnswer(q))
+      .filter((a): a is SubmitAnswer => a !== null);
+    if (!(await this.check(answers))) return;
     this.busy.set(true);
     try {
-      const answers = this.answerable()
-        .map((q) => this.toAnswer(q))
-        .filter((a): a is SubmitAnswer => a !== null);
-      await this.api.submit(this.data.taskId, answers);
+      await firstValueFrom(this.tasksApi.submit(this.data.taskId, answers));
       this.toast.success('Submitted for review');
       this.ref.close('submitted');
     } catch (e) {
@@ -113,6 +176,10 @@ export class SubmitDialogComponent {
 
   /** Map a question's ngModel value to a submit answer, or null when left blank. */
   private toAnswer(q: Question): SubmitAnswer | null {
+    if (q.type === 'attachment') {
+      const ids = (this.uploads[q.id!] ?? []).map((u) => u.id);
+      return ids.length ? { questionId: q.id!, attachmentIds: ids } : null;
+    }
     const raw = this.model[q.id!];
     if (raw == null || raw === '') return null;
     if (q.type === 'numeric') return { questionId: q.id!, value: Number(raw) };
@@ -122,5 +189,23 @@ export class SubmitDialogComponent {
     }
     if (isTextType(q.type)) return { questionId: q.id!, value: String(raw) };
     return null;
+  }
+
+  /** Run the API's own validator here first, so mistakes show next to their question. */
+  private async check(answers: SubmitAnswer[]): Promise<boolean> {
+    const metaById = new Map(Object.values(this.uploads).flat().map((u) => [u.id, u.meta]));
+    const defs: QuestionDef[] = this.data.questions.map((q) => ({ ...q, id: q.id!, constraints: q.constraints as never }));
+    const typed: Answer[] = answers.map((a) => {
+      const q = this.data.questions.find((x) => x.id === a.questionId)!;
+      if (q.type === 'attachment') return { questionId: a.questionId, attachmentIds: a.attachmentIds ?? null };
+      if (q.type === 'numeric') return { questionId: a.questionId, number: a.value as number };
+      if (isChoiceType(q.type)) return { questionId: a.questionId, selected: a.value as string[] };
+      return { questionId: a.questionId, text: a.value as string };
+    });
+    const result = await validateSubmission({ id: this.data.taskId, questions: defs }, typed, (id) => metaById.get(id) ?? null);
+    const byQuestion: Record<string, string[]> = {};
+    if (!result.ok) for (const e of result.errors) (byQuestion[e.questionId] ??= []).push(e.message);
+    this.errors.set(byQuestion);
+    return result.ok;
   }
 }

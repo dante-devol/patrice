@@ -96,12 +96,13 @@ export class RequestTemplateFormService {
     return arr.controls.map((ctrl) => {
       const g = ctrl as FormGroup;
       const type = g.get('type')!.value as QuestionType;
+      // constraintsFor builds the bag that matches `type`; the API validates it too.
       return {
         type,
         prompt: (g.get('prompt')!.value as string).trim(),
         required: g.get('required')!.value as boolean,
         constraints: this.constraintsFor(type, g),
-      };
+      } as QuestionInput;
     });
   }
 

@@ -1,3 +1,5 @@
+import { AccessApi, OrgApi } from '../../core/api/org.api';
+import { firstValueFrom } from 'rxjs';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -11,7 +13,6 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
 import { ActionInfo, Division, Grant, Role, ScopeKind, Team } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { ToastService } from '../../core/toast.service';
@@ -289,7 +290,8 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
   `,
 })
 export class PermissionsAdminComponent implements OnDestroy {
-  private readonly api = inject(ApiService);
+  private readonly accessApi = inject(AccessApi);
+  private readonly orgApi = inject(OrgApi);
   private readonly toast = inject(ToastService);
   private readonly unsaved = inject(UnsavedChangesService);
 
@@ -400,11 +402,11 @@ export class PermissionsAdminComponent implements OnDestroy {
   private async load(): Promise<void> {
     try {
       const [roles, grants, actions, divisions, teams] = await Promise.all([
-        this.api.listRoles(),
-        this.api.listGrants(),
-        this.api.listActions(),
-        this.api.listDivisions(),
-        this.api.listTeams(),
+        firstValueFrom(this.orgApi.listRoles()),
+        firstValueFrom(this.accessApi.listGrants()),
+        firstValueFrom(this.accessApi.listActions()),
+        firstValueFrom(this.orgApi.listDivisions()),
+        firstValueFrom(this.orgApi.listTeams()),
       ]);
       this.roles.set(roles);
       this.catalog.set(actions.catalog);
@@ -586,7 +588,7 @@ export class PermissionsAdminComponent implements OnDestroy {
     this.saving.set(true);
     this.saveError.set(null);
     try {
-      this.setSaved(await this.api.saveGrants(this.changes()));
+      this.setSaved(await firstValueFrom(this.accessApi.saveGrants(this.changes())));
       this.toast.success(`Saved ${n} permission ${n === 1 ? 'change' : 'changes'}`);
     } catch (e) {
       this.stale.set(e instanceof HttpErrorResponse && e.status === 409 && e.error?.error?.code === 'STALE_GRANT');
