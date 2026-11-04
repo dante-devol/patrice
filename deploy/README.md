@@ -22,8 +22,9 @@ gateway), `web` (the SPA + an `/api` reverse proxy), and a bundled `db`.
 
 ```bash
 mkdir -p /opt/patrice && cd /opt/patrice
-# put docker-compose.prod.yml and .env.example here, then:
+# put docker-compose.prod.yml, .env.example and worker.env.example here, then:
 cp .env.example .env
+cp worker.env.example worker.env
 ```
 
 Edit `.env` and fill in every `CHANGE_ME`. At minimum:
@@ -35,6 +36,10 @@ Edit `.env` and fill in every `CHANGE_ME`. At minimum:
 - `POSTGRES_PASSWORD` — must match the password inside `DATABASE_URL`.
 - `SMTP_URL`, `EMAIL_FROM` — a real outbound mail server (invites + email login
   links go through it).
+
+Edit `worker.env` and set `INTEGRATION_TOKEN_KEY` (`openssl rand -hex 32`). It
+protects stored Discord bot tokens, and only the worker reads that file: the API
+never holds the key. The worker won't start without it.
 
 The API validates `.env` on boot and refuses to start with a readable list of
 every bad/missing key, so a typo fails fast rather than half-booting.
@@ -55,7 +60,7 @@ on `${WEB_PORT}` (default `8080`).
 On a fresh database Patrice enters **bootstrap mode** and prints a one-time key:
 
 ```bash
-docker compose -f docker-compose.prod.yml logs api | grep -i bootstrap
+docker compose -f docker-compose.prod.yml logs worker | grep -i bootstrap
 ```
 
 Open `PUBLIC_BASE_URL` in a browser, go through setup with that key, and you

@@ -109,6 +109,7 @@ export class RolesAdminComponent {
       for (const c of conns) {
         const maps = await this.api.listMappings(c.id).catch(() => []);
         for (const m of maps) {
+          if (!m.roleId) continue; // a membership mapping
           const list = byRole.get(m.roleId) ?? [];
           list.push({
             connectionName: c.displayName,

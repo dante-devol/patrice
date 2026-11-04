@@ -1,20 +1,18 @@
 # Patrice — dev/evaluation stack.
-# `docker compose up --build` on an empty DB: Vault initialises, migrations run,
-# the API prints a bootstrap key, the worker opens Gateway sessions, and the web
-# app is served on :8080.
+# `docker compose up --build` on an empty DB: migrations run, the worker prints a
+# bootstrap key and opens Gateway sessions, and the web app is served on :8080.
 #
 # Secrets / overrides: create a .env file in this directory (docker-compose reads
 # it automatically). Relevant vars:
 #   SESSION_SECRET, TOKEN_PEPPER  — override the throwaway dev defaults
-#   KMS_KEY_ID, AWS_REGION        — required for the KMS cipher adapter
-#   INTEGRATION_TOKEN_KEY         — 64-hex-char key for the AEAD adapter
+#   INTEGRATION_TOKEN_KEY         — required: 64 hex chars (`openssl rand -hex 32`).
+#                                   Only the worker gets it.
 #
 # ⚠️  NOT a production deployment. Plain HTTP on localhost; throwaway secrets.
 #     For production you MUST at minimum:
 #       - terminate TLS and set COOKIE_SECURE=true
 #       - supply strong, unique SESSION_SECRET and TOKEN_PEPPER (≥32 random bytes)
 #       - use the S3 storage driver (local-fs is single-instance only)
-#       - replace Vault dev mode with a real Vault cluster or KMS
 
 x-api-base: &api-base
   build:
@@ -22,8 +20,6 @@ x-api-base: &api-base
   depends_on:
     db:
       condition: service_healthy
-    vault-init:
-      condition: service_completed_successfully
 
 x-common-env: &common-env
   DATABASE_URL: postgresql://patrice:patrice@db:5432/patrice?schema=public
@@ -38,13 +34,6 @@ x-common-env: &common-env
   LOG_LEVEL: info
   COOKIE_SECURE: ${COOKIE_SECURE:-false}
   TRUST_PROXY: 'true'
-  VAULT_ADDR: http://vault:8200
-  VAULT_TOKEN: dev-root
-  VAULT_TRANSIT_KEY: patrice-integration
-  KMS_KEY_ID: ${KMS_KEY_ID:-}
-  AWS_REGION: ${AWS_REGION:-us-east-2}
-  # Throwaway dev key — override via root .env for any persistent data.
-  INTEGRATION_TOKEN_KEY: ${INTEGRATION_TOKEN_KEY:-deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef}
 
 services:
   db:
@@ -72,38 +61,6 @@ services:
       - '1025:1025' # SMTP
     restart: unless-stopped
 
-  vault:
-    image: hashicorp/vault:1.17
-    environment:
-      VAULT_DEV_ROOT_TOKEN_ID: dev-root
-      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
-    ports:
-      - '8200:8200'
-    cap_add:
-      - IPC_LOCK
-    healthcheck:
-      test: ['CMD', 'vault', 'status', '-address=http://127.0.0.1:8200']
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 3s
-
-  # One-shot: enables the transit engine and creates the encryption key.
-  # Exits 0 after setup; api and worker wait on service_completed_successfully.
-  vault-init:
-    image: hashicorp/vault:1.17
-    environment:
-      VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN: dev-root
-    depends_on:
-      vault:
-        condition: service_healthy
-    entrypoint:
-      - sh
-      - -c
-      - vault secrets enable transit || true; vault write -f transit/keys/patrice-integration || true; echo vault-init done
-    restart: 'no'
-
   # HTTP-only role: handles all inbound API requests. No background jobs.
   api:
     <<: *api-base
@@ -114,16 +71,15 @@ services:
     ports:
       - '3000:3000'
 
-  # Worker role: pg-boss consumers, cron, GC, Discord Gateway sessions.
-  # Holds the cipher key; never exposes HTTP.
+  # Worker role: pg-boss consumers, cron, GC, Discord Gateway sessions, bootstrap
+  # mode. The only service with the bot-token key; never exposes HTTP.
   worker:
     <<: *api-base
     environment:
       <<: *common-env
       PROCESS_ROLE: worker
       LOG_LEVEL: debug
-    volumes:
-      - ./.aws:/root/.aws:ro
+      INTEGRATION_TOKEN_KEY: ${INTEGRATION_TOKEN_KEY:?Set INTEGRATION_TOKEN_KEY in .env (openssl rand -hex 32)}
 
   web:
     build:

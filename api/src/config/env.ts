@@ -59,20 +59,13 @@ export const envSchema = z.object({
   // Batching window: role-change events within this window collapse into one sync
   // job per connection (pg-boss singletonKey deduplication). Default 5 s (#61).
   INTEGRATION_SYNC_DELAY_SECONDS: z.coerce.number().int().positive().default(5),
-  // AES-256-GCM key for the AEAD-env SecretCipherPort adapter (Slice C / #57).
-  // 32 raw bytes encoded as hex (64 chars). Worker-only — the api role never
-  // decrypts tokens. If absent the adapter is disabled (plaintext botToken fallback).
+  // AES-256-GCM key protecting bot tokens: 32 bytes as 64 hex characters. Give it to
+  // the worker only; the worker refuses to start without it, and the API never needs
+  // it (it hands new tokens to the worker in a job).
   INTEGRATION_TOKEN_KEY: emptyAsUndefined(z.string().regex(/^[0-9a-fA-F]{64}$/).optional()),
   // Which root module main.ts boots: `api` (HTTP only) or `worker` (jobs, schedules,
   // the Gateway). Unset runs both in one process, for development.
   PROCESS_ROLE: emptyAsUndefined(z.enum(['api', 'worker']).optional()),
-  // Vault transit adapter (Slice H / #62). Worker-only.
-  VAULT_ADDR: emptyAsUndefined(z.string().url().optional()),
-  VAULT_TOKEN: emptyAsUndefined(z.string().optional()),
-  VAULT_TRANSIT_KEY: emptyAsUndefined(z.string().optional()),
-  // KMS envelope adapter (Slice H / #62). Worker-only.
-  KMS_KEY_ID: emptyAsUndefined(z.string().optional()),
-  AWS_REGION: emptyAsUndefined(z.string().optional()),
 });
 
 export type Env = z.infer<typeof envSchema>;

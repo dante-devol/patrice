@@ -121,7 +121,13 @@ enum IntegrationProvider {
 enum IntegrationStatus {
   active
   broken
-  disabled
+}
+
+/// What happens to the roles and memberships an integration granted when the thing
+/// that granted them goes away: kept as native grants, or revoked.
+enum GrantDisposition {
+  keep
+  revoke
 }
 
 enum SyncDirection {
@@ -206,6 +212,7 @@ model Division {
   teams            Team[]
   memberships      Membership[]
   scopedGrants     Grant[]
+  groupMappings    ExternalGroupMapping[]
 
   @@map("division")
 }
@@ -223,10 +230,11 @@ model Team {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  division     Division     @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  tasks        Task[]
-  memberships  Membership[]
-  scopedGrants Grant[]
+  division      Division               @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  tasks         Task[]
+  memberships   Membership[]
+  scopedGrants  Grant[]
+  groupMappings ExternalGroupMapping[]
 
   @@index([divisionId])
   @@map("team")
@@ -761,6 +769,8 @@ model IntegrationConnection {
   lastSyncGranted        Int                 @default(0) @map("last_sync_granted")
   lastSyncRevoked        Int                 @default(0) @map("last_sync_revoked")
   lastError              String?             @map("last_error")
+  /// Set at retire: what to do with this connection's grants when it's collected.
+  retireDisposition      GrantDisposition?   @map("retire_disposition")
   createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -802,7 +812,10 @@ model ExternalIdentity {
 /// `conflict_winner` is used for cold-baseline conflict resolution (Slice E/#59).
 model ExternalGroupMapping {
   id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  roleId          String         @map("role_id") @db.Uuid
+  /// Exactly one of role, division or team is the target (a CHECK).
+  roleId          String?        @map("role_id") @db.Uuid
+  divisionId      String?        @map("division_id") @db.Uuid
+  teamId          String?        @map("team_id") @db.Uuid
   connectionId    String         @map("connection_id") @db.Uuid
   externalGroupId String         @map("external_group_id")
   syncDirection   SyncDirection  @map("sync_direction")
@@ -811,7 +824,9 @@ model ExternalGroupMapping {
   createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  role          Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  role          Role?                 @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  division      Division?             @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  team          Team?                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
   connection    IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
   syncBaselines SyncBaseline[]
 

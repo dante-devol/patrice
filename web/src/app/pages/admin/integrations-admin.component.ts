@@ -320,7 +320,7 @@ export class IntegrationsAdminComponent {
         provider: 'discord',
         externalWorkspaceId: this.form.guildId.trim(),
         displayName: this.form.displayName.trim(),
-        config: this.form.botToken.trim() ? { botToken: this.form.botToken.trim() } : {},
+        ...(this.form.botToken.trim() ? { botToken: this.form.botToken.trim() } : {}),
       });
       this.form.displayName = '';
       this.form.guildId = '';

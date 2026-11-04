@@ -5,10 +5,11 @@
 #
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d
-#   docker compose -f docker-compose.prod.yml logs api   # grab the bootstrap key
+#   docker compose -f docker-compose.prod.yml logs worker   # grab the bootstrap key
 #
 # Compose auto-reads `.env` from this directory for both ${VAR} interpolation
-# (image tag, ports, db creds) and the per-service `env_file` injection.
+# (image tag, ports, db creds) and the per-service `env_file` injection. The bot-token
+# key goes in `worker.env`, which only the worker reads: the API never holds it.
 #
 # TLS is intentionally NOT handled here: the `web` service serves plain HTTP on
 # ${WEB_PORT}. Terminate TLS at your own proxy (nginx / Cloudflare / cloud LB),
@@ -66,11 +67,14 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  # Worker role: pg-boss consumers, cron, GC, the Discord Gateway socket. Single
-  # instance (the Gateway socket is the strict single-instance guard); holds the
-  # integration cipher key. Never exposes HTTP.
+  # Worker role: pg-boss consumers, cron, GC, the Discord Gateway socket and
+  # bootstrap mode. Single instance (the Gateway socket is the strict single-instance
+  # guard). The only service with the bot-token key (worker.env). Never exposes HTTP.
   worker:
     <<: *api-image
+    env_file:
+      - .env
+      - worker.env
     environment:
       PROCESS_ROLE: worker
       SKIP_MIGRATIONS: 'true'

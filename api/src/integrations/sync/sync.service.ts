@@ -2,12 +2,8 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QueueService } from '../../queue/queue.service';
 import { ENV, Env } from '../../config/env';
-import { DiscordAdapter } from './discord.adapter';
 
 
-// Adaptive reconcile floor: 6h when Gateway is healthy, 30min when degraded.
-const FLOOR_HEALTHY_HOURS = 6;
-const FLOOR_DEGRADED_HOURS = 0.5;
 
 
 export interface SyncJobData {
@@ -19,27 +15,18 @@ export interface SyncJobData {
 /**
  * Integration sync orchestration. The API side enqueues: `enqueue` (now),
  * `enqueueSoon` (debounced per connection) and `enqueueUserSoon` (debounced per user).
- * The worker's {@link SyncWorker} runs the jobs and the reconcile floor. A failed run
- * throws, so pg-boss retries it.
+ * The worker's SyncWorker runs the jobs (through the provider-neutral SyncEngine) and
+ * the reconcile floor.
  */
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
 
-  /** Gateway health state per connectionId — updated by IntegrationGatewayService. */
-  private readonly gatewayHealth = new Map<string, boolean>();
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
-    private readonly discord: DiscordAdapter,
     @Inject(ENV) private readonly env: Env,
   ) {}
-
-  /** Called by IntegrationGatewayService when health changes. */
-  setGatewayHealth(connectionId: string, healthy: boolean): void {
-    this.gatewayHealth.set(connectionId, healthy);
-  }
 
   /** Enqueue an immediate sync for one connection. */
   async enqueue(connectionId: string): Promise<void> {
@@ -127,57 +114,6 @@ export class SyncService {
       await Promise.all(mappings.map((m) => this.enqueueSoon(m.connectionId)));
     } catch (err) {
       this.logger.warn(`notifyRoleChange for ${roleId} failed: ${(err as Error).message}`);
-    }
-  }
-
-  /** Reconcile a whole connection (worker). Throws on failure so the job retries. */
-  async runSync(connectionId: string): Promise<void> {
-    try {
-      await this.discord.sync(connectionId);
-    } catch (err) {
-      this.logger.error(`Sync failed for connection ${connectionId}: ${(err as Error).message}`);
-      throw err;
-    }
-  }
-
-  /** Reconcile one member of a connection (worker). Throws on failure so the job retries. */
-  async runSyncUser(connectionId: string, externalUserId: string): Promise<void> {
-    try {
-      await this.discord.syncUser(connectionId, externalUserId);
-    } catch (err) {
-      this.logger.error(`User sync failed for ${connectionId}/${externalUserId}: ${(err as Error).message}`);
-      throw err;
-    }
-  }
-
-  /**
-   * Adaptive Reconcile Floor tick (#61).
-   *
-   * Runs every 30 min. For each active connection:
-   *  - If the Gateway is healthy: only sync if last run > 6h ago.
-   *  - If the Gateway is degraded: always sync (30-min effective floor).
-   * When degraded, also logs a warning so operators know the fast-path is down.
-   */
-  async reconcileFloorTick(): Promise<void> {
-    const connections = await this.prisma.integrationConnection.findMany({
-      where: { lifecycleState: 'active', status: { not: 'disabled' } },
-      select: { id: true, updatedAt: true },
-    });
-
-    const now = Date.now();
-    for (const conn of connections) {
-      const gatewayHealthy = this.gatewayHealth.get(conn.id) ?? false;
-      const floorHours = gatewayHealthy ? FLOOR_HEALTHY_HOURS : FLOOR_DEGRADED_HOURS;
-      const staleSinceMs = floorHours * 60 * 60 * 1000;
-      const age = now - conn.updatedAt.getTime();
-
-      if (!gatewayHealthy) {
-        this.logger.warn(`Gateway degraded for ${conn.id} — floor tightened to ${FLOOR_DEGRADED_HOURS * 60}min`);
-      }
-
-      if (age >= staleSinceMs) {
-        await this.enqueue(conn.id);
-      }
     }
   }
 }

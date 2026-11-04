@@ -7,7 +7,7 @@ import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { CedarEngine } from '../access/cedar/engine';
 import { ActivityService } from '../activity/activity.service';
-import { ALL_ACTION_STRINGS, RESOURCE_TYPE_BY_ACTION, TASK_FAMILY_ACTIONS } from '../access/actions';
+import { ALL_ACTION_STRINGS, EFFECTIVE_ADMIN_ACTIONS, RESOURCE_TYPE_BY_ACTION, TASK_FAMILY_ACTIONS } from '../access/actions';
 import {
   ProjectableGrant,
   grantToPolicy,
@@ -196,6 +196,26 @@ export class GrantsService {
   }
 
   /** Confirm the granted role exists and is active (422 otherwise). */
+  /**
+   * Native-Authority Carve-Out, grant side (problems D4): a governance permit can't
+   * go to a role that an integration grants (mapped inbound or bidirectional), or
+   * whoever controls the external group could make admins. The mapping side refuses
+   * mapping a role that already holds one.
+   */
+  private async assertNotGovernanceToMappedRole(roleId: string, action: string, effect: string): Promise<void> {
+    if (effect !== 'permit' || !EFFECTIVE_ADMIN_ACTIONS.includes(action)) return;
+    const mapped = await this.prisma.externalGroupMapping.findFirst({
+      where: { roleId, syncDirection: { in: ['inbound', 'bidirectional'] } },
+      select: { id: true },
+    });
+    if (mapped) {
+      throw new UnprocessableError(
+        'GOVERNANCE_ROLE_MAPPED',
+        'This role is granted by an integration, so it cannot hold governance actions',
+      );
+    }
+  }
+
   private async assertRole(roleId: string): Promise<void> {
     const role = await this.prisma.role.findFirst({
       where: { id: roleId },
@@ -218,6 +238,7 @@ export class GrantsService {
   ): Promise<GrantView> {
     this.assertShape(dto.action, dto);
     await this.assertRole(dto.roleId);
+    await this.assertNotGovernanceToMappedRole(dto.roleId, dto.action, dto.effect);
 
     const candidate: ProjectableGrant = {
       id: randomUUID(),
@@ -303,6 +324,7 @@ export class GrantsService {
             : existing.scopeRoleId,
     };
     this.assertShape(merged.action, merged);
+    await this.assertNotGovernanceToMappedRole(existing.roleId, merged.action, merged.effect);
 
     const candidate: ProjectableGrant = {
       id: existing.id,

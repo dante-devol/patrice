@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ActivitySource, Prisma } from '@prisma/client';
+import { ActivitySource, GrantDisposition, Prisma } from '@prisma/client';
+import { IntegrationsService } from '../integrations/integrations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SYSTEM_SUBJECT_ID } from '../settings/settings.service';
 import { ActivityService } from '../activity/activity.service';
@@ -70,6 +71,7 @@ export class GcService {
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
+    private readonly integrations: IntegrationsService,
   ) {}
 
   /** The past-grace cutoff `Date` for collectability. */
@@ -113,21 +115,16 @@ export class GcService {
     return { tasks, divisions, teams, roles };
   }
 
-  /** Retired-past-grace integration connections with no surviving external_identity or group mappings. */
+  /**
+   * Retired-past-grace integration connections. Its links, mappings and baseline go
+   * with it, and what it granted is kept or revoked as chosen at retire.
+   */
   private async collectableConnections(cutoff: Date): Promise<string[]> {
-    const candidates = await this.prisma.integrationConnection.findMany({
+    const rows = await this.prisma.integrationConnection.findMany({
       where: { lifecycleState: 'retired', retiredAt: { lt: cutoff } },
       select: { id: true },
     });
-    const result: string[] = [];
-    for (const c of candidates) {
-      const [ids, mappings] = await Promise.all([
-        this.prisma.externalIdentity.count({ where: { connectionId: c.id } }),
-        this.prisma.externalGroupMapping.count({ where: { connectionId: c.id } }),
-      ]);
-      if (ids === 0 && mappings === 0) result.push(c.id);
-    }
-    return result;
+    return rows.map((r) => r.id);
   }
 
   private async roleUnreferenced(roleId: string): Promise<boolean> {
@@ -286,8 +283,25 @@ export class GcService {
     report: GcReport,
   ): Promise<boolean> {
     try {
+      const conn = await this.prisma.integrationConnection.findUniqueOrThrow({
+        where: { id: connectionId },
+        select: { retireDisposition: true },
+      });
+      const grants = conn.retireDisposition ?? GrantDisposition.keep;
+      const affected = await this.integrations.releaseGrants(null, connectionId, null, grants);
       await this.prisma.$transaction(async (tx) => {
+        await tx.externalIdentity.deleteMany({ where: { connectionId } });
+        await tx.externalGroupMapping.deleteMany({ where: { connectionId } }); // cascades the baseline
         await tx.integrationConnection.delete({ where: { id: connectionId } });
+        await this.activity.logActivity({
+          tx,
+          actorUserId: null,
+          subjectType: 'integration_connection',
+          subjectId: connectionId,
+          verb: 'integration.grants_released',
+          payload: { connectionId, grants, affected },
+          source: ActivitySource.system,
+        });
         await this.activity.logActivity({
           tx,
           actorUserId: null,

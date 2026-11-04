@@ -10,25 +10,14 @@ describe('DiscordAdapter.applyOutbound', () => {
   const conn = {
     id: 'conn-1',
     externalWorkspaceId: 'guild-1',
-    config: { botToken: 'Bot.token' },
-    credentialsRef: null,
+    credentialsRef: 'aead:sealed',
   } as never;
 
   const addOp: ExternalRoleOp = { externalUserId: 'u1', externalGroupId: 'g1', action: 'add' };
 
   function makeAdapter(rest: Partial<DiscordRestClient>) {
-    const prisma = { integrationConnection: { update: jest.fn() } };
-    const activity = { logActivity: jest.fn() };
-    const cipher = { canHandle: () => false };
-    return new DiscordAdapter(
-      prisma as never,
-      activity as never,
-      {} as never,
-      cipher as never,
-      rest as DiscordRestClient,
-      {} as never, // NotificationsService — unused by applyOutbound
-      {} as never, // AdministrabilityService — unused by applyOutbound
-    );
+    const vault = { decrypt: () => 'Bot.token' };
+    return new DiscordAdapter(vault as never, rest as DiscordRestClient);
   }
 
   it('reports a human-readable reason + flags the group broken on 403', async () => {
@@ -63,5 +52,14 @@ describe('DiscordAdapter.applyOutbound', () => {
     expect(result.failReason).toBe('not_found');
     expect(result.lastError).toMatch(/no longer exists/i);
     expect(result.lastError).not.toMatch(/404/);
+  });
+
+  it('stops and reports the credentials rejected on 401', async () => {
+    const adapter = makeAdapter({
+      addMemberRole: jest.fn().mockResolvedValue({ ok: false, status: 401, body: null }),
+    });
+    const result = await adapter.applyOutbound(conn, [addOp, { ...addOp, externalUserId: 'u2' }]);
+    expect(result.credentialsRejected).toBe(true);
+    expect(result.failed).toBe(2);
   });
 });

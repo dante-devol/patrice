@@ -267,7 +267,7 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
         provider: 'discord',
         externalWorkspaceId: 'guild-link-test',
         displayName: 'Link Guild',
-        config: { botToken: 'Bot.x' },
+        botToken: 'Bot.x',
       });
     });
 

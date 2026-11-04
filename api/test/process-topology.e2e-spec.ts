@@ -8,6 +8,7 @@ import { JobRunner } from '../src/queue/job-runner.service';
 import { QueueService } from '../src/queue/queue.service';
 import { EmailService } from '../src/email/email.service';
 import { IntegrationGatewayService } from '../src/integrations/gateway/integration-gateway.service';
+import { TokenVault } from '../src/integrations/token-vault';
 import {
   AdminSession,
   BootedApp,
@@ -32,6 +33,20 @@ describe('Process topology and background work', () => {
       // It can still publish.
       expect(api.get(QueueService, { strict: false })).toBeDefined();
       await api.close();
+    });
+
+    it('the API runs without the bot-token key, which only the worker holds (D13)', async () => {
+      const key = process.env.INTEGRATION_TOKEN_KEY;
+      delete process.env.INTEGRATION_TOKEN_KEY;
+      try {
+        const api = await Test.createTestingModule({ imports: [ApiModule] }).compile();
+        await api.init();
+        expect(() => api.get(TokenVault, { strict: false })).toThrow();
+        await api.close();
+        await expect(Test.createTestingModule({ imports: [WorkerModule] }).compile()).rejects.toThrow(/INTEGRATION_TOKEN_KEY/);
+      } finally {
+        process.env.INTEGRATION_TOKEN_KEY = key;
+      }
     });
 
     it('the worker consumes every queue it schedules', async () => {
@@ -87,7 +102,7 @@ describe('Process topology and background work', () => {
         provider: 'discord',
         externalWorkspaceId: 'topology-guild',
         displayName: 'Topology',
-        config: { botToken: 'fake-bot-token' },
+        botToken: 'fake-bot-token',
       });
       expect(res.status).toBe(201);
       const id = res.body.id as string;

@@ -21,6 +21,9 @@ const changes = z
   .record(z.object({ from: z.unknown(), to: z.unknown() }).strict())
   .optional();
 
+/** What a group mapping grants. */
+const mappingTarget = { targetKind: z.enum(['role', 'division', 'team']), targetId: uuid };
+
 /** Which questions an edit added, removed and kept (ids only). */
 const questionDiff = z
   .object({ added: z.array(uuid), removed: z.array(uuid), changed: z.array(uuid) })
@@ -253,7 +256,11 @@ export const activityPayloadSchemas = {
   // Slice 8 — integration lifecycle.
   'integration.connected': z.object({ connectionId: uuid }).strict(),
   'integration.updated': z.object({ connectionId: uuid }).strict(),
-  'integration.retired': z.object({ connectionId: uuid }).strict(),
+  // `grants` is applied to what the connection granted when it's collected.
+  'integration.retired': z.object({ connectionId: uuid, grants: z.enum(['keep', 'revoke']).optional() }).strict(),
+  'integration.grants_released': z
+    .object({ connectionId: uuid, grants: z.enum(['keep', 'revoke']), affected: z.number().int() })
+    .strict(),
   'integration.revived': z.object({ connectionId: uuid }).strict(),
   'integration.token_rotated': z.object({ connectionId: uuid }).strict(),
   'integration.synced': z
@@ -281,17 +288,17 @@ export const activityPayloadSchemas = {
   'integration.token_invalid': z.object({ connectionId: uuid }).strict(),
   // A broken mapping was cleared by an admin to retry it.
   'integration.mapping_retried': z
-    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+    .object({ mappingId: uuid, connectionId: uuid, ...mappingTarget })
     .strict(),
   'integration.removed': z
     .object({ connectionId: uuid, userId: uuid, roleId: uuid })
     .strict(),
   // Outbound (Patrice → Discord) per-user role pushes — one row per (user, role).
   'integration.external_role_added': z
-    .object({ connectionId: uuid, userId: uuid, roleId: uuid, externalGroupId: z.string() })
+    .object({ connectionId: uuid, userId: uuid, ...mappingTarget, externalGroupId: z.string() })
     .strict(),
   'integration.external_role_removed': z
-    .object({ connectionId: uuid, userId: uuid, roleId: uuid, externalGroupId: z.string() })
+    .object({ connectionId: uuid, userId: uuid, ...mappingTarget, externalGroupId: z.string() })
     .strict(),
   'external_identity.linked': z
     .object({ connectionId: uuid, userId: uuid, externalIdentityId: uuid })
@@ -310,13 +317,20 @@ export const activityPayloadSchemas = {
   'auth.email_changed': z.object({ userId: uuid }).strict(),
   'session.revoked': z.object({ sessionId: uuid, userId: uuid }).strict(),
   'external_group_mapping.created': z
-    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+    .object({ mappingId: uuid, connectionId: uuid, ...mappingTarget })
     .strict(),
   'external_group_mapping.updated': z
-    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+    .object({ mappingId: uuid, connectionId: uuid, ...mappingTarget })
     .strict(),
-  'external_group_mapping.retired': z
-    .object({ mappingId: uuid, connectionId: uuid, roleId: uuid })
+  // Deleted outright; `grants` says what happened to the roles/memberships it made.
+  'external_group_mapping.deleted': z
+    .object({
+      mappingId: uuid,
+      connectionId: uuid,
+      ...mappingTarget,
+      grants: z.enum(['keep', 'revoke']),
+      affected: z.number().int(),
+    })
     .strict(),
   'gc.integration_connection_collected': z.object({ connectionId: uuid }).strict(),
 } as const;

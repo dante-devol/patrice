@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IntegrationsModule } from '../integrations/integrations.module';
 import { GcService } from './gc.service';
 import { GcController } from './gc.controller';
 
@@ -7,6 +8,7 @@ import { GcController } from './gc.controller';
  * directly; the hourly sweep runs in the worker ({@link GcWorker}).
  */
 @Module({
+  imports: [IntegrationsModule],
   providers: [GcService],
   controllers: [GcController],
   exports: [GcService],

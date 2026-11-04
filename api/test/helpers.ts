@@ -5,6 +5,8 @@ import cookieParser from 'cookie-parser';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { EmailService } from '../src/email/email.service';
+import { INTEGRATION_SYNC_PORT } from '../src/integrations/sync/integration-sync.port';
+import { FakeSyncPort } from './fake-sync-port';
 
 /** Empty every table, and pg-boss's jobs, for a clean run (before bootstrap seeds). */
 export async function resetDatabase(): Promise<void> {
@@ -84,6 +86,8 @@ export interface BootedApp {
   app: INestApplication;
   logs: string[];
   bootstrapKey: string | null;
+  /** The in-memory Discord guild every sync in this app talks to. */
+  discord: FakeSyncPort;
 }
 
 export interface BootOptions {
@@ -93,7 +97,8 @@ export interface BootOptions {
 
 /** Boot a Nest app, capturing stdout so the bootstrap key can be recovered. */
 export async function bootApp(options: BootOptions = {}): Promise<BootedApp> {
-  let builder = Test.createTestingModule({ imports: [AppModule] });
+  const discord = new FakeSyncPort();
+  let builder = Test.createTestingModule({ imports: [AppModule] }).overrideProvider(INTEGRATION_SYNC_PORT).useValue(discord);
   if (options.emailStub) {
     builder = builder.overrideProvider(EmailService).useValue(options.emailStub);
   }
@@ -123,7 +128,7 @@ export async function bootApp(options: BootOptions = {}): Promise<BootedApp> {
     ? (keyLine.match(/PATRICE BOOTSTRAP KEY:\s*(\S+)/)?.[1] ?? null)
     : null;
 
-  return { app, logs, bootstrapKey };
+  return { app, logs, bootstrapKey, discord };
 }
 
 /** Extract a cookie value from a set-cookie header array. */

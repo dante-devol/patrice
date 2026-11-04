@@ -92,6 +92,7 @@ export const ERROR_CODES = {
   TEMPLATE_NOT_IN_DIVISION: { status: 422, description: 'The template belongs to a different division' },
   UNKNOWN_QUESTION_ID: { status: 422, description: 'A question id does not belong to this template' },
   GOVERNANCE_ROLE_NOT_MAPPABLE: { status: 422, description: 'A role holding governance grants cannot be mapped to an external group' },
+  GOVERNANCE_ROLE_MAPPED: { status: 422, description: 'A role an integration grants cannot hold governance actions' },
   NO_FILE: { status: 422, description: 'No file was uploaded' },
   TEAM_NOT_IN_DIVISION: { status: 422, description: "The team belongs to a different division than the task" },
   NOT_LINKED: { status: 422, description: 'The account is not linked' },

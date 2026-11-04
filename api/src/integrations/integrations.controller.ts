@@ -17,11 +17,15 @@ import { SyncService } from './sync/sync.service';
 import {
   connectIntegrationSchema,
   createMappingSchema,
+  deleteMappingSchema,
+  retireIntegrationSchema,
   updateIntegrationSchema,
   updateMappingSchema,
   rotateTokenSchema,
   type ConnectIntegrationDto,
   type CreateMappingDto,
+  type DeleteMappingDto,
+  type RetireIntegrationDto,
   type UpdateIntegrationDto,
   type UpdateMappingDto,
   type RotateTokenDto,
@@ -82,8 +86,12 @@ export class IntegrationsController {
   @Post(':id/retire')
   @HttpCode(200)
   @Authorize(ACTIONS.integrationRetire.action, orgResource)
-  async retire(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
-    return this.integrations.retire(id, user.id);
+  async retire(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(retireIntegrationSchema)) body: RetireIntegrationDto,
+    @CurrentUser() user: CurrentUserRef,
+  ) {
+    return this.integrations.retire(id, user.id, body);
   }
 
   @Contract(ROUTES.reviveIntegration)
@@ -136,9 +144,10 @@ export class IntegrationsController {
   async deleteMapping(
     @Param('id') id: string,
     @Param('mappingId') mappingId: string,
+    @Query(new ZodValidationPipe(deleteMappingSchema)) query: DeleteMappingDto,
     @CurrentUser() user: CurrentUserRef,
   ) {
-    await this.integrations.deleteMapping(id, mappingId, user.id);
+    await this.integrations.deleteMapping(id, mappingId, user.id, query);
   }
 
   // Clear a broken mapping's flag and re-run sync (admin recovery, no dev needed).

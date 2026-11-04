@@ -1,216 +1,211 @@
-import type { ExternalGroupMapping, UserRole, Role } from '@prisma/client';
 import type { ExternalUserId, ExternalGroupId, ExternalRoleOp } from './integration-sync.port';
+
+/** What a mapping grants in Patrice: a role, or membership of a division or team. */
+export type SyncTarget = { kind: 'role' | 'division' | 'team'; id: string };
+
+export const targetKey = (t: SyncTarget): string => `${t.kind}:${t.id}`;
+
+export interface SyncMapping {
+  id: string;
+  target: SyncTarget;
+  externalGroupId: ExternalGroupId;
+  syncDirection: 'inbound' | 'outbound' | 'bidirectional';
+  conflictWinner: 'patrice' | 'external';
+  isBroken: boolean;
+}
 
 export interface LinkedUser {
   userId: string;
   externalUserId: ExternalUserId;
 }
 
-/** Ops the reconciler wants applied on the Patrice side (grant/revoke user_role). */
-export interface PaRoleOp {
+/** A user's role or membership as Patrice holds it. */
+export interface Holding {
+  /** `integration` holdings may be revoked by sync; native ones never are. */
+  source: 'patrice' | 'integration';
+  /** When it was granted (a tie-breaker for cold conflicts). */
+  since: Date;
+}
+
+/** Patrice-side change: grant or revoke a target for a user. */
+export interface PatriceOp {
   kind: 'grant' | 'revoke';
   userId: string;
-  roleId: string;
-  /** Source of truth that drove the op (for activity logging). */
+  target: SyncTarget;
+  mappingId: string;
   externalGroupId: ExternalGroupId;
 }
 
 /**
- * A sparse set of (externalUserId, externalGroupId) edges that were present at
- * last convergence. Absence = was absent at last convergence.
+ * The value a bidirectional edge converges to. It's written to the baseline only once
+ * the change it depends on has happened: an outbound push must succeed first, which
+ * is what keeps a pushed grant from being recorded as absent (problems D9).
  */
-export type SyncBaseline = Set<string>; // key: `${externalUserId}:${externalGroupId}`
+export interface BaselineEdge {
+  mappingId: string;
+  userId: string;
+  externalUserId: ExternalUserId;
+  externalGroupId: ExternalGroupId;
+  present: boolean;
+  /** The outbound op that must succeed before this edge is recorded. */
+  dependsOn?: ExternalRoleOp;
+}
+
+/** Edges present at the last convergence; key `${externalUserId}:${externalGroupId}`. */
+export type SyncBaseline = Set<string>;
 
 export interface ReconcileInput {
-  /** Active, non-broken mappings for the connection. */
-  mappings: ExternalGroupMapping[];
-  /** All linked users for the connection. */
+  mappings: SyncMapping[];
   linkedUsers: LinkedUser[];
-  /** All external-group → [member external user IDs] from the provider. */
+  /** External user → the external groups they hold. */
   externalMembership: Map<ExternalUserId, ExternalGroupId[]>;
-  /** All known external group IDs (from fetchGroups). Used for broken detection. */
+  /** Every group the provider reports (a mapped group missing from it is broken). */
   knownGroupIds: Set<ExternalGroupId>;
-  /** All existing user_role rows for the linked users, keyed userId+roleId. */
-  existingRoles: Map<string, UserRole>;
-  /** All role rows for mapped role IDs. */
-  roleRows: Map<string, Role>;
-  /**
-   * The sync baseline for bidirectional attribution (#59).
-   * Key: `${externalUserId}:${externalGroupId}` — present = was present at last convergence.
-   * Undefined = baseline not available (cold-baseline path).
-   */
+  /** Patrice holdings of mapped targets, keyed `${userId}|${targetKey}`. */
+  holdings: Map<string, Holding>;
+  /** Targets sync must leave alone (a retired role, unit or team). */
+  inactiveTargets: Set<string>;
+  /** Undefined: no baseline yet (cold). */
   baseline?: SyncBaseline;
+  /** When the provider last changed an edge, where known (keyed like the baseline). */
+  externalChangedAt?: Map<string, Date>;
 }
 
 export interface ReconcileOutput {
-  /** Ops to apply on Patrice (inbound + bidirectional). */
-  paOps: PaRoleOp[];
-  /** Ops to apply on the external provider (outbound + bidirectional). */
+  patriceOps: PatriceOp[];
   externalOps: ExternalRoleOp[];
-  /** Mapping IDs that should be marked broken (external group no longer exists). */
   brokenMappingIds: string[];
-  /** Baseline edges to upsert after a converging run (present after convergence). */
-  baselineUpserts: Array<{ externalUserId: string; externalGroupId: string; mappingId: string }>;
-  /** Baseline edges to delete (absent after convergence). */
-  baselineDeletes: Array<{ externalUserId: string; externalGroupId: string; mappingId: string }>;
+  /** Bidirectional edges to record once their changes have happened. */
+  baselineEdges: BaselineEdge[];
 }
 
-const userRoleKey = (userId: string, roleId: string) => `${userId}:${roleId}`;
-const baselineKey = (extUserId: string, extGroupId: string) => `${extUserId}:${extGroupId}`;
+export const holdingKey = (userId: string, target: SyncTarget): string => `${userId}|${targetKey(target)}`;
+const edgeKey = (extUserId: string, extGroupId: string) => `${extUserId}:${extGroupId}`;
 
 /**
- * Pure desired-state reconciler (#56, extended in #59 for bidirectional attribution).
+ * Pure desired-state reconciler. Given both sides, the mappings and (for
+ * bidirectional mappings) the baseline, it returns the smallest set of changes that
+ * converges them; a converged state yields none.
  *
- * Given Patrice state + external state + mappings (+ optional baseline), returns the
- * minimal ops to converge both sides. Re-running a converged state produces zero ops.
- *
- * Bidirectional resolution (when baseline is available):
- *   - Baseline present, both sides agree → no-op.
- *   - Baseline present, exactly one side diverged → that side propagates.
- *   - Baseline absent (cold) → conflict_winner on the mapping determines authority.
+ * - Inbound: the provider is the source of truth. Sync grants, and revokes only what
+ *   it granted itself; a native grant is never revoked.
+ * - Outbound: Patrice is the source of truth.
+ * - Bidirectional: with a baseline, the side that moved since the last convergence
+ *   wins. Without one (or when both moved), the later change wins when both times are
+ *   known, else the mapping's `conflict_winner`.
  */
 export function reconcile(input: ReconcileInput): ReconcileOutput {
-  const paOps: PaRoleOp[] = [];
-  const externalOps: ExternalRoleOp[] = [];
-  const brokenMappingIds: string[] = [];
-  const baselineUpserts: ReconcileOutput['baselineUpserts'] = [];
-  const baselineDeletes: ReconcileOutput['baselineDeletes'] = [];
+  const out: ReconcileOutput = { patriceOps: [], externalOps: [], brokenMappingIds: [], baselineEdges: [] };
 
-  // Build reverse index: externalGroupId → Set<ExternalUserId>
   const membersOf = new Map<ExternalGroupId, Set<ExternalUserId>>();
   for (const [extUserId, groups] of input.externalMembership) {
     for (const gid of groups) {
-      let s = membersOf.get(gid);
-      if (!s) { s = new Set(); membersOf.set(gid, s); }
-      s.add(extUserId);
+      let set = membersOf.get(gid);
+      if (!set) membersOf.set(gid, (set = new Set()));
+      set.add(extUserId);
     }
   }
 
   for (const mapping of input.mappings) {
     if (mapping.isBroken) continue;
-
-    // Broken-group detection: if the external group doesn't exist in the provider
-    // and we have at least one member (so the fetch wasn't empty), flag broken.
-    const hasMemberData = input.externalMembership.size > 0;
-    if (hasMemberData && !input.knownGroupIds.has(mapping.externalGroupId)) {
-      brokenMappingIds.push(mapping.id);
+    // A group the provider no longer reports (and the fetch wasn't empty) is broken.
+    if (input.externalMembership.size > 0 && !input.knownGroupIds.has(mapping.externalGroupId)) {
+      out.brokenMappingIds.push(mapping.id);
       continue;
     }
-
-    const role = input.roleRows.get(mapping.roleId);
-    if (!role || role.lifecycleState === 'retired') continue;
-
-    const externalMembers = membersOf.get(mapping.externalGroupId) ?? new Set<ExternalUserId>();
+    if (input.inactiveTargets.has(targetKey(mapping.target))) continue;
+    const members = membersOf.get(mapping.externalGroupId) ?? new Set<ExternalUserId>();
 
     for (const link of input.linkedUsers) {
-      const hasExternalRole = externalMembers.has(link.externalUserId);
-      const existingUR = input.existingRoles.get(userRoleKey(link.userId, mapping.roleId));
-      const hasPatriceRole = !!existingUR;
-      const dir = mapping.syncDirection;
-
-      if (dir === 'inbound') {
-        if (hasExternalRole && !hasPatriceRole) {
-          paOps.push({ kind: 'grant', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
-        } else if (!hasExternalRole && existingUR?.source === 'integration') {
-          paOps.push({ kind: 'revoke', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
-        }
-      } else if (dir === 'outbound') {
-        if (hasPatriceRole && !hasExternalRole) {
-          externalOps.push({ externalUserId: link.externalUserId, externalGroupId: mapping.externalGroupId, action: 'add' });
-        } else if (!hasPatriceRole && hasExternalRole) {
-          externalOps.push({ externalUserId: link.externalUserId, externalGroupId: mapping.externalGroupId, action: 'remove' });
-        }
-      } else {
-        // bidirectional — divergence attribution
-        reconcileBidirectional({
-          link,
-          mapping,
-          hasExternalRole,
-          hasPatriceRole,
-          existingUR,
-          baseline: input.baseline,
-          paOps,
-          externalOps,
+      const edge = {
+        hasExternal: members.has(link.externalUserId),
+        holding: input.holdings.get(holdingKey(link.userId, mapping.target)),
+      };
+      const decision = decide(mapping, link, edge, input);
+      if (decision.patrice) {
+        out.patriceOps.push({
+          kind: decision.patrice,
+          userId: link.userId,
+          target: mapping.target,
+          mappingId: mapping.id,
+          externalGroupId: mapping.externalGroupId,
         });
       }
+      const extOp: ExternalRoleOp | undefined = decision.external
+        ? { externalUserId: link.externalUserId, externalGroupId: mapping.externalGroupId, action: decision.external }
+        : undefined;
+      if (extOp) out.externalOps.push(extOp);
 
-      // Track baseline state for this edge (for upsert after convergence).
-      const bk = { externalUserId: link.externalUserId, externalGroupId: mapping.externalGroupId, mappingId: mapping.id };
-      if (hasExternalRole) {
-        baselineUpserts.push(bk);
-      } else {
-        baselineDeletes.push(bk);
+      if (mapping.syncDirection === 'bidirectional' && decision.converged !== undefined) {
+        out.baselineEdges.push({
+          mappingId: mapping.id,
+          userId: link.userId,
+          externalUserId: link.externalUserId,
+          externalGroupId: mapping.externalGroupId,
+          present: decision.converged,
+          ...(extOp ? { dependsOn: extOp } : {}),
+        });
       }
     }
   }
-
-  return { paOps, externalOps, brokenMappingIds, baselineUpserts, baselineDeletes };
+  return out;
 }
 
-interface BidirectionalArgs {
-  link: LinkedUser;
-  mapping: ExternalGroupMapping;
-  hasExternalRole: boolean;
-  hasPatriceRole: boolean;
-  existingUR: UserRole | undefined;
-  baseline: SyncBaseline | undefined;
-  paOps: PaRoleOp[];
-  externalOps: ExternalRoleOp[];
+interface Decision {
+  patrice?: 'grant' | 'revoke';
+  external?: 'add' | 'remove';
+  /** The edge's value once the changes apply; undefined when it stays diverged. */
+  converged?: boolean;
 }
 
-function reconcileBidirectional(args: BidirectionalArgs): void {
-  const { link, mapping, hasExternalRole, hasPatriceRole, existingUR, baseline, paOps, externalOps } = args;
+function decide(
+  mapping: SyncMapping,
+  link: LinkedUser,
+  edge: { hasExternal: boolean; holding: Holding | undefined },
+  input: ReconcileInput,
+): Decision {
+  const hasPatrice = edge.holding !== undefined;
+  const revocable = edge.holding?.source === 'integration';
 
-  if (hasExternalRole === hasPatriceRole) return; // already converged
+  /** Patrice follows the provider (a native holding is never revoked). */
+  const followExternal = (): Decision => {
+    if (edge.hasExternal && !hasPatrice) return { patrice: 'grant', converged: true };
+    if (!edge.hasExternal && hasPatrice) {
+      return revocable ? { patrice: 'revoke', converged: false } : { external: 'add', converged: true };
+    }
+    return { converged: edge.hasExternal };
+  };
+  /** The provider follows Patrice. */
+  const followPatrice = (): Decision =>
+    hasPatrice === edge.hasExternal
+      ? { converged: hasPatrice }
+      : { external: hasPatrice ? 'add' : 'remove', converged: hasPatrice };
 
-  const bKey = baselineKey(link.externalUserId, mapping.externalGroupId);
-  const wasInBaseline = baseline?.has(bKey); // undefined = cold (baseline unknown)
-
-  if (baseline !== undefined) {
-    // Warm baseline: one side diverged from the last-converged state.
-    const externalDiverged = hasExternalRole !== (wasInBaseline ?? false);
-    const patriceDiverged = hasPatriceRole !== (wasInBaseline ?? false);
-
-    if (externalDiverged && !patriceDiverged) {
-      // Discord moved — propagate to Patrice.
-      if (hasExternalRole) {
-        paOps.push({ kind: 'grant', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
-      } else if (existingUR?.source === 'integration') {
-        paOps.push({ kind: 'revoke', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
-      } else {
-        // Discord dropped a role Patrice holds NATIVELY (admin-authored). Sync never
-        // revokes a native grant, so Patrice is authoritative for this edge — the
-        // Discord-side removal can't win. Re-assert it outbound instead of leaving
-        // the sides diverged (this is what makes bidirectional ⊇ outbound for native
-        // roles; see api/CONTEXT.md "Divergence Attribution").
-        externalOps.push({ externalUserId: link.externalUserId, externalGroupId: mapping.externalGroupId, action: 'add' });
+  switch (mapping.syncDirection) {
+    case 'inbound': {
+      if (edge.hasExternal && !hasPatrice) return { patrice: 'grant' };
+      if (!edge.hasExternal && revocable) return { patrice: 'revoke' };
+      return {};
+    }
+    case 'outbound':
+      return followPatrice();
+    case 'bidirectional': {
+      if (hasPatrice === edge.hasExternal) return { converged: hasPatrice };
+      const key = edgeKey(link.externalUserId, mapping.externalGroupId);
+      if (input.baseline) {
+        const was = input.baseline.has(key);
+        const externalMoved = edge.hasExternal !== was;
+        const patriceMoved = hasPatrice !== was;
+        if (externalMoved && !patriceMoved) return followExternal();
+        if (patriceMoved && !externalMoved) return followPatrice();
       }
-    } else if (patriceDiverged && !externalDiverged) {
-      // Patrice moved — propagate to Discord.
-      externalOps.push({
-        externalUserId: link.externalUserId,
-        externalGroupId: mapping.externalGroupId,
-        action: hasPatriceRole ? 'add' : 'remove',
-      });
+      // Cold, or both moved: the later change wins when both are known.
+      const externalAt = input.externalChangedAt?.get(key);
+      const patriceAt = edge.holding?.since;
+      if (externalAt && patriceAt) {
+        return externalAt > patriceAt ? followExternal() : followPatrice();
+      }
+      return mapping.conflictWinner === 'external' ? followExternal() : followPatrice();
     }
-    // Both diverged simultaneously: fall through to cold-baseline path below.
-    if (!externalDiverged || !patriceDiverged) return;
-  }
-
-  // Cold-baseline (first sync, lost state, or simultaneous divergence): use conflict_winner.
-  const winner = (mapping as ExternalGroupMapping & { conflictWinner?: string }).conflictWinner ?? 'patrice';
-  if (winner === 'external') {
-    if (hasExternalRole && !hasPatriceRole) {
-      paOps.push({ kind: 'grant', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
-    } else if (!hasExternalRole && existingUR?.source === 'integration') {
-      paOps.push({ kind: 'revoke', userId: link.userId, roleId: mapping.roleId, externalGroupId: mapping.externalGroupId });
-    }
-  } else {
-    // patrice wins
-    externalOps.push({
-      externalUserId: link.externalUserId,
-      externalGroupId: mapping.externalGroupId,
-      action: hasPatriceRole ? 'add' : 'remove',
-    });
   }
 }

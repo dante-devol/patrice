@@ -8,11 +8,10 @@ import { AdministrabilityService } from '../access/administrability.service';
 import type { ExternalProfile } from '../auth/providers/login-provider';
 
 /**
- * The **user-driven** Discord account connection (distinct from the admin-driven
- * role mapping). One consent establishes, for the acting user:
- *   1. a Discord sign-in method (`user_identity[discord]`) — enables login, and
- *   2. an integration link (`external_identity`) per active Discord connection —
- *      enables role sync.
+ * Sync links (`external_identity`): which Discord account is which member, per
+ * connection. Patrice creates them wherever it knows a member's Discord id — when they
+ * register through Discord, when they connect Discord to their account, and for every
+ * such member when a connection is added (problems D22).
  * After linking, a reconcile is enqueued so the user's mapped Discord roles flow
  * into Patrice immediately (the reconciler's warm-baseline path grants on a fresh
  * link — it never strips, since the new edge reads as "Discord diverged").
@@ -30,8 +29,9 @@ export class DiscordLinkService {
 
   /**
    * Create the user's integration link on every active Discord connection, after
-   * their Discord sign-in identity has been attached. Idempotent (a re-link refreshes
-   * handle and avatar). Reconcile is enqueued so mapped roles populate promptly.
+   * their Discord sign-in identity has been attached (link and registration alike).
+   * Idempotent (a re-link refreshes handle and avatar); a reconcile is enqueued so
+   * mapped roles populate promptly.
    */
   async linkConnections(userId: string, profile: ExternalProfile): Promise<void> {
     const connections = await this.prisma.integrationConnection.findMany({
@@ -53,36 +53,78 @@ export class DiscordLinkService {
           'That Discord account is already linked to another Patrice account on this server',
         );
       }
-
-      const identity = await this.prisma.externalIdentity.upsert({
-        where: { userId_connectionId: { userId, connectionId: conn.id } },
-        create: {
-          userId,
-          connectionId: conn.id,
-          externalUserId: profile.subject,
-          externalHandle: profile.displayName ?? profile.username,
-          externalAvatarHash: profile.avatar,
-        },
-        update: {
-          externalHandle: profile.displayName ?? profile.username,
-          externalAvatarHash: profile.avatar,
-        },
-        select: { id: true },
+      await this.upsertLink(conn.id, userId, profile.subject, {
+        handle: profile.displayName ?? profile.username,
+        avatar: profile.avatar,
       });
+      await this.enqueueSync(conn.id);
+    }
+  }
 
+  /**
+   * Link every member whose Discord id Patrice already knows (from Discord sign-in)
+   * to a connection — run when a connection is added or reconnected (problems D22).
+   * A Discord id another member already holds on it is skipped.
+   */
+  async linkKnownMembers(connectionId: string): Promise<number> {
+    const identities = await this.prisma.userIdentity.findMany({
+      where: { provider: 'discord', providerSubject: { not: null }, user: { lifecycleState: LifecycleState.active } },
+      select: { userId: true, providerSubject: true },
+    });
+    let linked = 0;
+    for (const id of identities) {
+      const taken = await this.prisma.externalIdentity.findUnique({
+        where: { connectionId_externalUserId: { connectionId, externalUserId: id.providerSubject! } },
+        select: { userId: true },
+      });
+      if (taken && taken.userId !== id.userId) continue;
+      await this.upsertLink(connectionId, id.userId, id.providerSubject!, {});
+      linked++;
+    }
+    return linked;
+  }
+
+  private async upsertLink(
+    connectionId: string,
+    userId: string,
+    externalUserId: string,
+    profile: { handle?: string | null; avatar?: string | null },
+  ): Promise<void> {
+    const existing = await this.prisma.externalIdentity.findUnique({
+      where: { userId_connectionId: { userId, connectionId } },
+      select: { id: true },
+    });
+    const identity = await this.prisma.externalIdentity.upsert({
+      where: { userId_connectionId: { userId, connectionId } },
+      create: {
+        userId,
+        connectionId,
+        externalUserId,
+        externalHandle: profile.handle ?? null,
+        externalAvatarHash: profile.avatar ?? null,
+      },
+      update: {
+        ...(profile.handle !== undefined ? { externalHandle: profile.handle } : {}),
+        ...(profile.avatar !== undefined ? { externalAvatarHash: profile.avatar } : {}),
+      },
+      select: { id: true },
+    });
+    if (!existing) {
       await this.activity.logActivity({
         actorUserId: userId,
         subjectType: 'external_identity',
         subjectId: identity.id,
         verb: 'external_identity.linked',
-        payload: { connectionId: conn.id, userId, externalIdentityId: identity.id },
-      });
-
-      // Fire-and-forget — a queue hiccup must not fail the user's link.
-      this.sync.enqueue(conn.id).catch((err) => {
-        this.logger.warn(`reconcile enqueue after link failed for ${conn.id}: ${(err as Error).message}`);
+        payload: { connectionId, userId, externalIdentityId: identity.id },
       });
     }
+  }
+
+  /** A queue hiccup must not fail the user's link; the reconcile floor catches up. */
+  private async enqueueSync(connectionId: string): Promise<void> {
+    await this.sync.enqueue(connectionId).catch((err) => {
+      this.logger.warn(`reconcile enqueue after link failed for ${connectionId}: ${(err as Error).message}`);
+    });
   }
 
   /**

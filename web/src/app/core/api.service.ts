@@ -500,7 +500,7 @@ export class ApiService {
     provider: 'discord';
     externalWorkspaceId: string;
     displayName: string;
-    config?: Record<string, unknown>;
+    botToken?: string;
   }): Promise<IntegrationConnection> {
     return firstValueFrom(this.http.post<IntegrationConnection>('/api/integrations', body));
   }

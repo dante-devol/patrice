@@ -95,6 +95,8 @@ export class OAuthLoginService {
         email: profile.email,
         displayName: profile.displayName ?? profile.username,
       });
+      // Registering through a provider is as good as linking it: create its sync links.
+      await provider.afterLink?.(userId, profile);
       return { kind: 'session', userId, intent: 'register' };
     }
 

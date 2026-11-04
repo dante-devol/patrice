@@ -9,6 +9,8 @@ export interface QueuePolicy {
   /** Seconds before the first retry; doubles each time when `retryBackoff` is set. */
   retryDelay: number;
   retryBackoff: boolean;
+  /** False for jobs whose data must not be copied anywhere (no dead-letter queue). */
+  deadLetter?: false;
 }
 
 export const JOB_QUEUES = {
@@ -22,9 +24,20 @@ export const JOB_QUEUES = {
   'integration.sync': { retryLimit: 5, retryDelay: 30, retryBackoff: true },
   /** The reconcile floor tick (every 30 minutes). */
   'integration.reconcile-floor': { retryLimit: 1, retryDelay: 60, retryBackoff: false },
+  /**
+   * Hand a bot token from the API to the worker, which encrypts and stores it: the
+   * API never holds the key. Not retried and never dead-lettered, and the worker
+   * wipes the job's data once it has run, so the plaintext doesn't linger.
+   */
+  'integration.store-token': { retryLimit: 0, retryDelay: 0, retryBackoff: false, deadLetter: false },
   /** Open, restart or close a connection's Gateway session after an admin change. */
   'gateway.reconcile-sessions': { retryLimit: 5, retryDelay: 15, retryBackoff: true },
 } as const satisfies Record<string, QueuePolicy>;
+
+/** Queues whose failed jobs move to a dead-letter queue. */
+export const DEAD_LETTERED_QUEUES = (Object.keys(JOB_QUEUES) as (keyof typeof JOB_QUEUES)[]).filter(
+  (q) => (JOB_QUEUES[q] as QueuePolicy).deadLetter !== false,
+);
 
 export type JobQueue = keyof typeof JOB_QUEUES;
 

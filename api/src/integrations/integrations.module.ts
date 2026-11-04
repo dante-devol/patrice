@@ -1,37 +1,17 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../prisma/prisma.module';
-import { ActivityModule } from '../activity/activity.module';
-import { CommonModule } from '../common/common.module';
-import { QueueModule } from '../queue/queue.module';
-import { ConfigModule } from '../config/config.module';
-import { NotificationsModule } from '../notifications/notifications.module';
 import { IntegrationsController } from './integrations.controller';
 import { IntegrationsService } from './integrations.service';
 import { DiscordLinkService } from './discord-link.service';
 import { SyncService } from './sync/sync.service';
-import { DiscordAdapter } from './sync/discord.adapter';
-import { AeadEnvAdapter } from './aead-env.adapter';
-import { VaultTransitAdapter } from './vault-transit.adapter';
-import { KmsEnvelopeAdapter } from './kms-envelope.adapter';
-import { CompositeCipherAdapter } from './composite-cipher.adapter';
-import { SECRET_CIPHER_PORT } from './secret-cipher.port';
-import { DiscordRestClient } from './sync/discord-rest.client';
 
+/**
+ * Integrations, the part both processes share: connection and mapping admin, sync
+ * links, and enqueueing syncs. No bot token is ever opened here; that, the sync
+ * engine and the Gateway are in {@link IntegrationsWorkerModule}.
+ */
 @Module({
-  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, NotificationsModule],
   controllers: [IntegrationsController],
-  providers: [
-    IntegrationsService,
-    DiscordLinkService,
-    SyncService,
-    DiscordAdapter,
-    DiscordRestClient,
-    AeadEnvAdapter,
-    VaultTransitAdapter,
-    KmsEnvelopeAdapter,
-    CompositeCipherAdapter,
-    { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter },
-  ],
-  exports: [SyncService, DiscordLinkService, CompositeCipherAdapter, { provide: SECRET_CIPHER_PORT, useExisting: CompositeCipherAdapter }],
+  providers: [IntegrationsService, DiscordLinkService, SyncService],
+  exports: [IntegrationsService, SyncService, DiscordLinkService],
 })
 export class IntegrationsModule {}

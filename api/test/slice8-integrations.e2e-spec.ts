@@ -51,7 +51,7 @@ describe('Slice 8 — Integrations', () => {
         provider: 'discord',
         externalWorkspaceId: '111222333444555666',
         displayName: 'Test Guild',
-        config: { botToken: 'Bot.test.token' },
+        botToken: 'Bot.test.token',
       });
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({
@@ -69,7 +69,7 @@ describe('Slice 8 — Integrations', () => {
         provider: 'discord',
         externalWorkspaceId: '900900900900900900',
         displayName: 'Encrypted Guild',
-        config: { botToken: 'Bot.SUPER.SECRET.encme' },
+        botToken: 'Bot.SUPER.SECRET.encme',
       });
       expect(res.status).toBe(201);
       const row = await prisma.integrationConnection.findUniqueOrThrow({ where: { id: res.body.id } });
@@ -85,7 +85,6 @@ describe('Slice 8 — Integrations', () => {
         provider: 'discord',
         externalWorkspaceId: '111222333444555666',
         displayName: 'Duplicate',
-        config: {},
       });
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('DUPLICATE_CONNECTION');
@@ -462,7 +461,7 @@ describe('Slice 8 — Integrations', () => {
       await auth(http().patch('/api/config')).send({ gracePeriodHours: 24 });
     });
 
-    it('connection with live external_identity blocked from GC', async () => {
+    it('a collected connection takes its links with it (sync is over for it)', async () => {
       const conn = await prisma.integrationConnection.create({
         data: {
           provider: 'discord',
@@ -474,21 +473,13 @@ describe('Slice 8 — Integrations', () => {
         },
       });
       const memberUser = await prisma.appUser.findFirst({ where: { email: 'member@example.com' } });
-      // Give member a distinct link to this connection
       await prisma.externalIdentity.create({
-        data: {
-          userId: memberUser!.id,
-          connectionId: conn.id,
-          externalUserId: 'blocked-discord-id',
-        },
+        data: { userId: memberUser!.id, connectionId: conn.id, externalUserId: 'collected-discord-id' },
       });
       await auth(http().patch('/api/config')).send({ gracePeriodHours: 0 });
       const sweep = await auth(http().post('/api/gc/sweep'));
-      // Not collected because external_identity still references it.
-      expect(sweep.body.integrationConnections ?? []).not.toContain(conn.id);
-      // Cleanup
-      await prisma.externalIdentity.deleteMany({ where: { connectionId: conn.id } });
-      await prisma.integrationConnection.delete({ where: { id: conn.id } });
+      expect(sweep.body.integrationConnections).toContain(conn.id);
+      expect(await prisma.externalIdentity.count({ where: { connectionId: conn.id } })).toBe(0);
       await auth(http().patch('/api/config')).send({ gracePeriodHours: 24 });
     });
   });
@@ -545,8 +536,7 @@ describe('Slice 8 — Integrations', () => {
         provider: 'discord',
         externalWorkspaceId: 'secret-guild-111',
         displayName: 'Secret Guild',
-        config: { botToken: 'Bot.secret.token.DO_NOT_LEAK' },
-        credentialsRef: 'aead:ciphertext-DO_NOT_LEAK',
+        botToken: 'Bot.secret.token.DO_NOT_LEAK',
       });
       secretConnId = res.body.id as string;
     });
@@ -565,7 +555,7 @@ describe('Slice 8 — Integrations', () => {
         provider: 'discord',
         externalWorkspaceId: 'secret-guild-222',
         displayName: 'Secret Guild 2',
-        config: { botToken: 'Bot.secret.2.DO_NOT_LEAK' },
+        botToken: 'Bot.secret.2.DO_NOT_LEAK',
       });
       expect(res.status).toBe(201);
       noSecret(res.body);

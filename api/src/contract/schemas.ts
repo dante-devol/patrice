@@ -32,7 +32,7 @@ export const AuthMethod = z.enum(['password', 'google', 'discord']).openapi('Aut
 export const InvitationStatus = z.enum(['pending', 'revoked', 'exhausted', 'expired']).openapi('InvitationStatus');
 export const ActivitySource = z.enum(['patrice', 'integration', 'system']).openapi('ActivitySource');
 export const IntegrationProvider = z.enum(['discord']).openapi('IntegrationProvider');
-export const IntegrationStatus = z.enum(['active', 'broken', 'disabled']).openapi('IntegrationStatus');
+export const IntegrationStatus = z.enum(['active', 'broken']).openapi('IntegrationStatus');
 export const SyncDirection = z.enum(['inbound', 'outbound', 'bidirectional']).openapi('SyncDirection');
 export const ConflictWinner = z.enum(['patrice', 'external']).openapi('ConflictWinner');
 export const GatewayState = z.enum(['down', 'connecting', 'connected', 'degraded']).openapi('GatewayState');
@@ -476,6 +476,9 @@ export const IntegrationConnection = z
     lastSyncGranted: z.number().int(),
     lastSyncRevoked: z.number().int(),
     lastError: z.string().nullable(),
+    /** Set while retired: what collection will do with the grants it made. */
+    retireDisposition: z.enum(['keep', 'revoke']).nullable(),
+    /** When the reconcile floor next guarantees a full sync (null while retired). */
     nextReconcileAt: nullableTimestamp.optional(),
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -483,10 +486,21 @@ export const IntegrationConnection = z
   .strict()
   .openapi('IntegrationConnection');
 
+export const SyncTarget = z
+  .object({ kind: z.enum(['role', 'division', 'team']), id })
+  .strict()
+  .openapi('SyncTarget');
+
 export const ExternalGroupMapping = z
   .object({
     id,
-    roleId: id,
+    roleId: id.nullable(),
+    divisionId: id.nullable(),
+    teamId: id.nullable(),
+    /** What the mapping grants. */
+    target: SyncTarget,
+    /** How many roles or memberships this connection granted for the target. */
+    grantedCount: z.number().int(),
     connectionId: id,
     externalGroupId: z.string(),
     syncDirection: SyncDirection,

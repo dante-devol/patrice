@@ -11,7 +11,7 @@ import { ActivitySource, GatewayState } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ActivityService } from '../../activity/activity.service';
 import { SyncService } from '../sync/sync.service';
-import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
+import { TokenVault } from '../token-vault';
 import { ENV, Env } from '../../config/env';
 import { JobRunner } from '../../queue/job-runner.service';
 import {
@@ -59,7 +59,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnApplicationBoo
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly sync: SyncService,
-    @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
+    private readonly vault: TokenVault,
     @Inject(ENV) private readonly env: Env,
     private readonly runner: JobRunner,
   ) {}
@@ -297,7 +297,6 @@ export class IntegrationGatewayService implements OnModuleInit, OnApplicationBoo
 
       case 'EMIT_HEALTH':
         session.healthy = action.healthy;
-        this.sync.setGatewayHealth(session.connectionId, action.healthy);
         this.persistGateway(session, action.healthy ? GatewayState.connected : GatewayState.degraded);
         if (!action.healthy) {
           this.logger.warn(`Gateway unhealthy for connection ${session.connectionId}`);
@@ -360,11 +359,9 @@ export class IntegrationGatewayService implements OnModuleInit, OnApplicationBoo
     session.ws = null;
   }
 
-  private async resolveToken(conn: { config: unknown; credentialsRef: string | null }): Promise<string | null> {
-    if (conn.credentialsRef && this.cipher.canHandle(conn.credentialsRef)) {
-      return this.cipher.decrypt(conn.credentialsRef).catch(() => null);
-    }
-    return (conn.config as Record<string, string>)['botToken'] ?? null;
+  /** The connection's bot token, or null when none is stored (no plaintext fallback). */
+  private async resolveToken(conn: { credentialsRef: string | null }): Promise<string | null> {
+    return TokenVault.isHandle(conn.credentialsRef) ? this.vault.decrypt(conn.credentialsRef) : null;
   }
 }
 

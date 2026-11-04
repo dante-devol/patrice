@@ -19,7 +19,6 @@ describe('SyncService.notifyUserRoleChange', () => {
     const svc = new SyncService(
       prisma as never,
       { publish } as never,
-      {} as never,
       env as never,
     );
     return { svc, publish, prisma };

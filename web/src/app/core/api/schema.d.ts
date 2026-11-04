@@ -1681,7 +1681,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retire a connection
+         * Retire a connection (sync pauses; `grants` applies at collection)
          * @description Gated by the `integration:retire` action.
          */
         post: operations["retireIntegration"];
@@ -1725,7 +1725,7 @@ export interface paths {
         get: operations["listMappings"];
         put?: never;
         /**
-         * Map a role to a Discord role
+         * Map a Discord role to a role, division or team
          * @description Gated by the `integration:update` action.
          */
         post: operations["createMapping"];
@@ -1746,7 +1746,7 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete a mapping
+         * Delete a mapping, keeping or revoking what it granted
          * @description Gated by the `integration:update` action.
          */
         delete: operations["deleteMapping"];
@@ -1847,7 +1847,7 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
@@ -2442,7 +2442,7 @@ export interface components {
         /** @enum {string} */
         IntegrationProvider: "discord";
         /** @enum {string} */
-        IntegrationStatus: "active" | "broken" | "disabled";
+        IntegrationStatus: "active" | "broken";
         /** @enum {string} */
         GatewayState: "down" | "connecting" | "connected" | "degraded";
         /** @enum {string} */
@@ -2470,12 +2470,20 @@ export interface components {
             lastSyncGranted: number;
             lastSyncRevoked: number;
             lastError: string | null;
+            /** @enum {string|null} */
+            retireDisposition: "keep" | "revoke" | null;
             /** Format: date-time */
             nextReconcileAt?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        SyncTarget: {
+            /** @enum {string} */
+            kind: "role" | "division" | "team";
+            /** Format: uuid */
+            id: string;
         };
         /** @enum {string} */
         SyncDirection: "inbound" | "outbound" | "bidirectional";
@@ -2485,7 +2493,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            roleId: string;
+            roleId: string | null;
+            /** Format: uuid */
+            divisionId: string | null;
+            /** Format: uuid */
+            teamId: string | null;
+            target: components["schemas"]["SyncTarget"];
+            grantedCount: number;
             /** Format: uuid */
             connectionId: string;
             externalGroupId: string;
@@ -6330,11 +6344,7 @@ export interface operations {
                     provider: "discord";
                     externalWorkspaceId: string;
                     displayName: string;
-                    /** @default {} */
-                    config?: {
-                        [key: string]: unknown;
-                    };
-                    credentialsRef?: string;
+                    botToken?: string;
                 };
             };
         };
@@ -6372,10 +6382,6 @@ export interface operations {
             content: {
                 "application/json": {
                     displayName?: string;
-                    config?: {
-                        [key: string]: unknown;
-                    };
-                    credentialsRef?: string;
                 };
             };
         };
@@ -6446,9 +6452,16 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    grants?: "keep" | "revoke";
+                };
+            };
+        };
         responses: {
-            /** @description Retire a connection */
+            /** @description Retire a connection (sync pauses; `grants` applies at collection) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6543,7 +6556,11 @@ export interface operations {
             content: {
                 "application/json": {
                     /** Format: uuid */
-                    roleId: string;
+                    roleId?: string;
+                    /** Format: uuid */
+                    divisionId?: string;
+                    /** Format: uuid */
+                    teamId?: string;
                     externalGroupId: string;
                     /** @enum {string} */
                     syncDirection: "inbound" | "outbound" | "bidirectional";
@@ -6551,7 +6568,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Map a role to a Discord role */
+            /** @description Map a Discord role to a role, division or team */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -6573,7 +6590,9 @@ export interface operations {
     };
     deleteMapping: {
         parameters: {
-            query?: never;
+            query?: {
+                grants?: "keep" | "revoke";
+            };
             header?: never;
             path: {
                 id: string;

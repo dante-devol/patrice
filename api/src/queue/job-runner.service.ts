@@ -10,7 +10,8 @@ import { ENV, Env } from '../config/env';
 import { JobQueue } from './job-queues';
 import { LocalJobRunner, QueueService, ensureQueue } from './queue.service';
 
-type Handler = (data: unknown) => Promise<void>;
+/** A job handler; `jobId` lets a handler scrub its own job's data. */
+type Handler = (data: unknown, jobId: string) => Promise<void>;
 
 /**
  * The worker side of the queue: consumes queues and runs schedules. It exists only in
@@ -67,7 +68,7 @@ export class JobRunner implements OnApplicationBootstrap, OnModuleDestroy, Local
     for (const [queue, handler] of this.handlers) {
       await ensureQueue(boss, queue);
       if (!sync) {
-        await boss.work(queue, { batchSize: 1 }, async ([job]) => handler(job.data));
+        await boss.work(queue, { batchSize: 1 }, async ([job]) => handler(job.data, job.id));
       }
     }
     for (const [queue, cron] of this.schedules) {
@@ -93,7 +94,7 @@ export class JobRunner implements OnApplicationBootstrap, OnModuleDestroy, Local
       if (jobs.length === 0) return;
       for (const job of jobs) {
         try {
-          await handler(job.data);
+          await handler(job.data, job.id);
           await boss.complete(queue, job.id);
         } catch (err) {
           this.logger.error(`Job ${job.id} on "${queue}" failed: ${(err as Error).message}`);

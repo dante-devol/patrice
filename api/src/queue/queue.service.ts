@@ -3,7 +3,7 @@ import PgBoss from 'pg-boss';
 import { ENV, Env } from '../config/env';
 import { ServiceUnavailableError } from '../common/errors';
 import { PrismaService } from '../prisma/prisma.service';
-import { JOB_QUEUES, JobQueue, deadLetterQueue } from './job-queues';
+import { DEAD_LETTERED_QUEUES, JOB_QUEUES, JobQueue, QueuePolicy, deadLetterQueue } from './job-queues';
 
 /** Something that can run a queue's due jobs in this process (sync mode). */
 export interface LocalJobRunner {
@@ -115,7 +115,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   /** Jobs that exhausted their retries, newest first. */
   async deadLetters(limit = 100): Promise<DeadLetter[]> {
     if (!this.boss) throw new ServiceUnavailableError('QUEUE_UNAVAILABLE', 'Background jobs are unavailable; try again later');
-    const dead = (Object.keys(JOB_QUEUES) as JobQueue[]).map(deadLetterQueue);
+    const dead = DEAD_LETTERED_QUEUES.map(deadLetterQueue);
     const rows = await this.prisma.$queryRawUnsafe<{ id: string; name: string; created_on: Date }[]>(
       `SELECT id::text, name, created_on FROM pgboss.job
        WHERE name = ANY($1::text[]) AND state = 'created'
@@ -134,9 +134,10 @@ export async function ensureQueue(boss: PgBoss, queue: JobQueue): Promise<void> 
   let done = ensured.get(boss);
   if (!done) ensured.set(boss, (done = new Set()));
   if (done.has(queue)) return;
-  const dead = deadLetterQueue(queue);
-  const options = { name: queue, ...JOB_QUEUES[queue], deadLetter: dead };
-  if (!(await boss.getQueue(dead))) await boss.createQueue(dead, { name: dead }).catch(ignoreExists);
+  const { deadLetter: keepDead, ...policy } = JOB_QUEUES[queue] as QueuePolicy;
+  const dead = keepDead === false ? undefined : deadLetterQueue(queue);
+  const options = { name: queue, ...policy, ...(dead ? { deadLetter: dead } : {}) };
+  if (dead && !(await boss.getQueue(dead))) await boss.createQueue(dead, { name: dead }).catch(ignoreExists);
   if (await boss.getQueue(queue)) await boss.updateQueue(queue, options);
   else await boss.createQueue(queue, options).catch(ignoreExists);
   done.add(queue);
