@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ActivityModule } from '../activity/activity.module';
 import { CommonModule } from '../common/common.module';
@@ -16,10 +16,9 @@ import { KmsEnvelopeAdapter } from './kms-envelope.adapter';
 import { CompositeCipherAdapter } from './composite-cipher.adapter';
 import { SECRET_CIPHER_PORT } from './secret-cipher.port';
 import { DiscordRestClient } from './sync/discord-rest.client';
-import { GatewayModule } from './gateway/gateway.module';
 
 @Module({
-  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, NotificationsModule, forwardRef(() => GatewayModule)],
+  imports: [PrismaModule, ActivityModule, CommonModule, QueueModule, ConfigModule, NotificationsModule],
   controllers: [IntegrationsController],
   providers: [
     IntegrationsService,

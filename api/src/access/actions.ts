@@ -101,6 +101,8 @@ export const ACTIONS = {
   teamManageMembers: { action: 'team:manage_members', resourceType: 'Team' },
   // ---- System.
   configUpdate: { action: 'config:update', resourceType: 'Organization' },
+  /** See background jobs that exhausted their retries. */
+  jobRead: { action: 'job:read', resourceType: 'Organization' },
   integrationCreate: { action: 'integration:create', resourceType: 'Organization' },
   integrationUpdate: { action: 'integration:update', resourceType: 'Organization' },
   integrationRetire: { action: 'integration:retire', resourceType: 'Organization' },

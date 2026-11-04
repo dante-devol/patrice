@@ -1,13 +1,9 @@
-import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { QueueService } from '../../queue/queue.service';
 import { ENV, Env } from '../../config/env';
 import { DiscordAdapter } from './discord.adapter';
-import { PROCESS_ROLE, isWorkerRole, type ProcessRoleValue } from '../../common/process-role';
 
-const QUEUE_INTEGRATION_SYNC = 'integration-sync';
-const QUEUE_INTEGRATION_SYNC_SCHEDULED = 'integration-sync-scheduled';
-const QUEUE_RECONCILE_FLOOR = 'integration-reconcile-floor';
 
 // Adaptive reconcile floor: 6h when Gateway is healthy, 30min when degraded.
 const FLOOR_HEALTHY_HOURS = 6;
@@ -21,21 +17,13 @@ export interface SyncJobData {
 }
 
 /**
- * pg-boss sync orchestrator (Slice 8.4).
- *
- * Two enqueue paths:
- *  - `enqueue(connectionId)` — immediate, manual trigger or cron.
- *  - `enqueueSoon(connectionId)` — delayed by INTEGRATION_SYNC_DELAY_SECONDS with
- *    singletonKey so rapid role-change bursts collapse into a single run.
- *
- * `notifyRoleChange(roleId)` is called by UsersService after any grant/revoke; it
- * finds every active connection that maps that role and calls `enqueueSoon` for each.
- *
- * A daily cron (`integration-sync-scheduled`) walks all active connections and
- * calls `enqueue` for each — the full reconciliation baseline.
+ * Integration sync orchestration. The API side enqueues: `enqueue` (now),
+ * `enqueueSoon` (debounced per connection) and `enqueueUserSoon` (debounced per user).
+ * The worker's {@link SyncWorker} runs the jobs and the reconcile floor. A failed run
+ * throws, so pg-boss retries it.
  */
 @Injectable()
-export class SyncService implements OnModuleInit {
+export class SyncService {
   private readonly logger = new Logger(SyncService.name);
 
   /** Gateway health state per connectionId — updated by IntegrationGatewayService. */
@@ -46,7 +34,6 @@ export class SyncService implements OnModuleInit {
     private readonly queue: QueueService,
     private readonly discord: DiscordAdapter,
     @Inject(ENV) private readonly env: Env,
-    @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
   ) {}
 
   /** Called by IntegrationGatewayService when health changes. */
@@ -54,38 +41,10 @@ export class SyncService implements OnModuleInit {
     this.gatewayHealth.set(connectionId, healthy);
   }
 
-  async onModuleInit() {
-    if (!isWorkerRole(this.processRole)) {
-      this.logger.log(`PROCESS_ROLE=${this.processRole} — skipping sync consumers and cron`);
-      return;
-    }
-    await this.queue.work(QUEUE_INTEGRATION_SYNC, async (data) => {
-      const { connectionId, externalUserId } = data as SyncJobData;
-      if (externalUserId) await this.runSyncUser(connectionId, externalUserId);
-      else await this.runSync(connectionId);
-    });
-
-    await this.queue.work(QUEUE_INTEGRATION_SYNC_SCHEDULED, async () => {
-      await this.sweepAllConnections();
-    });
-
-    // Adaptive Reconcile Floor (#61): 30-min tick; effective floor is 6h when
-    // Gateway is healthy, 30min when degraded. Replaces the former daily 02:00 sweep.
-    await this.queue.work(QUEUE_RECONCILE_FLOOR, async () => {
-      await this.reconcileFloorTick();
-    });
-    await this.queue.schedule(
-      QUEUE_RECONCILE_FLOOR,
-      '*/30 * * * *', // every 30 minutes
-      {},
-      { singletonKey: QUEUE_RECONCILE_FLOOR },
-    );
-  }
-
   /** Enqueue an immediate sync for one connection. */
   async enqueue(connectionId: string): Promise<void> {
     await this.queue.publish(
-      QUEUE_INTEGRATION_SYNC,
+      'integration.sync',
       { connectionId } satisfies SyncJobData,
       { singletonKey: `sync-${connectionId}` },
     );
@@ -98,7 +57,7 @@ export class SyncService implements OnModuleInit {
    */
   async enqueueSoon(connectionId: string): Promise<void> {
     await this.queue.publish(
-      QUEUE_INTEGRATION_SYNC,
+      'integration.sync',
       { connectionId } satisfies SyncJobData,
       {
         singletonKey: `sync-${connectionId}`,
@@ -115,7 +74,7 @@ export class SyncService implements OnModuleInit {
    */
   async enqueueUserSoon(connectionId: string, externalUserId: string): Promise<void> {
     await this.queue.publish(
-      QUEUE_INTEGRATION_SYNC,
+      'integration.sync',
       { connectionId, externalUserId } satisfies SyncJobData,
       {
         singletonKey: `sync-${connectionId}-${externalUserId}`,
@@ -171,31 +130,24 @@ export class SyncService implements OnModuleInit {
     }
   }
 
-  private async runSync(connectionId: string): Promise<void> {
+  /** Reconcile a whole connection (worker). Throws on failure so the job retries. */
+  async runSync(connectionId: string): Promise<void> {
     try {
       await this.discord.sync(connectionId);
     } catch (err) {
       this.logger.error(`Sync failed for connection ${connectionId}: ${(err as Error).message}`);
+      throw err;
     }
   }
 
-  private async runSyncUser(connectionId: string, externalUserId: string): Promise<void> {
+  /** Reconcile one member of a connection (worker). Throws on failure so the job retries. */
+  async runSyncUser(connectionId: string, externalUserId: string): Promise<void> {
     try {
       await this.discord.syncUser(connectionId, externalUserId);
     } catch (err) {
-      this.logger.error(
-        `User sync failed for ${connectionId}/${externalUserId}: ${(err as Error).message}`,
-      );
+      this.logger.error(`User sync failed for ${connectionId}/${externalUserId}: ${(err as Error).message}`);
+      throw err;
     }
-  }
-
-  private async sweepAllConnections(): Promise<void> {
-    const connections = await this.prisma.integrationConnection.findMany({
-      where: { lifecycleState: 'active', status: { not: 'disabled' } },
-      select: { id: true },
-    });
-    this.logger.log(`Scheduled sweep: enqueueing sync for ${connections.length} connection(s)`);
-    await Promise.all(connections.map((c) => this.enqueue(c.id)));
   }
 
   /**
@@ -206,7 +158,7 @@ export class SyncService implements OnModuleInit {
    *  - If the Gateway is degraded: always sync (30-min effective floor).
    * When degraded, also logs a warning so operators know the fast-path is down.
    */
-  private async reconcileFloorTick(): Promise<void> {
+  async reconcileFloorTick(): Promise<void> {
     const connections = await this.prisma.integrationConnection.findMany({
       where: { lifecycleState: 'active', status: { not: 'disabled' } },
       select: { id: true, updatedAt: true },

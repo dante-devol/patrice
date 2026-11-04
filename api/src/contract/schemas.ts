@@ -518,4 +518,12 @@ export const GcReport = z
   .strict()
   .openapi('GcReport');
 
-export const Health = z.object({ status: z.string(), db: z.string() }).strict().openapi('Health');
+export const Health = z
+  .object({ status: z.enum(['ok', 'degraded']), db: z.literal('ok'), queue: z.enum(['ok', 'down']) })
+  .strict()
+  .openapi('Health');
+
+export const DeadLetter = z
+  .object({ id: z.string(), queue: z.string(), failedAt: timestamp })
+  .strict()
+  .openapi('DeadLetter');

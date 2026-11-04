@@ -1,7 +1,6 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { QueueService } from '../queue/queue.service';
 import { PUBSUB_PORT, PubSubPort } from '../notifications/pubsub.port';
 import { NotificationType, computeRecipients } from '../notifications/notification.types';
 import {
@@ -11,7 +10,6 @@ import {
   domainEventPayloadSchemas,
 } from './event.types';
 
-const DELIVER_QUEUE = 'events.deliver';
 const DELIVER_BATCH = 200;
 
 export interface RecordArgs<T extends DomainEventType> {
@@ -30,23 +28,17 @@ export interface RecordArgs<T extends DomainEventType> {
  * event's snapshotted recipients into notification rows.
  *
  * Delivery runs right after the command commits (`deliver`), and a scheduled job
- * re-runs it so an event whose delivery was interrupted is still delivered. Each
+ * re-runs it (the worker's DeliveryWorker) so an event whose delivery was interrupted is still delivered. Each
  * notification is unique per (event, recipient), so delivering twice is a no-op.
  */
 @Injectable()
-export class EventStore implements OnModuleInit {
+export class EventStore {
   private readonly logger = new Logger(EventStore.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly queue: QueueService,
     @Inject(PUBSUB_PORT) private readonly pubsub: PubSubPort,
   ) {}
-
-  async onModuleInit(): Promise<void> {
-    await this.queue.work(DELIVER_QUEUE, () => this.deliver().then(() => undefined));
-    await this.queue.schedule(DELIVER_QUEUE, '* * * * *', {}, { singletonKey: DELIVER_QUEUE });
-  }
 
   /** Record an event in the caller's transaction. Returns its id. */
   async record<T extends DomainEventType>(tx: Prisma.TransactionClient, args: RecordArgs<T>): Promise<string> {

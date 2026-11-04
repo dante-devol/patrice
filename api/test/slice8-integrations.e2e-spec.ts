@@ -26,7 +26,6 @@ describe('Slice 8 — Integrations', () => {
     r.set('Cookie', admin.cookies).set('x-csrf-token', admin.csrf);
 
   beforeAll(async () => {
-    process.env.DISABLE_QUEUE = 'true';
     await resetDatabase();
     const { stub } = createEmailCapture();
     booted = await bootApp({ emailStub: stub });

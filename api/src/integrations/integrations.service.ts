@@ -1,3 +1,4 @@
+import { QueueService } from '../queue/queue.service';
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { LifecycleState, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -54,7 +55,16 @@ export class IntegrationsService {
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
+    private readonly queue: QueueService,
   ) {}
+
+  /**
+   * Tell the worker to bring the connection's Gateway session in line (open,
+   * restart with a new token, or close). Runs after the change is saved.
+   */
+  private signalGateway(connectionId: string): Promise<void> {
+    return this.queue.publish('gateway.reconcile-sessions', { connectionId });
+  }
 
   /**
    * Never persist a bot token in plaintext `config.botToken` — encrypt it at rest
@@ -128,6 +138,7 @@ export class IntegrationsService {
       verb: 'integration.connected',
       payload: { connectionId: connection.id },
     });
+    await this.signalGateway(connection.id);
     return toConnectionResponse(connection);
   }
 
@@ -153,6 +164,7 @@ export class IntegrationsService {
       verb: 'integration.updated',
       payload: { connectionId: id },
     });
+    if (dto.config !== undefined || dto.credentialsRef !== undefined) await this.signalGateway(id);
     return toConnectionResponse(updated);
   }
 
@@ -177,6 +189,7 @@ export class IntegrationsService {
       verb: 'integration.token_rotated',
       payload: { connectionId: id },
     });
+    await this.signalGateway(id);
     return toConnectionResponse(updated);
   }
 
@@ -197,6 +210,7 @@ export class IntegrationsService {
       verb: 'integration.retired',
       payload: { connectionId: id },
     });
+    await this.signalGateway(id);
     return toConnectionResponse(updated);
   }
 
@@ -218,6 +232,7 @@ export class IntegrationsService {
       verb: 'integration.revived',
       payload: { connectionId: id },
     });
+    await this.signalGateway(id);
     return toConnectionResponse(updated);
   }
 

@@ -6,7 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { EmailService } from '../src/email/email.service';
 
-/** Truncate all Slice 1 tables for a clean run (before bootstrap seeds). */
+/** Empty every table, and pg-boss's jobs, for a clean run (before bootstrap seeds). */
 export async function resetDatabase(): Promise<void> {
   const prisma = new PrismaClient();
   try {
@@ -17,6 +17,10 @@ export async function resetDatabase(): Promise<void> {
        message, attachment, notification,
        integration_connection, external_identity, external_group_mapping
        RESTART IDENTITY CASCADE;`,
+    );
+    // Jobs left by an earlier suite must not run in this one.
+    await prisma.$executeRawUnsafe(
+      `DO $$ BEGIN IF to_regclass('pgboss.job') IS NOT NULL THEN DELETE FROM pgboss.job; END IF; END $$;`,
     );
   } finally {
     await prisma.$disconnect();

@@ -1,11 +1,10 @@
-import { Module, forwardRef } from '@nestjs/common';
-import { PrismaModule } from '../../prisma/prisma.module';
-import { ActivityModule } from '../../activity/activity.module';
+import { Module } from '@nestjs/common';
 import { IntegrationsModule } from '../integrations.module';
 import { IntegrationGatewayService } from './integration-gateway.service';
 
+/** The Discord Gateway listener. Worker only (imported by WorkerModule). */
 @Module({
-  imports: [PrismaModule, ActivityModule, forwardRef(() => IntegrationsModule)],
+  imports: [IntegrationsModule],
   providers: [IntegrationGatewayService],
   exports: [IntegrationGatewayService],
 })

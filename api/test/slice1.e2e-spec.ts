@@ -49,7 +49,7 @@ describe('Slice 1 — Foundation, Auth, Engine & Bootstrap', () => {
   it('GET /health pings the DB', async () => {
     const res = await http().get('/api/health');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: 'ok', db: 'ok' });
+    expect(res.body).toEqual({ status: 'ok', db: 'ok', queue: 'ok' });
   });
 
   it('GET /bootstrap reports open with an invite token', async () => {

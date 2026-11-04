@@ -140,15 +140,51 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
           },
           "db": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          },
+          "queue": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "down"
+            ]
           }
         },
         "required": [
           "status",
-          "db"
+          "db",
+          "queue"
+        ],
+        "additionalProperties": false
+      },
+      "DeadLetter": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "queue": {
+            "type": "string"
+          },
+          "failedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "queue",
+          "failedAt"
         ],
         "additionalProperties": false
       },
@@ -2640,15 +2676,55 @@
         "tags": [
           "platform"
         ],
-        "summary": "Liveness and database check",
+        "summary": "Liveness, database and job queue check",
         "security": [],
         "responses": {
           "200": {
-            "description": "Liveness and database check",
+            "description": "Liveness, database and job queue check",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/dead-letters": {
+      "get": {
+        "operationId": "listDeadLetters",
+        "tags": [
+          "platform"
+        ],
+        "summary": "Background jobs that ran out of retries",
+        "description": "Gated by the `job:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Background jobs that ran out of retries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeadLetter"
+                  }
                 }
               }
             }

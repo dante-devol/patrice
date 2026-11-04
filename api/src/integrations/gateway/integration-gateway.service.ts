@@ -1,11 +1,19 @@
-import { Injectable, Inject, Logger, OnModuleInit, OnModuleDestroy, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { WebSocket } from 'ws';
 import { ActivitySource, GatewayState } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ActivityService } from '../../activity/activity.service';
 import { SyncService } from '../sync/sync.service';
 import { SECRET_CIPHER_PORT, type SecretCipherPort } from '../secret-cipher.port';
-import { PROCESS_ROLE, isWorkerRole, type ProcessRoleValue } from '../../common/process-role';
+import { ENV, Env } from '../../config/env';
+import { JobRunner } from '../../queue/job-runner.service';
 import {
   initialContext,
   handle,
@@ -34,28 +42,50 @@ interface GatewaySession {
 /**
  * Discord Gateway Doorbell listener (#61).
  *
- * Worker-role only. Maintains one WebSocket per unique bot token.
+ * Worker only. Maintains one WebSocket per connection. Admin changes on the API
+ * (connect, token rotation, retire, revive) reach it as `gateway.reconcile-sessions`
+ * jobs, so sessions open, restart and close without a worker restart (problems D21).
  * On relevant events it calls SyncService.enqueueSoon(connectionId) — never
  * writes user_role directly (Doorbell pattern: the reconciler is the sole writer).
  *
  * Uses the pure GatewayConnectionStateMachine for session management.
  */
 @Injectable()
-export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy {
+export class IntegrationGatewayService implements OnModuleInit, OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(IntegrationGatewayService.name);
   private readonly sessions = new Map<string, GatewaySession>(); // key: connectionId
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
-    @Inject(forwardRef(() => SyncService)) private readonly sync: SyncService,
+    private readonly sync: SyncService,
     @Inject(SECRET_CIPHER_PORT) private readonly cipher: SecretCipherPort,
-    @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
+    @Inject(ENV) private readonly env: Env,
+    private readonly runner: JobRunner,
   ) {}
 
-  async onModuleInit(): Promise<void> {
-    if (!isWorkerRole(this.processRole)) return;
+  onModuleInit(): void {
+    this.runner.register('gateway.reconcile-sessions', async (data) => {
+      await this.reconcileSession((data as { connectionId: string }).connectionId);
+    });
+  }
+
+  async onApplicationBootstrap(): Promise<void> {
     await this.openAllSessions();
+  }
+
+  /**
+   * Bring one connection's session in line with the connection: (re)open it with the
+   * current token while the connection is active, close it otherwise.
+   */
+  async reconcileSession(connectionId: string): Promise<void> {
+    this.closeSessionById(connectionId);
+    await this.openSession(connectionId);
+  }
+
+  /** Whether this worker holds a session for the connection. */
+  hasSession(connectionId: string): boolean {
+    return this.sessions.has(connectionId);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -130,6 +160,7 @@ export class IntegrationGatewayService implements OnModuleInit, OnModuleDestroy 
   }
 
   private connect(session: GatewaySession): void {
+    if (!this.env.INTEGRATION_GATEWAY_ENABLED) return;
     const url = session.ctx.resumeGatewayUrl ?? DISCORD_GATEWAY_URL;
     this.logger.log(`Connecting to Gateway for connection ${session.connectionId} → ${url}`);
     this.persistGateway(session, GatewayState.connecting);

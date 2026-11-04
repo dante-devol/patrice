@@ -89,7 +89,8 @@ function r(route: ContractRoute): ContractRoute {
  */
 export const ROUTES = {
   // ---- Platform ----
-  health: r({ method: 'get', path: '/health', tag: 'platform', summary: 'Liveness and database check', public: true, status: 200, kind: 'json', response: S.Health }),
+  health: r({ method: 'get', path: '/health', tag: 'platform', summary: 'Liveness, database and job queue check', public: true, status: 200, kind: 'json', response: S.Health }),
+  listDeadLetters: r({ method: 'get', path: '/jobs/dead-letters', tag: 'platform', summary: 'Background jobs that ran out of retries', action: 'job:read', status: 200, kind: 'json', response: z.array(S.DeadLetter) }),
 
   // ---- Auth ----
   login: r({ method: 'post', path: '/auth/login', tag: 'auth', summary: 'Sign in with email and password', public: true, body: loginSchema, status: 200, kind: 'json', response: S.CurrentUser }),

@@ -10,8 +10,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { ADMIN_SEED_ACTIONS, MEMBER_SEED_GRANTS } from '../access/actions';
-import { generateInviteToken, generateOpaqueToken, hashToken } from '../common/tokens';
-import { PROCESS_ROLE, isApiRole, type ProcessRoleValue } from '../common/process-role';
+import { createHmac } from 'node:crypto';
+import { uuidv7 } from 'uuidv7';
+import { generateOpaqueToken, hashToken } from '../common/tokens';
 
 const ADMIN_ROLE_NAME = 'Admin';
 const MEMBER_ROLE_NAME = 'Member';
@@ -24,33 +25,33 @@ export interface BootstrapStatus {
 }
 
 /**
- * Boot-time seeding + bootstrap mode.
+ * Boot-time seeding and bootstrap mode.
  *
- * On boot: ensure the settings row, the seeded **Admin** role, and its global
- * grants exist (idempotent). Then, if there is **no effective admin**, mint a
- * fresh ephemeral **bootstrap key** (printed to stdout, never persisted) and ensure
- * a single passcode-gated system invitation. A restart while unbootstrapped rotates
- * the key (old key dead). When an effective admin exists, bootstrap mode is closed
- * (any lingering system invite is revoked).
+ * Every process ensures the settings row and the seeded roles on boot (idempotent,
+ * serialised by an advisory lock, so replicas can start together).
+ *
+ * Only the **worker** runs bootstrap mode ({@link openBootstrap}, called by the
+ * BootstrapWorker): with no effective admin it mints an ephemeral **bootstrap key**
+ * (printed to stdout, never persisted) as the passcode of a single system invitation;
+ * a worker restart rotates it. Starting more API replicas no longer rotates the key
+ * out from under the operator (problems D18). With an effective admin, bootstrap
+ * mode is closed.
+ *
+ * The invitation's token isn't secret (the passcode is), so any process derives it
+ * from the invitation's id for the setup page.
  */
 @Injectable()
 export class BootstrapService implements OnApplicationBootstrap {
   private readonly logger = new Logger(BootstrapService.name);
-  /** Plaintext token of the live system invite, cached for status responses. */
-  private liveInviteToken: string | null = null;
-
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly prisma: PrismaService,
     private readonly admin: AdministrabilityService,
     private readonly settings: SettingsService,
-    @Inject(PROCESS_ROLE) private readonly processRole: ProcessRoleValue,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    if (!isApiRole(this.processRole)) return;
     await this.ensureSeed();
-    await this.refreshBootstrap();
   }
 
   /**
@@ -60,6 +61,7 @@ export class BootstrapService implements OnApplicationBootstrap {
    */
   private async ensureSeed(): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('patrice.seed'))`;
       await this.settings.ensureRow(tx);
 
       let adminRole = await tx.role.findFirst({
@@ -110,12 +112,15 @@ export class BootstrapService implements OnApplicationBootstrap {
     });
   }
 
-  /** Mint/rotate or close the bootstrap system invite based on effective-admin presence. */
-  private async refreshBootstrap(): Promise<void> {
+  /**
+   * Mint or rotate the bootstrap system invite, or close it when an effective admin
+   * exists. Worker only; prints the new key.
+   */
+  async openBootstrap(): Promise<void> {
+    await this.ensureSeed();
     const hasAdmin = await this.admin.effectiveAdminExists();
     if (hasAdmin) {
       await this.closeBootstrap();
-      this.liveInviteToken = null;
       this.logger.log('Effective admin present — bootstrap mode closed.');
       return;
     }
@@ -136,22 +141,17 @@ export class BootstrapService implements OnApplicationBootstrap {
     });
 
     if (existing) {
-      // Rotate the passcode (old key dead); reuse the token.
-      const token = generateInviteToken();
+      // Rotate the passcode; the old key is dead.
       await this.prisma.invitation.update({
         where: { id: existing.id },
-        data: {
-          passcodeHash,
-          tokenHash: hashToken(this.env.TOKEN_PEPPER, token),
-          expiresAt,
-        },
+        data: { passcodeHash, expiresAt },
       });
-      this.liveInviteToken = token;
     } else {
-      const token = generateInviteToken();
+      const id = uuidv7();
       await this.prisma.invitation.create({
         data: {
-          tokenHash: hashToken(this.env.TOKEN_PEPPER, token),
+          id,
+          tokenHash: hashToken(this.env.TOKEN_PEPPER, this.tokenFor(id)),
           roles: { create: [{ roleId: adminRole.id }] },
           passcodeHash,
           maxUses: 1,
@@ -159,7 +159,6 @@ export class BootstrapService implements OnApplicationBootstrap {
           expiresAt,
         },
       });
-      this.liveInviteToken = token;
     }
 
     this.printKey(key);
@@ -190,9 +189,16 @@ export class BootstrapService implements OnApplicationBootstrap {
   /** Public status for the web Setup page. */
   async getStatus(): Promise<BootstrapStatus> {
     const hasAdmin = await this.admin.effectiveAdminExists();
-    return {
-      open: !hasAdmin,
-      inviteToken: hasAdmin ? null : this.liveInviteToken,
-    };
+    if (hasAdmin) return { open: false, inviteToken: null };
+    const invite = await this.prisma.invitation.findFirst({
+      where: { createdBy: null, revokedAt: null },
+      select: { id: true },
+    });
+    return { open: true, inviteToken: invite ? this.tokenFor(invite.id) : null };
+  }
+
+  /** The system invitation's token, derived from its id (the passcode is the secret). */
+  private tokenFor(invitationId: string): string {
+    return createHmac('sha256', this.env.TOKEN_PEPPER).update(`bootstrap-invite:${invitationId}`).digest('base64url');
   }
 }

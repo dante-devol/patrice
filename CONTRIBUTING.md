@@ -160,7 +160,9 @@ npm run start:dev              # prints the bootstrap key when no effective admi
 ```
 
 Leaving `PROCESS_ROLE` unset runs a **combined** process (HTTP + background jobs in one) — the
-right choice for native dev.
+right choice for native dev. Background jobs need pg-boss (it uses the same Postgres); with
+`QUEUE_MODE=off` they're disabled, and anything that needs one (sending mail, signalling the
+worker) answers `503 QUEUE_UNAVAILABLE`.
 
 **Web** (`:4200`, proxies `/api` → `http://localhost:3000`):
 

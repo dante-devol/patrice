@@ -53,8 +53,12 @@ export class VerificationService {
     await this.mail.request({ kind: 'email_verification', userId });
   }
 
-  /** Resend verification. Always reports success — no enumeration oracle. */
+  /**
+   * Resend verification. Reports success whether or not the address exists (no
+   * enumeration oracle); when mail can't be queued it fails for every address alike.
+   */
   async resendVerification(email: string): Promise<void> {
+    this.mail.assertAvailable();
     const user = await this.prisma.appUser.findFirst({
       where: { email, lifecycleState: 'active' },
       select: {
@@ -80,8 +84,12 @@ export class VerificationService {
     });
   }
 
-  /** Request a password reset. Always reports success — no enumeration oracle. */
+  /**
+   * Request a password reset. Reports success whether or not the address exists (no
+   * enumeration oracle); when mail can't be queued it fails for every address alike.
+   */
   async requestPasswordReset(email: string): Promise<void> {
+    this.mail.assertAvailable();
     const user = await this.prisma.appUser.findFirst({
       where: { email, lifecycleState: 'active' },
       select: { id: true },

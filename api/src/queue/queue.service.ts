@@ -1,129 +1,148 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import PgBoss from 'pg-boss';
 import { ENV, Env } from '../config/env';
+import { ServiceUnavailableError } from '../common/errors';
+import { PrismaService } from '../prisma/prisma.service';
+import { JOB_QUEUES, JobQueue, deadLetterQueue } from './job-queues';
+
+/** Something that can run a queue's due jobs in this process (sync mode). */
+export interface LocalJobRunner {
+  drain(queue: JobQueue): Promise<void>;
+}
+
+/** A job that ran out of retries, as the admin sees it (no job data: it may hold PII). */
+export interface DeadLetter {
+  id: string;
+  queue: string;
+  failedAt: Date;
+}
 
 /**
- * pg-boss wrapper (Postgres-backed jobs). Slice 1 uses it for email send; GC sweeps
- * (Slice 7) and integration sync (Slice 8) land here later. Resilient by design: if
- * the queue can't start, publishing degrades to a logged no-op so the core request
- * path (bootstrap/auth/authz) is never blocked by queue health.
+ * Publishes background jobs (pg-boss). This side runs in every process, and never
+ * works a queue or runs a schedule: that's the worker's {@link JobRunner}.
+ *
+ * Publishing fails loudly. When pg-boss isn't running, or a send fails, the caller
+ * gets `503 QUEUE_UNAVAILABLE` instead of a silently dropped job, and `/health`
+ * reports the queue down.
+ *
+ * In `sync` mode (tests) a publish also runs the queue's due jobs in-process before
+ * returning, so a test sees a job's effects without polling.
  */
 @Injectable()
 export class QueueService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(QueueService.name);
   private boss: PgBoss | null = null;
-  private readonly pendingWorkers: Array<{
-    queue: string;
-    handler: (data: unknown) => Promise<void>;
-  }> = [];
+  private localRunner: LocalJobRunner | null = null;
 
-  constructor(@Inject(ENV) private readonly env: Env) {}
+  constructor(
+    @Inject(ENV) private readonly env: Env,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
-    if (this.env.DISABLE_QUEUE) {
-      this.logger.warn('DISABLE_QUEUE=true — pg-boss disabled (jobs are no-ops).');
-      return;
-    }
-    try {
-      this.boss = new PgBoss({ connectionString: this.env.DATABASE_URL });
-      this.boss.on('error', (err) => this.logger.error('pg-boss error', err));
-      await this.boss.start();
-      for (const w of this.pendingWorkers) {
-        await this.registerWorker(w.queue, w.handler);
-      }
-    } catch (err) {
-      this.boss = null;
-      this.logger.error(
-        `pg-boss failed to start; jobs disabled. ${(err as Error).message}`,
-      );
-    }
+    await this.start();
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.boss?.stop({ graceful: true }).catch(() => undefined);
+    await this.stop();
   }
 
-  private async registerWorker(
-    queue: string,
-    handler: (data: unknown) => Promise<void>,
-  ): Promise<void> {
-    if (!this.boss) return;
-    await this.boss.createQueue(queue).catch(() => undefined);
-    await this.boss.work(queue, async (jobs: PgBoss.Job[]) => {
-      for (const job of jobs) {
-        await handler(job.data);
-      }
-    });
-  }
-
-  /** Register a worker for a queue. Deferred until pg-boss has started. */
-  async work(queue: string, handler: (data: unknown) => Promise<void>): Promise<void> {
-    if (this.boss) {
-      await this.registerWorker(queue, handler);
-    } else {
-      this.pendingWorkers.push({ queue, handler });
+  /** Start publishing. A failure leaves the queue down (and `/health` degraded). */
+  async start(): Promise<void> {
+    if (this.boss) return;
+    if (this.env.QUEUE_MODE === 'off') {
+      this.logger.warn('QUEUE_MODE=off: background jobs are disabled; publishing will fail.');
+      return;
+    }
+    const boss = new PgBoss({ connectionString: this.env.DATABASE_URL, supervise: false, schedule: false });
+    boss.on('error', (err) => this.logger.error('pg-boss error', err));
+    try {
+      await boss.start();
+      this.boss = boss;
+    } catch (err) {
+      this.logger.error(`pg-boss failed to start: ${(err as Error).message}`);
     }
   }
 
+  async stop(): Promise<void> {
+    const boss = this.boss;
+    this.boss = null;
+    await boss?.stop({ graceful: true, wait: true }).catch(() => undefined);
+  }
+
+  /** Whether jobs can be published right now. */
+  get healthy(): boolean {
+    return this.boss !== null;
+  }
+
+  /** Throw `503 QUEUE_UNAVAILABLE` unless jobs can be published. */
+  assertAvailable(): void {
+    if (!this.boss) throw new ServiceUnavailableError('QUEUE_UNAVAILABLE', 'Background jobs are unavailable; try again later');
+  }
+
+  /** In sync mode, the worker's runner drains queues right after a publish. */
+  attachLocalRunner(runner: LocalJobRunner): void {
+    this.localRunner = runner;
+  }
+
   /**
-   * Publish a job. No-op (logged) when the queue is unavailable. `singletonKey`
-   * de-duplicates in-flight jobs (pg-boss drops a send whose key matches one already
-   * active) — the GC sweep passes `'gc-sweep'` so concurrent triggers can't overlap.
-   * `startAfterSeconds` delays execution, letting a singleton absorb follow-on
-   * events that arrive within the window (role-change batching in Slice 8).
-   * `runInlineWhenUnavailable` runs the queue's handler in-process instead of
-   * dropping the job when pg-boss is off (DISABLE_QUEUE in tests and local runs).
+   * Publish a job. `singletonKey` drops a send whose key matches a job already queued
+   * or running; `startAfterSeconds` delays it, so a singleton absorbs follow-on events
+   * inside the window. Throws `503 QUEUE_UNAVAILABLE` if the job can't be queued.
    */
   async publish(
-    queue: string,
-    data: unknown,
-    opts: { singletonKey?: string; startAfterSeconds?: number; runInlineWhenUnavailable?: boolean } = {},
+    queue: JobQueue,
+    data: object,
+    opts: { singletonKey?: string; startAfterSeconds?: number } = {},
   ): Promise<void> {
-    if (!this.boss) {
-      const inline = opts.runInlineWhenUnavailable
-        ? this.pendingWorkers.find((w) => w.queue === queue)
-        : undefined;
-      if (inline) {
-        await inline.handler(data);
-        return;
-      }
-      this.logger.warn(`Queue unavailable; dropping job for "${queue}".`);
-      return;
+    this.assertAvailable();
+    const boss = this.boss!;
+    try {
+      await ensureQueue(boss, queue);
+      await boss.send(queue, data, {
+        ...(opts.singletonKey ? { singletonKey: opts.singletonKey } : {}),
+        ...(opts.startAfterSeconds ? { startAfter: opts.startAfterSeconds } : {}),
+      });
+    } catch (err) {
+      this.logger.error(`Publishing to "${queue}" failed: ${(err as Error).message}`);
+      throw new ServiceUnavailableError('QUEUE_UNAVAILABLE', 'Background jobs are unavailable; try again later');
     }
-    await this.boss.createQueue(queue).catch(() => undefined);
-    await this.boss.send(queue, data as object, {
-      ...(opts.singletonKey && { singletonKey: opts.singletonKey }),
-      ...(opts.startAfterSeconds && { startAfter: opts.startAfterSeconds }),
-    });
+    if (this.env.QUEUE_MODE === 'sync' && this.localRunner && !opts.startAfterSeconds) {
+      await this.localRunner.drain(queue);
+    }
   }
 
-  /**
-   * Schedule a recurring job on a cron expression. The `singletonKey` keeps a
-   * multi-instance deployment from double-running the same sweep. No-op when the
-   * queue is unavailable (jobs disabled).
-   */
-  async schedule(
-    queue: string,
-    cron: string,
-    data: unknown = {},
-    opts: { singletonKey?: string } = {},
-  ): Promise<void> {
-    if (!this.boss) {
-      this.logger.warn(`Queue unavailable; not scheduling "${queue}".`);
-      return;
-    }
-    await this.boss.createQueue(queue).catch(() => undefined);
-    await this.boss.schedule(
-      queue,
-      cron,
-      data as object,
-      opts.singletonKey ? { singletonKey: opts.singletonKey } : {},
+  /** Jobs that exhausted their retries, newest first. */
+  async deadLetters(limit = 100): Promise<DeadLetter[]> {
+    if (!this.boss) throw new ServiceUnavailableError('QUEUE_UNAVAILABLE', 'Background jobs are unavailable; try again later');
+    const dead = (Object.keys(JOB_QUEUES) as JobQueue[]).map(deadLetterQueue);
+    const rows = await this.prisma.$queryRawUnsafe<{ id: string; name: string; created_on: Date }[]>(
+      `SELECT id::text, name, created_on FROM pgboss.job
+       WHERE name = ANY($1::text[]) AND state = 'created'
+       ORDER BY created_on DESC LIMIT $2`,
+      dead,
+      limit,
     );
+    return rows.map((r) => ({ id: r.id, queue: r.name.replace(/\.dead$/, ''), failedAt: r.created_on }));
   }
+}
+
+const ensured = new WeakMap<PgBoss, Set<string>>();
+
+/** Create a queue (and its dead-letter queue) with its policy, once per pg-boss instance. */
+export async function ensureQueue(boss: PgBoss, queue: JobQueue): Promise<void> {
+  let done = ensured.get(boss);
+  if (!done) ensured.set(boss, (done = new Set()));
+  if (done.has(queue)) return;
+  const dead = deadLetterQueue(queue);
+  const options = { name: queue, ...JOB_QUEUES[queue], deadLetter: dead };
+  if (!(await boss.getQueue(dead))) await boss.createQueue(dead, { name: dead }).catch(ignoreExists);
+  if (await boss.getQueue(queue)) await boss.updateQueue(queue, options);
+  else await boss.createQueue(queue, options).catch(ignoreExists);
+  done.add(queue);
+}
+
+/** Two processes may race to create the same queue; the loser's error is harmless. */
+function ignoreExists(err: Error): void {
+  if (!/already exists|duplicate key/i.test(err.message)) throw err;
 }

@@ -91,7 +91,7 @@ The active-only default on entity **list** queries (`activeFilter`): list endpoi
 _Avoid_: Active Scope, Retirement Hiding
 
 **GC Sweep**:
-The lazy collector (`GcService`, Slice 7.3) — a pg-boss job (`singletonKey: 'gc-sweep'`) that permanently deletes entities retired past the Grace Period with no live references. Task aggregates delete as a unit; roles/divisions/teams individually (`ON DELETE RESTRICT` is the DB backstop, logged as `gc.blocked`). A reconciliation pass removes orphaned blobs. `POST /gc/sweep` + `/gc/sweep/dry-run` are the manual hooks.
+The lazy collector (`GcService`, Slice 7.3) — an hourly worker job (`gc.sweep`) that permanently deletes entities retired past the Grace Period with no live references. Task aggregates delete as a unit; roles/divisions/teams individually (`ON DELETE RESTRICT` is the DB backstop, logged as `gc.blocked`). A reconciliation pass removes orphaned blobs. `POST /gc/sweep` + `/gc/sweep/dry-run` are the manual hooks.
 _Avoid_: Garbage Collector (the term), Reaper, Purge
 
 **Scrub-in-Place**:
@@ -134,7 +134,7 @@ The fan-out seam (`publish(userId, ev)` / `subscribe(userId, cb)`). v1 binds the
 _Avoid_: Event Bus, Broker
 
 **Process Role**:
-The `PROCESS_ROLE` toggle (resolved into an injected `ProcessRole` provider) selecting a process's job from one image: `api` (HTTP only, N replicas, freely restartable) or `worker` (no HTTP — pg-boss consumers + cron + GC + the Gateway socket; holds the singletons and the only copy of the cipher key). Dev runs one combined process; prod splits. The Gateway socket is the one strict single-instance guard; multi-`worker` leader election is the deferred HA seam.
+Which root module a process boots, chosen by `PROCESS_ROLE` in `main.ts`: `ApiModule` (HTTP; publishes jobs but consumes none) or `WorkerModule` (no HTTP — queue consumers, schedules, email, bootstrap mode and the Gateway socket). Both import the shared `CoreModule`; unset boots `AppModule`, which imports both, for development. No module checks the role itself: what a process runs is what its root imports. Run one worker; it holds the Gateway sessions.
 _Avoid_: Process Type, Mode, Web/Worker Dyno
 
 **Claim Eligibility AND-Composition**:

@@ -4,6 +4,8 @@ import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { ApiModule } from './api.module';
+import { WorkerModule } from './worker.module';
 import { ENV, type Env } from './config/env';
 
 // Load api/.env into process.env for local runs (Node's built-in loader). In
@@ -18,16 +20,18 @@ try {
 }
 
 async function bootstrap(): Promise<void> {
+  // PROCESS_ROLE picks the root module: the worker runs jobs and the Gateway with no
+  // HTTP server; the API serves HTTP and runs no background work. Unset runs both.
   const processRole = process.env.PROCESS_ROLE;
 
   if (processRole === 'worker') {
-    const ctx = await NestFactory.createApplicationContext(AppModule, { bufferLogs: false });
+    const ctx = await NestFactory.createApplicationContext(WorkerModule, { bufferLogs: false });
     ctx.enableShutdownHooks();
     new Logger('Bootstrap').log('Patrice worker started');
     return;
   }
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create(processRole === 'api' ? ApiModule : AppModule, { bufferLogs: false });
   const env = app.get<Env>(ENV);
 
   if (env.TRUST_PROXY) {

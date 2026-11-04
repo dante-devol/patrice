@@ -42,7 +42,8 @@ jobs:
       SECRETS_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       SMTP_URL: smtp://localhost:1025
       EMAIL_FROM: Patrice CI <ci@patrice.local>
-      DISABLE_QUEUE: 'true'
+      QUEUE_MODE: sync
+      INTEGRATION_GATEWAY_ENABLED: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

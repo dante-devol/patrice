@@ -79,7 +79,6 @@ describe('Slice 8 — Discord auth (login / register / link)', () => {
   const nonceCookie = (nonce: string) => `patrice_oauth=${nonce}`;
 
   beforeAll(async () => {
-    process.env.DISABLE_QUEUE = 'true';
     await resetDatabase();
     const { stub } = createEmailCapture();
     booted = await bootApp({ emailStub: stub });

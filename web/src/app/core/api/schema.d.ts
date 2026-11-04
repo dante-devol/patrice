@@ -11,8 +11,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Liveness and database check */
+        /** Liveness, database and job queue check */
         get: operations["health"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/dead-letters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Background jobs that ran out of retries
+         * @description Gated by the `job:read` action.
+         */
+        get: operations["listDeadLetters"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1836,8 +1856,18 @@ export interface components {
             };
         };
         Health: {
-            status: string;
-            db: string;
+            /** @enum {string} */
+            status: "ok" | "degraded";
+            /** @enum {string} */
+            db: "ok";
+            /** @enum {string} */
+            queue: "ok" | "down";
+        };
+        DeadLetter: {
+            id: string;
+            queue: string;
+            /** Format: date-time */
+            failedAt: string;
         };
         /** @enum {string} */
         AuthMethod: "password" | "google" | "discord";
@@ -2505,13 +2535,42 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Liveness and database check */
+            /** @description Liveness, database and job queue check */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listDeadLetters: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Background jobs that ran out of retries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeadLetter"][];
                 };
             };
             /** @description An error; `error.code` is one of `ErrorCode` */

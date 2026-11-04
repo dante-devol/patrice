@@ -21,7 +21,6 @@ describe('SyncService.notifyUserRoleChange', () => {
       { publish } as never,
       {} as never,
       env as never,
-      'worker' as never,
     );
     return { svc, publish, prisma };
   }

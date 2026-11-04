@@ -31,8 +31,13 @@ export const envSchema = z.object({
   ARGON2_MEMORY_COST: z.coerce.number().int().positive().optional(),
   ARGON2_TIME_COST: z.coerce.number().int().positive().optional(),
   ARGON2_PARALLELISM: z.coerce.number().int().positive().optional(),
-  // Runs without pg-boss: enqueues are dropped. For tests and queue-less local runs.
-  DISABLE_QUEUE: boolFromString.default('false'),
+  // `normal` in production. `sync` (tests) runs a queue's jobs in-process right after
+  // a publish, with no polling or cron. `off` disables jobs: publishing fails (503)
+  // and /health reports the queue down.
+  QUEUE_MODE: z.enum(['normal', 'sync', 'off']).default('normal'),
+  // Whether the worker opens Discord Gateway sockets. Tests turn it off and still see
+  // sessions tracked.
+  INTEGRATION_GATEWAY_ENABLED: boolFromString.default('true'),
 
   // Object storage (Slice 4.3). `local` writes blobs to STORAGE_LOCAL_DIR (single
   // instance only — see the slice doc's multi-instance caveat); `s3` uses an
@@ -58,8 +63,8 @@ export const envSchema = z.object({
   // 32 raw bytes encoded as hex (64 chars). Worker-only — the api role never
   // decrypts tokens. If absent the adapter is disabled (plaintext botToken fallback).
   INTEGRATION_TOKEN_KEY: emptyAsUndefined(z.string().regex(/^[0-9a-fA-F]{64}$/).optional()),
-  // Process topology split (Slice F / #60). `api` = HTTP only; `worker` = pg-boss
-  // consumers + cron + GC + Gateway. Dev/test leaves this unset (combined process).
+  // Which root module main.ts boots: `api` (HTTP only) or `worker` (jobs, schedules,
+  // the Gateway). Unset runs both in one process, for development.
   PROCESS_ROLE: emptyAsUndefined(z.enum(['api', 'worker']).optional()),
   // Vault transit adapter (Slice H / #62). Worker-only.
   VAULT_ADDR: emptyAsUndefined(z.string().url().optional()),
