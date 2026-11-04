@@ -23,7 +23,10 @@ import { Notification } from '../../core/api.types';
         (click)="toggle()"
         [attr.aria-label]="'Notifications: ' + store.unreadCount() + ' unread'"
       >
-        🔔
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 9a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
         @if (store.hasUnread()) {
           <span class="notif-badge">{{ store.unreadCount() }}</span>
         }
@@ -61,33 +64,34 @@ import { Notification } from '../../core/api.types';
   styles: [
     `
       .notif { position: relative; display: inline-block; }
-      .notif-btn { background: none; border: 0; cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 4px; position: relative; }
+      .notif-btn { background: none; border: 0; cursor: pointer; line-height: 0; padding: 4px; position: relative; color: var(--ink-soft); }
+      .notif-btn:hover { color: var(--ink); }
       .notif-badge {
-        position: absolute; top: -2px; right: -2px; background: #99492f; color: #fbfbf8;
-        border-radius: 999px; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem;
+        position: absolute; top: -2px; right: -2px; background: var(--rust); color: var(--paper);
+        border-radius: 2px; font-weight: 700; font-size: 0.65rem;
         padding: 0 5px; line-height: 1.5;
       }
       .notif-panel {
         position: absolute; right: 0; top: 2.4rem; width: 320px; max-height: 420px;
-        overflow-y: auto; background: #fbfbf8; border: 1px solid #d3d5cc; border-radius: 10px;
-        box-shadow: 0 10px 30px -10px rgba(25,27,25,0.25); z-index: 50;
+        overflow-y: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 2px;
+        box-shadow: var(--float-shadow); z-index: 50;
       }
       .notif-panel header {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 0.6rem 0.8rem; border-bottom: 1px solid #d3d5cc;
+        padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line);
       }
-      .notif-panel header strong { font-family: 'IBM Plex Serif', Georgia, serif; }
+      .notif-panel header strong { font-family: var(--font-display); }
       .notif-panel ul { list-style: none; margin: 0; padding: 0; }
       .notif-panel li {
         display: flex; justify-content: space-between; gap: 0.5rem; cursor: pointer;
-        padding: 0.55rem 0.8rem; border-bottom: 1px solid #e7e8e1;
+        padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--line);
       }
-      .notif-panel li.unread { background: rgba(15,122,107,0.06); font-weight: 600; }
-      .notif-panel li:hover { background: #e7e8e1; }
+      .notif-panel li.unread { background: var(--paper-alt); font-weight: 700; }
+      .notif-panel li:hover { background: var(--paper-hover); }
       .notif-text { font-size: 0.82rem; }
-      .notif-panel time { color: #5b605c; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; white-space: nowrap; }
+      .notif-panel time { color: var(--ink-soft); font-size: 0.78rem; white-space: nowrap; }
       .notif-empty { padding: 1rem 0.8rem; }
-      .link { background: none; border: 0; color: #0a5249; cursor: pointer; font-size: 0.78rem; }
+      .link { background: none; border: 0; color: var(--ink); text-decoration: underline; cursor: pointer; font-size: 0.78rem; font-weight: 400; margin: 0; padding: 0; }
     `,
   ],
 })

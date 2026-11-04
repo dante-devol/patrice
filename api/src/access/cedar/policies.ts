@@ -93,6 +93,21 @@ const OWN_WHEN_BY_ACTION: Readonly<Record<string, string>> = {
 /** Actions whose `own` scope means "yourself" (the resource is a User). */
 const OWN_SELF_ACTIONS = new Set(['user:read', 'user:update']);
 
+/**
+ * What an `own` grant on `action` checks, for the permission editor to explain: an
+ * owner relation (`requester`, `sender`…), `visible`, `eligible`, `seated`, `self`,
+ * or null when `own` doesn't apply.
+ */
+export function ownRelation(action: string): string | null {
+  if (action in OWN_ATTR_BY_ACTION) return OWN_ATTR_BY_ACTION[action];
+  if (OWN_SELF_ACTIONS.has(action)) return 'self';
+  const when = OWN_WHEN_BY_ACTION[action];
+  if (when === VISIBLE) return 'visible';
+  if (when === ELIGIBLE) return 'eligible';
+  if (when === SEATED) return 'seated';
+  return null;
+}
+
 /** Whether `own` scope means something for this action. */
 export function supportsOwnScope(action: string): boolean {
   return action in OWN_ATTR_BY_ACTION || action in OWN_WHEN_BY_ACTION || OWN_SELF_ACTIONS.has(action);

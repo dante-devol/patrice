@@ -5,7 +5,9 @@ import {
   initials,
   isMultiClaim,
   relativeTime,
+  shortTaskId,
   stampClass,
+  stampLabel,
   stampStatus,
   teamColor,
 } from './task-presentation';
@@ -21,6 +23,18 @@ describe('task-presentation', () => {
     it('treats a null statusCache as open (nothing has happened yet)', () => {
       expect(stampStatus(null)).toBe('open');
       expect(stampClass(null)).toBe('stamp--open');
+    });
+
+    it('prints sentence-case words on the stamp', () => {
+      expect(stampLabel('review')).toBe('In review');
+      expect(stampLabel('approved')).toBe('Approved');
+      expect(stampLabel(null)).toBe('Open');
+    });
+  });
+
+  describe('shortTaskId', () => {
+    it('takes the first four hex digits of the UUID', () => {
+      expect(shortTaskId('7f3a-9b21-0000')).toBe('7f3a');
     });
   });
 
@@ -52,8 +66,8 @@ describe('task-presentation', () => {
 
   describe('colours', () => {
     it('uses the canonical hue for known division names (case-insensitive)', () => {
-      expect(divisionColor('Writing')).toBe('#3c5ba0');
-      expect(divisionColor('art')).toBe('#b0573c');
+      expect(divisionColor('Writing')).toBe('#3f5fb5');
+      expect(divisionColor('art')).toBe('#c0563a');
     });
 
     it('is deterministic for unknown divisions and for teams', () => {

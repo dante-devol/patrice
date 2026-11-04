@@ -7,10 +7,12 @@ import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { CedarEngine } from '../access/cedar/engine';
 import { ActivityService } from '../activity/activity.service';
-import { ALL_ACTION_STRINGS, EFFECTIVE_ADMIN_ACTIONS, RESOURCE_TYPE_BY_ACTION, TASK_FAMILY_ACTIONS } from '../access/actions';
+import { ACTIONS, ALL_ACTION_STRINGS, EFFECTIVE_ADMIN_ACTIONS, RESOURCE_TYPE_BY_ACTION, TASK_FAMILY_ACTIONS } from '../access/actions';
+import { ORGANIZATION_RESOURCE } from '../access/access.service';
 import {
   ProjectableGrant,
   grantToPolicy,
+  ownRelation,
   staticPolicies,
 } from '../access/cedar/policies';
 
@@ -21,7 +23,15 @@ const ROLE_SCOPABLE = new Set(['User']);
 import { ConflictError, NotFoundError, UnprocessableError, ValidationError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
-import { CreateGrantDto, UpdateGrantDto } from './grants.dto';
+import { CreateGrantDto, UpdateGrantDto, BatchGrantsDto } from './grants.dto';
+
+/** One action as the permission editor sees it: its scopes, and what `own` checks. */
+export interface ActionInfo {
+  action: string;
+  resourceType: string;
+  scopes: ScopeKind[];
+  own: string | null;
+}
 
 export interface GrantView {
   id: string;
@@ -61,6 +71,24 @@ export class GrantsService {
   ) {}
 
   /** The closed action vocabulary, for the matrix UI. */
+  /**
+   * The vocabulary with each action's assignable scopes — the same rules `assertShape`
+   * and the projector enforce, so the editor only offers scopes that can be saved.
+   */
+  actionCatalog(): ActionInfo[] {
+    return ALL_ACTION_STRINGS.map((action) => {
+      const resourceType = RESOURCE_TYPE_BY_ACTION[action];
+      const own = ownRelation(action);
+      const scopes: ScopeKind[] = ['global'];
+      if (GROUP_SCOPABLE.has(resourceType)) {
+        scopes.push('own_division', 'own_team', 'specific_division', 'specific_team');
+      }
+      if (ROLE_SCOPABLE.has(resourceType)) scopes.push('role');
+      if (own) scopes.push('own');
+      return { action, resourceType, scopes, own };
+    });
+  }
+
   listActions(): readonly string[] {
     return ALL_ACTION_STRINGS;
   }
@@ -146,15 +174,17 @@ export class GrantsService {
 
   /** Project static + all active grants, substituting the candidate, then validate. */
   private async validateActivation(
-    candidate: ProjectableGrant,
-    excludeGrantId?: string,
+    candidates: ProjectableGrant | ProjectableGrant[],
+    exclude?: string | string[],
   ): Promise<void> {
+    const candidate = [candidates].flat();
+    const excludeIds = exclude === undefined ? [] : [exclude].flat();
     const { selfReviewAllowed, requireDiscordLink } = await this.settings.get();
 
     const active = await this.prisma.grant.findMany({
       where: {
         role: { lifecycleState: 'active' },
-        ...(excludeGrantId ? { id: { not: excludeGrantId } } : {}),
+        ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
       },
       select: {
         id: true,
@@ -170,7 +200,7 @@ export class GrantsService {
 
     let policiesText: string;
     try {
-      const grantPolicies = [...active.map((g) => g as ProjectableGrant), candidate].map(
+      const grantPolicies = [...active.map((g) => g as ProjectableGrant), ...candidate].map(
         (g) => grantToPolicy(g),
       );
       const statics = staticPolicies({
@@ -393,6 +423,146 @@ export class GrantsService {
       },
     );
   }
+
+  /**
+   * Apply the permission editor's staged changes all-or-nothing: each change is
+   * shape-checked, the resulting matrix is validated as one set, and the writes land
+   * in one admin-floor-guarded transaction with one config_version bump. A stale
+   * `version` on any update or delete refuses the whole batch (409 STALE_GRANT).
+   */
+  async applyBatch(actorUserId: string, dto: BatchGrantsDto): Promise<GrantView[]> {
+    const { changes } = dto;
+
+    // The route is gated on grant:update; creates and deletes need their own action.
+    for (const action of new Set(changes.map((c) => BATCH_ACTION[c.op]))) {
+      await this.access.assert(actorUserId, action, ORGANIZATION_RESOURCE);
+    }
+
+    const touchedIds = changes.flatMap((c) => (c.op === 'create' ? [] : [c.id]));
+    if (new Set(touchedIds).size !== touchedIds.length) {
+      throw new ValidationError('A grant appears in more than one change', [
+        { field: 'changes', message: 'Each grant may be changed once per batch' },
+      ]);
+    }
+    const existing = await this.prisma.grant.findMany({ where: { id: { in: touchedIds } }, select: this.viewSelect() });
+    const byId = new Map(existing.map((g) => [g.id, g]));
+    for (const c of changes) {
+      if (c.op === 'create') continue;
+      const g = byId.get(c.id);
+      if (!g) throw new NotFoundError('GRANT_NOT_FOUND', 'Grant not found');
+      if (g.version !== c.version) {
+        throw new ConflictError('STALE_GRANT', 'Someone else changed these permissions. Reload to see their changes.');
+      }
+    }
+    for (const roleId of new Set(changes.flatMap((c) => (c.op === 'create' ? [c.roleId] : [])))) {
+      await this.assertRole(roleId);
+    }
+
+    // The post-batch shape of every created or updated grant, for one validation pass.
+    const candidates: ProjectableGrant[] = [];
+    for (const c of changes) {
+      if (c.op === 'delete') continue;
+      const base =
+        c.op === 'create'
+          ? { id: randomUUID(), roleId: c.roleId, action: c.action, effect: c.effect }
+          : (() => {
+              const g = byId.get(c.id)!;
+              return { id: g.id, roleId: g.roleId, action: g.action, effect: c.effect ?? g.effect };
+            })();
+      const candidate: ProjectableGrant = {
+        ...base,
+        scopeKind: c.scopeKind,
+        scopeDivisionId: c.scopeDivisionId ?? null,
+        scopeTeamId: c.scopeTeamId ?? null,
+        scopeRoleId: c.scopeRoleId ?? null,
+      };
+      this.assertShape(candidate.action, candidate);
+      await this.assertNotGovernanceToMappedRole(candidate.roleId, candidate.action, candidate.effect);
+      candidates.push(candidate);
+    }
+    await this.validateActivation(candidates, touchedIds);
+
+    await this.admin.withAdminFloor(
+      actorUserId,
+      { type: 'grant', id: randomUUID(), path: 'grant.batch' },
+      async (tx) => {
+        let i = 0;
+        for (const c of changes) {
+          if (c.op === 'create') {
+            const cand = candidates[i++];
+            const g = await tx.grant.create({
+              data: {
+                roleId: cand.roleId,
+                action: cand.action,
+                effect: cand.effect as GrantEffect,
+                scopeKind: cand.scopeKind as ScopeKind,
+                scopeDivisionId: cand.scopeDivisionId,
+                scopeTeamId: cand.scopeTeamId,
+                scopeRoleId: cand.scopeRoleId,
+              },
+              select: { id: true, roleId: true },
+            });
+            await this.activity.logActivity({
+              tx,
+              actorUserId,
+              subjectType: 'grant',
+              subjectId: g.id,
+              verb: 'grant.created',
+              payload: { grantId: g.id, roleId: g.roleId },
+            });
+            continue;
+          }
+          const before = byId.get(c.id)!;
+          if (c.op === 'delete') {
+            // Version-guarded: a concurrent write since the pre-check rolls the batch back.
+            const res = await tx.grant.deleteMany({ where: { id: c.id, version: c.version } });
+            if (res.count !== 1) {
+              throw new ConflictError('STALE_GRANT', 'Someone else changed these permissions. Reload to see their changes.');
+            }
+            await this.activity.logActivity({
+              tx,
+              actorUserId,
+              subjectType: 'grant',
+              subjectId: c.id,
+              verb: 'grant.deleted',
+              payload: { grantId: c.id, roleId: before.roleId, ...grantShape(before) },
+            });
+            continue;
+          }
+          const cand = candidates[i++];
+          const res = await tx.grant.updateMany({
+            where: { id: c.id, version: c.version },
+            data: {
+              effect: cand.effect as GrantEffect,
+              scopeKind: cand.scopeKind as ScopeKind,
+              scopeDivisionId: cand.scopeDivisionId,
+              scopeTeamId: cand.scopeTeamId,
+              scopeRoleId: cand.scopeRoleId,
+              version: { increment: 1 },
+            },
+          });
+          if (res.count !== 1) {
+            throw new ConflictError('STALE_GRANT', 'Someone else changed these permissions. Reload to see their changes.');
+          }
+          await this.activity.logActivity({
+            tx,
+            actorUserId,
+            subjectType: 'grant',
+            subjectId: c.id,
+            verb: 'grant.updated',
+            payload: {
+              grantId: c.id,
+              roleId: before.roleId,
+              before: grantShape(before),
+              after: grantShape({ ...before, ...cand, effect: cand.effect as GrantEffect, scopeKind: cand.scopeKind as ScopeKind }),
+            },
+          });
+        }
+        await this.access.bumpConfigVersion(tx);
+      },
+    );
+    return this.list();
+  }
 }
 
 /** A grant's configuration, as audited (action, effect, scope). */
@@ -411,3 +581,9 @@ function grantShape(g: {
     scopeId: g.scopeDivisionId ?? g.scopeTeamId ?? g.scopeRoleId ?? null,
   };
 }
+
+const BATCH_ACTION = {
+  create: ACTIONS.grantCreate.action,
+  update: ACTIONS.grantUpdate.action,
+  delete: ACTIONS.grantDelete.action,
+} as const;

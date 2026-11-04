@@ -14,7 +14,7 @@ import {
   setPasswordSchema,
 } from '../auth/auth.dto';
 import { createDivisionSchema, updateDivisionSchema } from '../divisions/divisions.dto';
-import { createGrantSchema, updateGrantSchema } from '../grants/grants.dto';
+import { batchGrantsSchema, createGrantSchema, updateGrantSchema } from '../grants/grants.dto';
 import {
   connectIntegrationSchema,
   createMappingSchema,
@@ -147,6 +147,7 @@ export const ROUTES = {
   listActions: r({ method: 'get', path: '/actions', tag: 'access', summary: 'The closed action vocabulary', action: 'grant:create', status: 200, kind: 'json', response: S.ActionList }),
   listGrants: r({ method: 'get', path: '/grants', tag: 'access', summary: 'List grants', action: 'grant:create', status: 200, kind: 'json', response: z.array(S.Grant) }),
   createGrant: r({ method: 'post', path: '/grants', tag: 'access', summary: 'Create a grant', action: 'grant:create', body: createGrantSchema, status: 201, kind: 'json', response: S.Grant }),
+  batchGrants: r({ method: 'post', path: '/grants/batch', tag: 'access', summary: "Apply the permission editor's staged changes, all or nothing", action: 'grant:update', body: batchGrantsSchema, status: 200, kind: 'json', response: z.array(S.Grant) }),
   updateGrant: r({ method: 'patch', path: '/grants/:id', tag: 'access', summary: 'Edit a grant', action: 'grant:update', body: updateGrantSchema, status: 200, kind: 'json', response: S.Grant }),
   deleteGrant: r({ method: 'delete', path: '/grants/:id', tag: 'access', summary: 'Delete a grant (permanent, audited)', action: 'grant:delete', status: 204, kind: 'empty' }),
 

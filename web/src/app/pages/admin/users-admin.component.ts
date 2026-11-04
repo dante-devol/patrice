@@ -48,13 +48,13 @@ import { avatarColor, initials } from '../tasks/task-presentation';
               </td>
               <td>
                 @if (u.lifecycleState === 'active') {
-                  <button class="secondary" (click)="deactivate(u)">Deactivate</button>
-                  <button class="secondary" (click)="retire(u)">Retire</button>
+                  <button class="quiet" (click)="deactivate(u)">Deactivate</button>
+                  <button class="quiet danger" (click)="retire(u)">Retire</button>
                 } @else if (u.lifecycleState === 'deactivated') {
-                  <button class="secondary" (click)="reactivate(u)">Reactivate</button>
-                  <button class="secondary" (click)="retire(u)">Retire</button>
+                  <button class="quiet" (click)="reactivate(u)">Reactivate</button>
+                  <button class="quiet danger" (click)="retire(u)">Retire</button>
                 } @else if (u.lifecycleState === 'retired') {
-                  <button class="secondary" (click)="revive(u)">Revive</button>
+                  <button class="quiet" (click)="revive(u)">Revive</button>
                 }
               </td>
             </tr>

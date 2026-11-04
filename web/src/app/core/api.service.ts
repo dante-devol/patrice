@@ -2,6 +2,8 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
+  ActionInfo,
+  GrantChange,
   ActivityFilters,
   ActivityListResult,
   AdminUser,
@@ -176,8 +178,14 @@ export class ApiService {
     return firstValueFrom(this.http.post<Team>(`/api/teams/${id}/revive`, {}));
   }
 
-  listActions(): Promise<{ actions: string[] }> {
-    return firstValueFrom(this.http.get<{ actions: string[] }>('/api/actions'));
+  listActions(): Promise<{ actions: string[]; catalog: ActionInfo[] }> {
+    return firstValueFrom(
+      this.http.get<{ actions: string[]; catalog: ActionInfo[] }>('/api/actions'),
+    );
+  }
+  /** Apply the permission editor's staged changes all-or-nothing; returns the active grants. */
+  saveGrants(changes: GrantChange[]): Promise<Grant[]> {
+    return firstValueFrom(this.http.post<Grant[]>('/api/grants/batch', { changes }));
   }
   listGrants(includeRetired = false): Promise<Grant[]> {
     return firstValueFrom(this.http.get<Grant[]>('/api/grants' + retiredQuery(includeRetired)));

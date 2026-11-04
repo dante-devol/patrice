@@ -20,8 +20,8 @@ interface RoleMapping {
   styles: [`
     .map-chip {
       display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
-      border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px;
-      font-family: monospace; color: var(--ink-soft, var(--muted));
+      border: 1px solid var(--border); border-radius: 2px; padding: 1px 8px;
+      color: var(--ink-soft, var(--muted));
     }
     .map-chip + .map-chip { margin-left: 4px; }
     .map-chip.broken { border-color: var(--danger); color: var(--danger); }
@@ -64,9 +64,9 @@ interface RoleMapping {
               <td><span [class]="lcStamp(r.lifecycleState)">{{ r.lifecycleState }}</span></td>
               <td>
                 @if (r.lifecycleState === 'active') {
-                  <button class="secondary" (click)="retire(r)">Retire</button>
+                  <button class="quiet danger" (click)="retire(r)">Retire</button>
                 } @else if (r.lifecycleState === 'retired') {
-                  <button class="secondary" (click)="revive(r)">Revive</button>
+                  <button class="quiet" (click)="revive(r)">Revive</button>
                 }
               </td>
             </tr>

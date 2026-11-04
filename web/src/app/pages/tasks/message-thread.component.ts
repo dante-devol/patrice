@@ -10,81 +10,75 @@ import { Message, Question, Submission, Task, TimelineEntry } from '../../core/a
 import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from './user-avatar.component';
 import { ReviewDialogComponent } from './review-dialog.component';
-import { HistoryEvent, HistoryReply, buildHistory, relativeTime, userOrderColor } from './task-presentation';
+import { HistoryEvent, buildHistory, relativeTime } from './task-presentation';
 
 /**
- * The unified **History** stream (ui-tailwind). System events and comments share one
- * threaded timeline: each top-level event carries its one-level replies beneath it, so a
- * "submitted vN" event becomes a small thread — the return decision plus discussion sit
- * on the submission, and a "View submission" button opens the review dialog. Comments are
- * threaded the same way (the data model already supports one-level replies). The bottom
- * composer adds new top-level notes. Bodies are shown verbatim (markdown is a follow-up).
+ * The unified **History** stream. System events and comments share one ruled sheet
+ * (web/DESIGN.md): each top-level event is a row, and its one-level replies thread inside
+ * that row — so a "submitted vN" event carries its return decision and discussion, and
+ * "View submission" opens the review dialog. Comments sit in their row with an avatar
+ * rather than in nested cards. The last row is the composer for new top-level notes.
+ * Bodies are shown verbatim (markdown is a follow-up).
  */
 @Component({
   selector: 'message-thread',
   standalone: true,
   imports: [FormsModule, UserAvatarComponent, NgTemplateOutlet],
   template: `
-    <div class="flex items-center gap-2 mb-3">
-      <h2 class="font-mono text-[11.5px] tracking-[0.16em] uppercase text-ink-soft">History</h2>
-      <span class="h-px flex-1 bg-line"></span>
-      <span class="font-mono text-[11.5px] text-ink-soft">{{ events().length }} events</span>
+    <div class="flex items-baseline gap-3 mb-1.5">
+      <h2 class="font-display font-bold text-[17px]">History</h2>
+      <span class="text-[13px] text-ink-soft">{{ events().length }} events</span>
     </div>
 
-    @if (error()) { <p class="text-[13px] text-[#99492f] mb-3">{{ error() }}</p> }
+    @if (error()) { <p class="text-[13px] text-rust mb-3">{{ error() }}</p> }
 
-    <div class="timeline flex flex-col gap-4">
+    <!-- One ruled sheet: each event is a row; its replies thread inside that row. -->
+    <div class="sheet text-[13.5px]">
       @for (ev of events(); track ev.id) {
-        <div class="ev">
+        <div class="px-3.5 py-2.5">
           @if (ev.kind === 'comment' && ev.message; as m) {
-            <!-- Comment node: filled circle in the user's ordinal color -->
-            <span class="node node--comment" [style.--who]="nodeColor(ev.actorId, 'full')"></span>
-            <ng-container [ngTemplateOutlet]="commentCard" [ngTemplateOutletContext]="{ m, small: false }" />
+            <ng-container [ngTemplateOutlet]="comment" [ngTemplateOutletContext]="{ m }" />
           } @else {
-            <!-- System event node: border = user color, fill varies by importance -->
-            <span class="node"
-                  [style.borderColor]="nodeColor(ev.actorId, ev.node === 'submit' ? 'full' : 'soft')"
-                  [style.background]="ev.node === 'submit' ? nodeColor(ev.actorId, 'bg') : '#fbfbf8'"></span>
-            <p class="text-[13.5px] flex items-center gap-2 flex-wrap">
-              <span>{{ ev.text }}</span>
-              <span class="font-mono text-ink-soft text-[12.5px]">· {{ rel(ev.createdAt) }}</span>
-              @if (ev.submission) {
-                <button class="font-mono text-[11.5px] text-accent-ink border border-line rounded px-2 py-[2px] hover:border-accent/50"
-                        (click)="openSubmission(ev)">view submission →</button>
-              }
-            </p>
+            <div class="flex items-baseline gap-3">
+              <span class="flex-1 min-w-0">
+                {{ ev.text }}
+                @if (ev.submission) {
+                  <button class="ml-1.5 font-bold underline decoration-faint underline-offset-2 hover:decoration-ink"
+                          (click)="openSubmission(ev)">View submission</button>
+                }
+              </span>
+              <span class="text-[13px] text-ink-soft shrink-0">{{ rel(ev.createdAt) }}</span>
+            </div>
           }
 
-          <!-- Thread: this event's one-level replies + a reply composer. -->
           @if (ev.replies.length || canReply(ev)) {
-            <div class="mt-2.5 ml-1 border-l border-line pl-3.5 flex flex-col gap-2.5">
+            <div class="mt-2 ml-[30px] flex flex-col gap-2.5">
               @for (r of ev.replies; track r.id) {
                 @if (r.kind === 'comment') {
-                  <ng-container [ngTemplateOutlet]="commentCard" [ngTemplateOutletContext]="{ m: r.message, small: true }" />
+                  <ng-container [ngTemplateOutlet]="comment" [ngTemplateOutletContext]="{ m: r.message }" />
                 } @else {
-                  <p class="text-[12.5px] flex items-center gap-2 flex-wrap text-ink-soft">
-                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0"
-                          [style.background]="nodeColor(r.actorId, r.node === 'submit' ? 'full' : 'soft')"></span>
-                    <span>{{ r.text }}</span>
-                    <span class="font-mono text-[11.5px]">· {{ rel(r.createdAt) }}</span>
-                  </p>
+                  <div class="flex items-baseline gap-3" [class.text-rust]="r.node === 'return'">
+                    <span class="flex-1">{{ r.text }}</span>
+                    <span class="text-[13px] text-ink-soft shrink-0">{{ rel(r.createdAt) }}</span>
+                  </div>
                 }
               }
 
               @if (canReply(ev)) {
                 @if (openReply() === ev.id) {
-                  <div class="composer rounded-lg border border-line bg-paper shadow-card transition-shadow">
+                  <div class="composer rounded border border-line bg-paper">
                     <textarea rows="2" [(ngModel)]="replyDraft" (keydown.control.enter)="postReply(ev)"
-                      [placeholder]="ev.submission ? 'Comment on this submission…' : 'Reply…'"
-                      class="w-full resize-none bg-transparent px-3 py-2 text-[13.5px] leading-relaxed placeholder:text-ink-soft/70 focus:outline-none"></textarea>
-                    <div class="flex items-center justify-end gap-2 px-2.5 py-1.5 border-t border-line">
-                      <button class="font-mono text-[11px] text-ink-soft hover:text-ink" (click)="openReply.set(null)">cancel</button>
-                      <button class="rounded-md bg-ink text-paper text-[12px] font-medium px-3 py-1 hover:bg-ink/90 disabled:opacity-50"
+                      [placeholder]="ev.submission ? 'Comment on this submission' : 'Reply'"
+                      [attr.aria-label]="ev.submission ? 'Comment on this submission' : 'Reply'"
+                      class="w-full resize-none px-3 py-2 leading-[1.55] placeholder:text-faint focus:outline-none"></textarea>
+                    <div class="flex items-center justify-end gap-4 px-3 py-1.5 border-t border-line text-[13px]">
+                      <button class="text-ink-soft hover:text-ink hover:underline" (click)="openReply.set(null)">Cancel</button>
+                      <button class="rounded bg-accent text-paper font-bold px-3 py-1 hover:bg-accent-ink disabled:opacity-50"
                               (click)="postReply(ev)" [disabled]="busy() || !replyDraft.trim()">Reply</button>
                     </div>
                   </div>
                 } @else {
-                  <button class="self-start font-mono text-[11px] text-ink-soft hover:text-ink" (click)="startReply(ev)">↳ reply</button>
+                  <button class="self-start text-[13px] text-ink-soft hover:text-ink hover:underline" (click)="startReply(ev)">Reply</button>
                 }
               }
             </div>
@@ -93,76 +87,61 @@ import { HistoryEvent, HistoryReply, buildHistory, relativeTime, userOrderColor 
       }
 
       @if (nextCursor()) {
-        <div class="ev">
-          <span class="node" style="background:#e7e8e1;border-color:#c4c7bd"></span>
-          <button class="font-mono text-[12.5px] text-ink-soft hover:text-ink" (click)="loadMore()" [disabled]="busy()">load earlier history →</button>
+        <div class="px-3.5 py-2.5">
+          <button class="text-[13px] text-ink-soft hover:text-ink hover:underline" (click)="loadMore()" [disabled]="busy()">Load earlier history</button>
         </div>
       }
 
-      <!-- New top-level comment composer -->
-      <div class="ev pt-1">
-        <span class="node" style="background:#e7e8e1;border-color:#c4c7bd"></span>
-        <div class="composer rounded-lg border border-line bg-paper shadow-card transition-shadow">
-          <textarea rows="2" [(ngModel)]="draft" (keydown.control.enter)="post()"
-            (focus)="composerFocused.set(true)" (blur)="composerFocused.set(false)"
-            placeholder="Add to the history — a note, a question, a review reply…"
-            class="w-full resize-none bg-transparent px-3.5 py-3 text-[14px] leading-relaxed placeholder:text-ink-soft/70 focus:outline-none"></textarea>
-          <div class="flex items-center justify-between px-3 py-2 border-t border-line">
-            <!-- Paperclip attachment trigger -->
-            <label class="cursor-pointer text-ink-soft hover:text-ink rounded p-1 -ml-1 transition-colors"
-                   [title]="pendingName() ?? 'Attach a file'">
+      <!-- New top-level comment: the sheet's last row. -->
+      <div class="px-3.5 py-3">
+        <div class="composer rounded border border-line bg-paper">
+          <textarea rows="2" [(ngModel)]="draft" (keydown.control.enter)="post()" aria-label="Add a comment"
+            placeholder="Add a note or question"
+            class="w-full resize-none px-3 py-2.5 text-[14px] leading-[1.55] placeholder:text-faint focus:outline-none"></textarea>
+          <div class="flex items-center justify-between px-3 py-1.5 border-t border-line text-[13px]">
+            <label class="cursor-pointer text-ink-soft hover:text-ink hover:underline">
               <input type="file" class="hidden" (change)="onFile($event)" />
-              @if (pendingName()) {
-                <span class="font-mono text-[11px]">{{ pendingName() }}</span>
-              } @else {
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M13.5 7.5l-7 7a4.243 4.243 0 01-6-6l7-7a2.828 2.828 0 014 4l-7 7a1.414 1.414 0 01-2-2l6.5-6.5"/>
-                </svg>
-              }
+              {{ pendingName() ?? 'Attach a file' }}
             </label>
-            <!-- Submit button: filled+labeled when composer is focused -->
-            <button [class]="composerFocused()
-                      ? 'rounded-md bg-accent text-paper text-[13px] font-medium px-3.5 py-1.5 hover:bg-accent-ink transition-colors disabled:opacity-50'
-                      : 'rounded-md border border-line text-ink-soft text-[13px] font-medium px-3.5 py-1.5 hover:border-ink/40 transition-colors disabled:opacity-50'"
-                    (click)="post()" [disabled]="busy() || !draft.trim()">
-              {{ composerFocused() ? 'Submit' : 'Comment' }}
-            </button>
+            <button class="rounded border border-line bg-paper font-bold px-3 py-1 hover:bg-paper-hover disabled:opacity-50"
+                    (click)="post()" [disabled]="busy() || !draft.trim()">Comment</button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Reusable comment card (top-level + reply). -->
-    <ng-template #commentCard let-m="m" let-small="small">
-      <div class="rounded-lg border border-line bg-paper shadow-card">
-        <div class="flex items-center gap-2 px-3.5 border-b border-line" [class.py-2]="!small" [class.py-1.5]="small">
-          <user-avatar [name]="lookup.userName(m.senderUserId)" [seed]="m.senderUserId ?? ''" [size]="small ? 18 : 20" [imageUrl]="lookup.userAvatar(m.senderUserId)" />
-          <span class="font-medium" [class.text-[13px]]="!small" [class.text-[12.5px]]="small">{{ lookup.userName(m.senderUserId) }}</span>
-          <span class="font-mono text-[11.5px] text-ink-soft">{{ roleLabel(m.senderUserId) }}· {{ rel(m.createdAt) }}</span>
-          @if (m.editedAt) { <span class="font-mono text-[11px] text-ink-soft">(edited)</span> }
-          @if (m.deletedAt) { <span class="vchip">deleted</span> }
-          <span class="flex-1"></span>
-          @if (m.senderUserId === myId() && !m.deletedAt) {
-            <button class="font-mono text-[11px] text-ink-soft hover:text-ink" (click)="startEdit(m)">edit</button>
-            <button class="font-mono text-[11px] text-ink-soft hover:text-ink" (click)="remove(m)">delete</button>
+    <!-- A comment (top-level or reply): avatar, name, body — inside its row, not a card. -->
+    <ng-template #comment let-m="m">
+      <div class="grid grid-cols-[22px_1fr] gap-x-2">
+        <user-avatar [name]="lookup.userName(m.senderUserId)" [seed]="m.senderUserId ?? ''" [size]="22" [imageUrl]="lookup.userAvatar(m.senderUserId)" />
+        <div class="min-w-0">
+          <div class="flex items-baseline gap-2 flex-wrap">
+            <span class="font-bold">{{ lookup.userName(m.senderUserId) }}</span>
+            @if (isRequester(m.senderUserId)) { <span class="text-[13px] text-ink-soft">requester</span> }
+            @if (m.editedAt) { <span class="text-[13px] text-ink-soft">edited</span> }
+            @if (m.deletedAt) { <span class="vchip">deleted</span> }
+            <span class="flex-1"></span>
+            @if (m.senderUserId === myId() && !m.deletedAt) {
+              <button class="text-[13px] text-ink-soft hover:text-ink hover:underline" (click)="startEdit(m)">Edit</button>
+              <button class="text-[13px] text-ink-soft hover:text-rust hover:underline" (click)="remove(m)">Delete</button>
+            }
+            <span class="text-[13px] text-ink-soft">{{ rel(m.createdAt) }}</span>
+          </div>
+          @if (editingId() === m.id) {
+            <textarea rows="3" [(ngModel)]="editBody" aria-label="Edit comment"
+              class="w-full resize-none rounded border border-line bg-paper px-3 py-2 mt-1.5 text-[14px] leading-[1.55] focus:outline-none focus:border-ink"></textarea>
+            <div class="flex items-center gap-4 mt-1.5 text-[13px]">
+              <button class="rounded bg-accent text-paper font-bold px-3 py-1 hover:bg-accent-ink" (click)="saveEdit(m)">Save</button>
+              <button class="text-ink-soft hover:text-ink hover:underline" (click)="editingId.set(null)">Cancel</button>
+            </div>
+          } @else {
+            <p class="mt-0.5 text-[14px] leading-[1.55] whitespace-pre-wrap">{{ m.body }}</p>
+          }
+          @for (a of m.attachments; track a.id) {
+            <a class="block mt-1 text-[13px] font-bold underline decoration-faint underline-offset-2 hover:decoration-ink"
+               [href]="api.attachmentUrl(a.id)" target="_blank" rel="noopener">{{ a.filename }}</a>
           }
         </div>
-        @if (editingId() === m.id) {
-          <div class="px-3.5 py-3">
-            <textarea rows="3" [(ngModel)]="editBody"
-              class="w-full resize-none bg-board/40 rounded-md border border-line px-3 py-2 text-[14px] leading-relaxed focus:outline-none"></textarea>
-            <div class="flex gap-2 mt-2">
-              <button class="rounded-md bg-ink text-paper text-[12.5px] font-medium px-3 py-1.5" (click)="saveEdit(m)">Save</button>
-              <button class="font-mono text-[12px] text-ink-soft hover:text-ink px-2" (click)="editingId.set(null)">cancel</button>
-            </div>
-          </div>
-        } @else {
-          <p class="px-3.5 leading-relaxed whitespace-pre-wrap" [class.py-3]="!small" [class.py-2.5]="small" [class.text-[14px]]="!small" [class.text-[13.5px]]="small">{{ m.body }}</p>
-        }
-        @for (a of m.attachments; track a.id) {
-          <a class="block px-3.5 pb-2 font-mono text-[12px] text-accent-ink hover:underline"
-             [href]="api.attachmentUrl(a.id)" target="_blank" rel="noopener">📎 {{ a.filename }}</a>
-        }
       </div>
     </ng-template>
   `,
@@ -197,39 +176,20 @@ export class MessageThreadComponent implements OnInit {
     buildHistory(this.timeline(), this.messages(), (id) => this.lookup.userName(id)),
   );
 
-  /** Maps userId → 1-based ordinal of first appearance in this task's history. */
-  readonly userOrdinals = computed<Map<string, number>>(() => {
-    const map = new Map<string, number>();
-    let next = 1;
-    const see = (id: string | null) => {
-      if (id && !map.has(id)) map.set(id, next++);
-    };
-    for (const ev of this.events()) {
-      see(ev.actorId);
-      for (const r of ev.replies) see(r.actorId);
-    }
-    return map;
-  });
 
   draft = '';
   editBody = '';
   replyDraft = '';
-  readonly composerFocused = signal(false);
   private pendingFile: File | null = null;
 
   myId(): string | undefined {
     return this.auth.user()?.id;
   }
-  /** Ordinal-based color for a user; variant controls saturation/lightness. */
-  nodeColor(id: string | null, variant: 'full' | 'soft' | 'bg' = 'full'): string {
-    const ordinal = (id ? this.userOrdinals().get(id) : undefined) ?? 1;
-    return userOrderColor(ordinal, variant);
-  }
   rel(iso: string): string {
     return relativeTime(iso);
   }
-  roleLabel(senderId: string | null): string {
-    return senderId && senderId === this.task.requesterUserId ? 'requester ' : '';
+  isRequester(senderId: string | null): boolean {
+    return !!senderId && senderId === this.task.requesterUserId;
   }
   /** Threads root only at top-level comments and submission events. */
   canReply(ev: HistoryEvent): boolean {

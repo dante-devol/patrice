@@ -754,6 +754,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/grants/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply the permission editor's staged changes, all or nothing
+         * @description Gated by the `grant:update` action.
+         */
+        post: operations["batchGrants"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/grants/{id}": {
         parameters: {
             query?: never;
@@ -1847,7 +1867,7 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
@@ -1966,11 +1986,18 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
-        ActionList: {
-            actions: string[];
-        };
         /** @enum {string} */
         ScopeKind: "global" | "own" | "own_division" | "own_team" | "specific_division" | "specific_team" | "role";
+        ActionInfo: {
+            action: string;
+            resourceType: string;
+            scopes: components["schemas"]["ScopeKind"][];
+            own: string | null;
+        };
+        ActionList: {
+            actions: string[];
+            catalog: components["schemas"]["ActionInfo"][];
+        };
         Grant: {
             /** Format: uuid */
             id: string;
@@ -3965,6 +3992,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Grant"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    batchGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    changes: ({
+                        /** Format: uuid */
+                        roleId: string;
+                        action: string;
+                        /**
+                         * @default permit
+                         * @enum {string}
+                         */
+                        effect?: "permit" | "forbid";
+                        /** @enum {string} */
+                        scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role";
+                        /** Format: uuid */
+                        scopeDivisionId?: string | null;
+                        /** Format: uuid */
+                        scopeTeamId?: string | null;
+                        /** Format: uuid */
+                        scopeRoleId?: string | null;
+                        /** @enum {string} */
+                        op: "create";
+                    } | {
+                        /** @enum {string} */
+                        op: "update";
+                        /** Format: uuid */
+                        id: string;
+                        version: number;
+                        /** @enum {string} */
+                        effect?: "permit" | "forbid";
+                        /** @enum {string} */
+                        scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role";
+                        /** Format: uuid */
+                        scopeDivisionId?: string | null;
+                        /** Format: uuid */
+                        scopeTeamId?: string | null;
+                        /** Format: uuid */
+                        scopeRoleId?: string | null;
+                    } | {
+                        /** @enum {string} */
+                        op: "delete";
+                        /** Format: uuid */
+                        id: string;
+                        version: number;
+                    })[];
+                };
+            };
+        };
+        responses: {
+            /** @description Apply the permission editor's staged changes, all or nothing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Grant"][];
                 };
             };
             /** @description An error; `error.code` is one of `ErrorCode` */

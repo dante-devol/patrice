@@ -3,160 +3,177 @@
 @tailwind utilities;
 
 /* =========================================================================
-   Patrice — the "drafting board" light theme, applied app-wide.
-   Tailwind Preflight is OFF (tailwind.config.js): instead the app's existing
-   semantic classes (.panel, button, table, label, .badge, nav.tabs …) are
-   restyled here so every page inherits the theme without per-template rewrites.
-   The Tailwind-driven surfaces (Tasks pages, the app-shell header) opt into a
-   small scoped element reset so utilities fully control them.
+   Patrice — the "graphite sheet" visual language (source of truth: web/DESIGN.md).
+   Tailwind Preflight is OFF (tailwind.config.js): instead the app's semantic
+   classes (.panel, button, table, label, .badge, nav.tabs …) are styled here so
+   every page inherits the language without per-template rewrites. The
+   Tailwind-driven surfaces (Tasks pages, the app-shell header) opt into a small
+   scoped element reset so utilities fully control them.
    ========================================================================= */
 :root {
-  --board: #e7e8e1;
-  --paper: #fbfbf8;
-  --ink: #191b19;
-  --ink-soft: #5b605c;
-  --line: #d3d5cc;
-  --accent: #0f7a6b;
-  --accent-ink: #0a5249;
-  --clay: #99492f;
-  --pine: #0f7a6b;
+  --board: #e2e4e7;
+  --paper: #ffffff;
+  --paper-alt: #f5f6f8;
+  --paper-hover: #eef0f3;
+  --ink: #2a2d32;
+  --ink-soft: #62666e;
+  --line: #d5d8dd;
+  --margin: #9aa6b6;
+  --faint: #a3a7ae;
+  --rust: #8e3b26;
+  --graphite-hover: #43474f;
+  --float-shadow: 0 18px 40px -16px rgba(42, 45, 50, 0.35);
+
+  --font-ui: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Atkinson Hyperlegible', system-ui, sans-serif;
 
   /* Division/team hues — DB-configurable eventually; current client defaults. */
-  --div-writing: #3c5ba0;
-  --div-art: #b0573c;
-  --div-scripting: #2e7d5b;
-  --div-testing: #7e54a3;
-  --div-leadership: #a9810f;
+  --div-writing: #3f5fb5;
+  --div-art: #c0563a;
+  --div-scripting: #2d8060;
+  --div-testing: #7b57a8;
+  --div-leadership: #a57f12;
 
   /* Legacy aliases: older component-scoped styles reference these var names, so
-     mapping them onto the new tokens flips those styles to the light theme too. */
+     mapping them onto the tokens keeps those styles in the language too. */
   --bg: var(--board);
   --panel: var(--paper);
   --border: var(--line);
   --text: var(--ink);
   --muted: var(--ink-soft);
-  --danger: var(--clay);
-  --ok: var(--accent);
+  --danger: var(--rust);
+  --clay: var(--rust);
+  --accent: var(--ink);
+  --accent-ink: var(--ink);
+  --pine: var(--ink);
+  --ok: #2d6b50;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  background-color: var(--board);
-  background-image: radial-gradient(circle at 1px 1px, rgba(25, 27, 25, 0.035) 1px, transparent 0);
-  background-size: 22px 22px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  background: var(--board);
   color: var(--ink);
 }
 
 h1, h2, h3 {
-  font-family: 'IBM Plex Serif', Georgia, serif;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
   color: var(--ink);
   line-height: 1.15;
   margin: 0 0 12px;
 }
 h1 { font-size: 28px; }
-h2 { font-size: 21px; }
+h2 { font-size: 20px; }
 h3 { font-size: 17px; }
 
-a { color: var(--accent-ink); text-decoration: none; }
-a:hover { text-decoration: underline; }
+a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 2px; }
+a:hover { text-decoration-color: currentColor; }
 
-:focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 .container { max-width: 1080px; margin: 0 auto; padding: 28px 20px; }
 
+/* A sheet: paper, one hairline, 2px corners, no shadow. */
 .panel {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 22px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 0 rgba(25, 27, 25, 0.04), 0 1px 2px rgba(25, 27, 25, 0.05);
 }
-/* Single-card pages (auth/setup/home status) read better as a centred narrow card. */
-.panel.auth { max-width: 440px; margin: 56px auto; }
+/* Single-card pages (auth/setup/home status) read better as a centred narrow sheet. */
+.panel.auth { max-width: 400px; margin: 48px auto; }
 
 label {
   display: block;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 13px;
   color: var(--ink-soft);
   margin: 14px 0 5px;
 }
 
 input, textarea, select {
   width: 100%;
-  padding: 9px 11px;
-  background: #fff;
+  padding: 8px 10px;
+  background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 2px;
   color: var(--ink);
   font: inherit;
 }
-input[type='checkbox'], input[type='radio'] { width: auto; }
-input::placeholder, textarea::placeholder { color: var(--ink-soft); opacity: 0.7; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+input[type='checkbox'], input[type='radio'] { width: auto; accent-color: var(--ink); }
+input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 
+/* Primary button: graphite fill. One per view; everything else is .secondary or quiet. */
 button {
   font-family: inherit;
+  font-size: 13px;
   margin-top: 14px;
-  padding: 9px 15px;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 8px;
+  padding: 8px 14px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
   color: var(--paper);
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
 }
-button:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+/* Not inside the utility-driven surfaces: (0,1,1) would beat their non-hover `bg-*`. */
+button:not(:where(.tasks-board *, .appshell *)):hover { background: var(--graphite-hover); border-color: var(--graphite-hover); }
 button.secondary { background: var(--paper); border: 1px solid var(--line); color: var(--ink); }
-button.secondary:hover { background: var(--board); border-color: rgba(25, 27, 25, 0.4); }
+button.secondary:not(:where(.tasks-board *, .appshell *)):hover { background: var(--paper-hover); border-color: var(--faint); }
+/* Quiet action (edit, revive, cancel): plain soft text. `.danger` makes it rust (retire). */
+button.quiet { background: none; border: 0; padding: 4px 6px; color: var(--ink-soft); font-weight: 400; }
+button.quiet:not(:where(.tasks-board *, .appshell *)):hover { background: none; color: var(--ink); text-decoration: underline; }
+button.quiet.danger { color: var(--rust); }
+button.quiet.danger:not(:where(.tasks-board *, .appshell *)):hover { color: var(--rust); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Buttons laid out in a row or a table cell sit on the row's line, not 14px below it. */
+.row > button, td button { margin-top: 0; }
 
 .error {
-  color: var(--clay);
-  border-left: 2px solid var(--clay);
-  padding-left: 10px;
+  color: var(--rust);
   margin-top: 10px;
   white-space: pre-line;
 }
 .muted { color: var(--ink-soft); }
 .row { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 
-/* Admin/section tabs → pill switcher; the active tab is the primary button. */
-nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-start; }
+/* Section switchers: sentence-case text, the current one bold graphite with an underline. */
+nav.tabs { display: flex; gap: 20px; flex-wrap: wrap; justify-content: flex-start; border-bottom: 1px solid var(--line); }
 nav.tabs button {
-  margin-top: 0;
-  border-radius: 999px;
-  padding: 6px 15px;
-  font-size: 12.5px;
-  font-weight: 500;
-  text-transform: capitalize;
-  letter-spacing: 0.01em;
+  margin: 0 0 -1px;
+  padding: 0 0 7px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--ink-soft);
+  font-weight: 400;
 }
+nav.tabs button:not(:where(.tasks-board *, .appshell *)):hover { background: none; color: var(--ink); border-color: transparent; }
+nav.tabs button::first-letter { text-transform: uppercase; }
 
-/* Admin flat tab rail — mono-uppercase underline style. */
 .admin-tabs {
   display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--line);
-  background: var(--paper);
+  background: var(--board);
   position: sticky;
   top: 56px;
   z-index: 9;
   margin-bottom: 16px;
+  padding-top: 6px;
 }
 .admin-tab {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 400;
+  padding: 0 0 7px;
   border: none;
   background: none;
   cursor: pointer;
@@ -166,248 +183,248 @@ nav.tabs button {
   border-radius: 0;
   white-space: nowrap;
 }
-.admin-tab:hover { color: var(--ink); background: none; border-color: transparent; }
-.admin-tab.is-active { color: var(--ink); border-bottom-color: var(--accent); }
+.admin-tab::first-letter { text-transform: uppercase; }
+.admin-tab:not(:where(.tasks-board *, .appshell *)):hover { color: var(--ink); background: none; border-color: transparent; }
+.admin-tab.is-active,
+.admin-tab.is-active:not(:where(.tasks-board *, .appshell *)):hover { color: var(--ink); font-weight: 700; border-bottom-color: var(--ink); }
 
+/* Tables are ruled sheets: hairline rows, every second row one step darker. */
 table { width: 100%; border-collapse: collapse; }
 th {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 13px;
+  font-weight: 400;
   color: var(--ink-soft);
   text-align: left;
   padding: 8px;
   border-bottom: 1px solid var(--line);
-  font-weight: 500;
 }
 td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
-tr.row--retired { opacity: 0.6; }
-tr.row--deactivated { opacity: 0.8; }
+tbody tr:nth-child(even) > td { background: var(--paper-alt); }
+tbody tr:last-child > td { border-bottom: 0; }
+/* Inline-editable cells read as text until hovered or focused. */
+td > input:not([type='checkbox']):not([type='radio']):not([type='color']),
+td > select { border-color: transparent; background: transparent; }
+td > input:not([type='checkbox']):not([type='radio']):not([type='color']):hover,
+td > select:hover { border-color: var(--line); }
+td > input:not([type='checkbox']):not([type='radio']):not([type='color']):focus,
+td > select:focus { border-color: var(--ink); background: var(--paper); }
+/* Admin name cells carry the division/team colour as the same 3px spine as task rows. */
+td.name-cell { box-shadow: inset 3px 0 0 var(--c, #c9ccd1); padding-left: 11px; }
+tr.row--retired > td { color: var(--ink-soft); }
+tr.row--retired > td.name-cell { box-shadow: inset 3px 0 0 #c9ccd1; }
+tr.row--retired > td.name-cell > input { text-decoration: line-through; }
+tr.row--deactivated > td { color: var(--ink-soft); }
 
 /* Settings panel grouping. */
 .settings-group { margin-bottom: 22px; }
 .settings-group-label {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink);
   margin: 0 0 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
 
+/* Code stays monospaced — it's literal text to copy, not UI. */
 code {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  background: var(--board);
-  padding: 2px 6px;
-  border-radius: 5px;
+  font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+  background: var(--paper-alt);
+  border: 1px solid var(--line);
+  padding: 1px 5px;
+  border-radius: 2px;
   font-size: 0.9em;
 }
 
 .badge {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
-  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 2px;
   border: 1px solid var(--line);
   color: var(--ink-soft);
 }
 .badge--standalone { /* inherits default */ }
-.badge--division { color: var(--accent-ink); border-color: rgba(15, 122, 107, 0.4); background: rgba(15, 122, 107, 0.06); }
-.badge--team { color: #3c5ba0; border-color: rgba(60, 91, 160, 0.35); background: rgba(60, 91, 160, 0.06); }
+.badge--division { color: var(--div-writing); border-color: rgba(63, 95, 181, 0.45); }
+.badge--team { color: #4f6d7a; border-color: rgba(79, 109, 122, 0.45); }
 
-/* Permissions matrix scope selects — compact coloured select in each cell. */
-.perm-scope {
-  width: auto;
-  padding: 3px 6px 2px;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border-radius: 3px;
-  cursor: pointer;
-  background: transparent;
+/* Tooltip for a control: the wrapped element's `data-hint`, shown on hover or keyboard
+   focus. Used by the permission editor to say what each scope lets a person do. */
+.hint { position: relative; display: inline-flex; }
+.hint::after {
+  content: attr(data-hint);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 280px;
+  padding: 6px 9px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  border-radius: 2px;
+  box-shadow: var(--float-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
 }
-.perm-scope--empty { color: #c4c7bd; border-color: #e0e2da; }
-.perm-scope--global { color: var(--accent-ink); border-color: rgba(15, 122, 107, 0.45); background: rgba(15, 122, 107, 0.07); }
-.perm-scope--own_division { color: #3c5ba0; border-color: rgba(60, 91, 160, 0.4); background: rgba(60, 91, 160, 0.06); }
-.perm-scope--own_team { color: #4f6d7a; border-color: rgba(79, 109, 122, 0.4); background: rgba(79, 109, 122, 0.06); }
-.perm-scope--own { color: var(--ink-soft); border-color: var(--line); background: rgba(25, 27, 25, 0.04); }
+.hint:hover::after { opacity: 1; transition-delay: 0.3s; }
+.hint:focus-within::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .hint::after { transition: none; } }
 
 /* =========================================================================
    Scoped element reset for the Tailwind-driven surfaces. The Tasks pages and
    the app-shell header drive their look entirely with utility classes, so undo
    the semantic element styles above within them (Preflight is off globally).
-   `.tasks-board <el>` (0,1,1) outranks the bare element selectors (0,0,1).
+   The scope sits in `:where()` so it adds no specificity: `:where(.tasks-board)
+   button` (0,0,1) ties the bare element selectors above and wins by source order,
+   while every utility class (0,1,0) still outranks it. A `.tasks-board button`
+   (0,1,1) reset would silently strip `bg-*`/`px-*`/`border` off every button.
    ========================================================================= */
-.tasks-board button,
-.appshell button {
+:where(.tasks-board, .appshell) button {
   margin: 0; padding: 0; background: transparent; border: 0; border-radius: 0;
   color: inherit; font: inherit; font-weight: inherit; cursor: pointer;
 }
-.tasks-board input,
-.tasks-board textarea,
-.tasks-board select {
+:where(.tasks-board) input,
+:where(.tasks-board) textarea,
+:where(.tasks-board) select {
   margin: 0; padding: 0; width: auto; background: transparent; border: 0;
   border-radius: 0; color: inherit; font: inherit;
 }
-.tasks-board label { display: inline; margin: 0; font-size: inherit; color: inherit; letter-spacing: normal; text-transform: none; }
-.tasks-board a, .appshell a { color: inherit; text-decoration: none; }
-.tasks-board a:hover, .appshell a:hover { text-decoration: none; }
-.tasks-board h1, .tasks-board h2, .tasks-board h3,
-.tasks-board p, .tasks-board ul, .tasks-board ol, .tasks-board dl, .tasks-board dd {
-  margin: 0;
-}
-.tasks-board h1, .tasks-board h2, .tasks-board h3 { font-weight: inherit; line-height: inherit; }
-.tasks-board :focus-visible, .appshell :focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
+:where(.tasks-board) label { display: inline; margin: 0; font-size: inherit; color: inherit; }
+:where(.tasks-board, .appshell) a { color: inherit; text-decoration: none; }
+:where(.tasks-board, .appshell) a:hover { text-decoration: none; }
+:where(.tasks-board) :is(h1, h2, h3, p, ul, ol, dl, dd) { margin: 0; }
+:where(.tasks-board) :is(ul, ol) { padding: 0; list-style: none; }
+:where(.tasks-board) :is(h1, h2, h3) { line-height: inherit; }
 
 @layer components {
-  /* Faint pegboard grain (also on body); kept as a class for opt-in surfaces. */
-  .board-grain {
-    background-image: radial-gradient(circle at 1px 1px, rgba(25, 27, 25, 0.035) 1px, transparent 0);
-    background-size: 22px 22px;
-  }
+  /* A ruled sheet: a list of things on one paper surface (never a stack of cards).
+     Rows divide on a hairline, and every second row is one barely-visible step darker
+     so the eye can track across. Children of `.sheet` are its rows. */
+  .sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 2px; }
+  .sheet > * + * { border-top: 1px solid var(--line); }
+  .sheet > :nth-child(even) { background: var(--paper-alt); --ring: var(--paper-alt); }
+  .sheet-row--link { transition: background-color 0.1s ease; }
+  /* A single surface that isn't a list (a header, a form, a description): no row rules. */
+  .paper { background: var(--paper); border: 1px solid var(--line); border-radius: 2px; }
+  .sheet > .sheet-row--link:hover { background: var(--paper-hover); --ring: var(--paper-hover); }
 
-  /* Division spine — the colored "file tab" down the left of each task row. */
-  .spine { width: 4px; border-radius: 4px; align-self: stretch; background: var(--c, #c4c7bd); }
+  /* Division spine: 3px, full row height, square ends. */
+  .spine { width: 3px; align-self: stretch; flex: none; background: var(--c, #c9ccd1); }
 
-  /* Facet tags. Division = square chip (structural); team = round chip (grouping). */
-  .dtag,
-  .ttag {
-    font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500;
-    letter-spacing: 0.06em; text-transform: uppercase; display: inline-flex;
-    align-items: center; gap: 6px;
-  }
-  .dtag { color: var(--c, #5b605c); }
-  .dtag::before { content: ''; width: 7px; height: 7px; border-radius: 2px; background: var(--c, #5b605c); }
-  .ttag { color: var(--tc, #5b605c); }
-  .ttag::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tc, #5b605c); }
+  /* Margin rule: separates what a task is (division, team, ID) from who (requester). */
+  .margin-rule { align-self: stretch; flex: none; width: 3px; border-left: 3px double var(--margin); }
+  .margin-rule--h { display: block; height: 3px; width: auto; border-left: 0; border-top: 3px double var(--margin); }
 
-  /* Rubber-stamp status (no tilt). Open = un-inked / dashed: nothing has happened yet. */
+  /* Facet tags: plain coloured text. Division bold in its hue; team regular in its hue. */
+  .dtag { color: var(--c, var(--ink-soft)); font-weight: 700; }
+  .ttag { color: var(--tc, var(--ink-soft)); }
+
+  /* Status stamp: an outline with coloured text, never filled. Stamps share a min-width
+     so they line up down the right edge of a sheet. Open is dashed: nothing yet. */
   .stamp {
-    font-family: 'IBM Plex Mono', monospace; font-weight: 600; letter-spacing: 0.14em;
-    text-transform: uppercase; line-height: 1; border: 1.5px solid currentColor;
-    border-radius: 3px; display: inline-block; white-space: nowrap;
-    font-size: 10.5px; padding: 5px 8px 4px;
+    font-family: var(--font-ui); font-weight: 700; font-size: 12px; line-height: 1.35;
+    border: 1.5px solid currentColor; border-radius: 2px; display: inline-block;
+    white-space: nowrap; padding: 1px 8px; min-width: 76px; text-align: center;
   }
-  .stamp--lg { font-size: 13px; padding: 7px 11px 6px; }
-  .stamp--sm { font-size: 10.5px; padding: 5px 8px 4px; }
-  .stamp--open { color: #8b9089; border-style: dashed; }
-  .stamp--claimed { color: #3f443f; background: rgba(63, 68, 63, 0.06); }
-  .stamp--review { color: #8a6a0c; background: rgba(169, 129, 15, 0.1); }
-  .stamp--revising { color: #99492f; background: rgba(176, 87, 60, 0.1); }
-  .stamp--approved { color: #0a5249; background: rgba(15, 122, 107, 0.12); border-style: double; border-width: 3px; }
+  .stamp--lg { font-size: 13px; padding: 3px 10px; min-width: 88px; }
+  .stamp--sm { font-size: 12px; padding: 1px 8px; min-width: 0; }
+  .stamp--open { color: var(--ink-soft); border: 1.5px dashed var(--faint); }
+  .stamp--claimed { color: var(--ink); border-color: var(--ink); }
+  .stamp--review { color: #7a5b00; border-color: #a9810f; }
+  .stamp--revising { color: var(--rust); border-color: #c0563a; }
+  /* Finished work recedes: the quietest stamp on the board. */
+  .stamp--approved { color: #2d6b50; border: 1px solid #8fc2a8; }
 
-  /* Lifecycle state stamps for admin tables (not task-status stamps). */
-  .stamp--lc-active { color: #3f443f; border-color: rgba(63, 68, 63, 0.35); background: rgba(63, 68, 63, 0.05); }
-  .stamp--lc-deactivated { color: #8a6a0c; border-color: rgba(138, 106, 12, 0.4); background: rgba(138, 106, 12, 0.07); border-style: dashed; }
-  .stamp--lc-retired { color: #8b9089; border-style: dashed; background: transparent; }
+  /* Lifecycle states in admin tables reuse the task stamps' quiet ends. */
+  .stamp--lc-active { color: #2d6b50; border: 1px solid #8fc2a8; min-width: 0; }
+  .stamp--lc-deactivated { color: var(--ink-soft); border: 1px solid #c9ccd1; min-width: 0; }
+  .stamp--lc-retired { color: var(--ink-soft); border: 1px solid #c9ccd1; min-width: 0; }
+  /* Lifecycle states arrive lowercase from the API; print them in sentence case. */
+  .stamp[class*='stamp--lc-']::first-letter { text-transform: uppercase; }
 
-  /* Avatars: the initials fill is the fallback — real ones are <img> from the
-     Discord CDN (Slice 8). A solid muted circle ≈ a default Discord avatar. */
+  /* Avatars: circles are only ever people. The initials fill is the fallback; real
+     ones are <img> from the Discord CDN. Overlapping avatars take a ring in the
+     row's own background (`--ring`). */
   .avatar {
     border-radius: 50%; display: grid; place-items: center;
-    font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #fbfbf8;
+    font-family: var(--font-ui); font-weight: 700; color: #ffffff;
     overflow: hidden; flex: none;
   }
   .avatar img { width: 100%; height: 100%; object-fit: cover; }
-  .avatar--empty { border: 1.5px dashed #a7aba3; background: transparent !important; }
+  .avatar--empty { border: 1.5px dashed var(--faint); background: transparent !important; }
+  .avatar-stack { display: inline-flex; }
+  .avatar-stack > * { display: inline-flex; }
+  .avatar-stack > * + * { margin-left: -4px; box-shadow: 0 0 0 2px var(--ring, var(--paper)); border-radius: 50%; }
 
-  /* Slot gauge — only shown for multi-claim tasks (the rare case). */
-  .gauge { display: inline-flex; align-items: center; gap: 5px; }
-  .pip { width: 9px; height: 9px; border-radius: 50%; }
-  .pip--lg { width: 11px; height: 11px; }
-  .pip--filled { background: var(--pine); }
-  .pip--open { border: 1.5px solid #a7aba3; }
-  .gauge-n { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5b605c; }
-
-  /* History rail: a continuous hairline the event nodes sit on. */
-  .timeline { position: relative; }
-  .timeline::before {
-    content: ''; position: absolute; left: 11px; top: 6px; bottom: 18px; width: 1.5px; background: #d3d5cc;
-  }
-  .ev { position: relative; padding-left: 38px; }
-  .node {
-    position: absolute; left: 5.5px; top: 2px; width: 13px; height: 13px; border-radius: 50%;
-    background: #fbfbf8; border: 2px solid #a7aba3; box-sizing: border-box;
-  }
-  .node--request { border-color: #3c5ba0; }
-  .node--claim { border-color: #3f443f; }
-  .node--submit { border-color: #8a6a0c; }
-  .node--return { border-color: #99492f; }
-  .node--approve { border-color: #0f7a6b; }
-  .node--comment { width: 0; height: 0; border: none; left: 4.5px; top: 3px; }
-  .node--comment::after {
-    content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: var(--who, #5b6eae);
-  }
+  .gauge-n { font-size: 12px; color: var(--ink-soft); }
 
   .vchip {
-    font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600;
-    padding: 1px 6px; border-radius: 3px; border: 1px solid #c4c7bd; color: #5b605c;
+    font-size: 12px; font-weight: 700;
+    padding: 0 6px; border-radius: 2px; border: 1px solid var(--line); color: var(--ink-soft);
   }
 
-  .ticket { transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease; }
-  .ticket:hover { transform: translateY(-1px); box-shadow: 0 4px 14px -6px rgba(25, 27, 25, 0.22); border-color: #c4c7bd; }
-  .chip { transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease; }
-  .composer:focus-within { border-color: #0f7a6b; box-shadow: 0 0 0 3px rgba(15, 122, 107, 0.12); }
+  .composer:focus-within { border-color: var(--ink); }
 
   @media (prefers-reduced-motion: reduce) {
-    .ticket, .chip { transition: none; }
-    .ticket:hover { transform: none; }
+    .sheet-row--link { transition: none; }
   }
 }
 
 /* =========================================================================
-   Overlay surfaces — CDK dialogs/menus + ngx-sonner toasts, themed to match.
+   Overlay surfaces — CDK dialogs/menus + ngx-sonner toasts. Floating layers are
+   the only surfaces that take a shadow.
    ========================================================================= */
-.cdk-overlay-dark-backdrop { background: rgba(25, 27, 25, 0.32); }
+.cdk-overlay-dark-backdrop { background: rgba(42, 45, 50, 0.45); }
 
-/* Dialog card (the component inside cdk-dialog-container wraps itself in this). */
+/* Dialog sheet (the component inside cdk-dialog-container wraps itself in this). */
 .dialog-card {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 24px 60px -20px rgba(25, 27, 25, 0.4);
+  border-radius: 2px;
+  box-shadow: var(--float-shadow);
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 64px);
   overflow: auto;
 }
 @media (prefers-reduced-motion: no-preference) {
   .cdk-dialog-container .dialog-card { animation: dialog-in 0.14s ease-out; }
-  @keyframes dialog-in { from { opacity: 0; transform: translateY(6px) scale(0.99); } }
+  @keyframes dialog-in { from { opacity: 0; transform: translateY(6px); } }
 }
 
 /* CDK menu (the action overflow / future menus). */
 .menu-card {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 12px 30px -10px rgba(25, 27, 25, 0.28);
-  padding: 5px;
+  border-radius: 2px;
+  box-shadow: var(--float-shadow);
+  padding: 4px 0;
   min-width: 168px;
 }
 .menu-card [cdkMenuItem] {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; color: var(--ink);
-  text-align: left; padding: 7px 9px; border-radius: 7px; cursor: pointer; background: transparent; border: 0;
+  display: flex; align-items: center; gap: 8px; width: 100%; margin: 0;
+  font-family: var(--font-ui); font-size: 13px; font-weight: 400; color: var(--ink);
+  text-align: left; padding: 7px 12px; border-radius: 0; cursor: pointer; background: transparent; border: 0;
 }
 .menu-card [cdkMenuItem]:hover,
-.menu-card [cdkMenuItem]:focus-visible { background: var(--board); outline: none; }
-.menu-card [cdkMenuItem].danger { color: var(--clay); }
+.menu-card [cdkMenuItem]:focus-visible { background: var(--paper-hover); outline: none; }
+.menu-card [cdkMenuItem].danger { color: var(--rust); }
 
-/* ngx-sonner toasts in the drafting-board palette. */
+/* ngx-sonner toasts. */
 :root {
   --normal-bg: var(--paper);
   --normal-border: var(--line);
   --normal-text: var(--ink);
-  --border-radius: 10px;
+  --border-radius: 2px;
 }
-[data-sonner-toast] { font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+[data-sonner-toast] { font-family: var(--font-ui); }
 [data-sonner-toast] [data-title] { font-size: 13.5px; }
-[data-sonner-toast][data-type='success'] [data-icon] { color: var(--accent); }
-[data-sonner-toast][data-type='error'] [data-icon] { color: var(--clay); }
+[data-sonner-toast][data-type='success'] [data-icon] { color: #2d6b50; }
+[data-sonner-toast][data-type='error'] [data-icon] { color: var(--rust); }

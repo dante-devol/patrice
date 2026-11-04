@@ -69,6 +69,10 @@ export type Notification = Schemas['Notification'];
 export type NotificationListResult = Schemas['NotificationListResult'];
 export type ActivityItem = Schemas['ActivityItem'];
 export type ActivityListResult = Schemas['ActivityListResult'];
+/** One action as the permission editor sees it (`GET /actions` catalogue). */
+export type ActionInfo = Schemas['ActionInfo'];
+/** One staged change in a `POST /grants/batch` save. */
+export type GrantChange = JsonBody<'batchGrants'>['changes'][number];
 
 export type IntegrationConnection = Schemas['IntegrationConnection'];
 export type ExternalGroupMapping = Schemas['ExternalGroupMapping'];

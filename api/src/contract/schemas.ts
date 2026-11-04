@@ -205,7 +205,21 @@ export const Grant = z
   .strict()
   .openapi('Grant');
 
-export const ActionList = z.object({ actions: z.array(z.string()) }).strict().openapi('ActionList');
+export const ActionInfo = z
+  .object({
+    action: z.string(),
+    resourceType: z.string(),
+    scopes: z.array(ScopeKind),
+    /** What an `own` grant checks (`requester`, `sender`, `visible`…), or null. */
+    own: z.string().nullable(),
+  })
+  .strict()
+  .openapi('ActionInfo');
+
+export const ActionList = z
+  .object({ actions: z.array(z.string()), catalog: z.array(ActionInfo) })
+  .strict()
+  .openapi('ActionList');
 
 // ---- Work --------------------------------------------------------------------
 

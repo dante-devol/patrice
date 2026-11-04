@@ -14,8 +14,10 @@ import { Authorize, orgResource } from '../access/authorize.decorator';
 import { ACTIONS } from '../access/actions';
 import { GrantsService } from './grants.service';
 import {
+  batchGrantsSchema,
   createGrantSchema,
   updateGrantSchema,
+  type BatchGrantsDto,
   type CreateGrantDto,
   type UpdateGrantDto,
 } from './grants.dto';
@@ -28,12 +30,12 @@ import { ROUTES } from '../contract/routes';
 export class GrantsController {
   constructor(private readonly grants: GrantsService) {}
 
-  /** The closed action vocabulary — feeds the matrix's column axis. */
+  /** The closed action vocabulary, with each action's assignable scopes for the editor. */
   @Contract(ROUTES.listActions)
   @Get('actions')
   @Authorize(ACTIONS.grantCreate.action, orgResource)
   listActions() {
-    return { actions: this.grants.listActions() };
+    return { actions: this.grants.listActions(), catalog: this.grants.actionCatalog() };
   }
 
   @Contract(ROUTES.listGrants)
@@ -52,6 +54,18 @@ export class GrantsController {
     @CurrentUser() user: CurrentUserRef,
   ) {
     return this.grants.create(user.id, body);
+  }
+
+  /** The editor's staged changes, all-or-nothing. Creates and deletes need their own action. */
+  @Contract(ROUTES.batchGrants)
+  @Post('grants/batch')
+  @HttpCode(200)
+  @Authorize(ACTIONS.grantUpdate.action, orgResource)
+  async batch(
+    @Body(new ZodValidationPipe(batchGrantsSchema)) body: BatchGrantsDto,
+    @CurrentUser() user: CurrentUserRef,
+  ) {
+    return this.grants.applyBatch(user.id, body);
   }
 
   @Contract(ROUTES.updateGrant)
