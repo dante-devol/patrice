@@ -143,6 +143,15 @@ generated from the contract; there are no hand-written API types. Controls follo
 `allowedActions`; names come from the read endpoints every member may call. The visual
 language is the "graphite sheet" (`web/DESIGN.md`).
 
+**Admin editors stage every change until Save.** Permissions (`POST /grants/batch`) and
+memberships (`POST /memberships/batch`) save all-or-nothing; the other tabs apply their
+staged changes in order, each version-checked (`STALE_VERSION`; settings compare the
+values they replace), stopping at the first refusal and saying how many landed. While a
+tab holds unsaved changes the shell announces it (`POST /admin/presence`, repeated every
+20 s); the API relays an `admin-presence` event on the notification stream to the other
+people who may view that page, who see a bar naming the editor, and a Reload once they
+save. Presence is never stored.
+
 ## 9. Operations
 
 - **Deploy**: `deploy/docker-compose.prod.yml`: `migrate` (one-shot) → `api` + `worker` →

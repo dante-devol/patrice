@@ -51,6 +51,15 @@ export class OrgApi {
     return this.api.delete('/divisions/{id}/members/{userId}', { path: { id, userId } });
   }
 
+  // ---- Memberships (every unit at once, for the membership editor)
+  listMemberships() {
+    return this.api.get('/memberships');
+  }
+  /** Apply the membership editor's staged changes all-or-nothing; returns every membership. */
+  saveMemberships(changes: RequestBody<'/memberships/batch', 'post'>['changes']) {
+    return this.api.post('/memberships/batch', { changes });
+  }
+
   // ---- Teams
   listTeams(includeRetired = false) {
     return this.api.get('/teams', { query: retired(includeRetired) });
@@ -150,5 +159,9 @@ export class AdminApi {
   }
   listDeadLetters() {
     return this.api.get('/jobs/dead-letters');
+  }
+  /** Tell the other admins on `page` that this editor is changing it (or stopped, or saved). */
+  announcePresence(page: RequestBody<'/admin/presence', 'post'>['page'], state: RequestBody<'/admin/presence', 'post'>['state']) {
+    return this.api.post('/admin/presence', { page, state });
   }
 }

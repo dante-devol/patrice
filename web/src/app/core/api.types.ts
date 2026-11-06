@@ -40,6 +40,12 @@ export type Role = Schemas['Role'];
 export type Division = Schemas['Division'];
 export type Team = Schemas['Team'];
 export type Grant = Schemas['Grant'];
+export type Membership = Schemas['Membership'];
+/** One staged change in a `POST /memberships/batch` save. */
+export type MembershipChange = JsonBody<'batchMemberships'>['changes'][number];
+/** Another admin's editing state on an admin page (an `admin-presence` stream event). */
+export type AdminPresence = Schemas['AdminPresenceEvent'];
+export type AdminPage = AdminPresence['page'];
 
 export type ChoiceOption = Schemas['ChoiceOption'];
 export type QuestionConstraints = Schemas['QuestionConstraints'];

@@ -17,6 +17,7 @@ import { ActionInfo, Division, Grant, Role, ScopeKind, Team } from '../../core/a
 import { errorMessage } from '../../core/errors';
 import { ToastService } from '../../core/toast.service';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
+import { SaveBarComponent } from './save-bar.component';
 import { divisionColor, teamColor } from '../tasks/task-presentation';
 import {
   actionLabel,
@@ -51,7 +52,7 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
   selector: 'permissions-admin',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, NgTemplateOutlet],
+  imports: [FormsModule, NgTemplateOutlet, SaveBarComponent],
   styles: [`
     :host { display: block; font-size: 13px; }
     .pick { font: inherit; font-size: 13px; color: var(--ink); background: var(--paper);
@@ -80,7 +81,6 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
     .perm-row--changed { box-shadow: inset 3px 0 0 var(--rust); }
     .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rust); flex: none; }
     .was { font-size: 12px; color: var(--ink-soft); text-decoration: line-through; }
-    .savebar { position: sticky; bottom: 12px; z-index: 5; box-shadow: var(--float-shadow); }
     .add { font-size: 16px; line-height: 1; padding: 2px 6px; margin: 0; }
   `],
   template: `
@@ -194,7 +194,7 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
                 <ng-container *ngTemplateOutlet="grantRow; context: { roleId: r.id, a: a, title: r.name, sub: kindLabel(r) }" />
               }
               <div class="px-3 py-2 flex items-center gap-2">
-                <select class="pick pick--unset" aria-label="Grant to another role" [ngModel]="''" (ngModelChange)="grantToRole(a, $event)">
+                <select #grantPick class="pick pick--unset" aria-label="Grant to another role" (change)="grantToRole(a, grantPick.value); grantPick.value = ''">
                   <option value="">Grant to another role</option>
                   @for (r of nonHolders(); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
                 </select>
@@ -205,28 +205,8 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
           }
         }
 
-        @if (changes().length > 0 || saveError()) {
-          <div class="savebar sheet mt-3 !border-ink">
-            <div class="flex flex-wrap items-center gap-3 px-3 py-2.5">
-              @if (changes().length > 0) {
-                <span class="dot"></span>
-                <span><b>{{ changes().length }} unsaved {{ changes().length === 1 ? 'change' : 'changes' }}</b>
-                  <span class="text-ink-soft"> in {{ dirtyRoleNames() }}</span></span>
-              }
-              <span class="flex-1"></span>
-              <button class="quiet" (click)="discard()" [disabled]="saving()">Discard</button>
-              <button class="!m-0" (click)="save()" [disabled]="saving() || changes().length === 0">
-                {{ saving() ? 'Saving…' : 'Save changes' }}
-              </button>
-            </div>
-            @if (saveError(); as err) {
-              <div class="px-3 py-2 text-rust whitespace-pre-line flex items-start gap-3">
-                <span class="flex-1">{{ err }}</span>
-                @if (stale()) { <button class="quiet" (click)="reload()">Reload</button> }
-              </div>
-            }
-          </div>
-        }
+        <save-bar [count]="changes().length" [where]="dirtyRoleNames()" [saving]="saving()" [error]="saveError()" [stale]="stale()"
+                  (save)="save()" (discard)="discard()" (reload)="reload()" />
       </div>
     </div>
 
@@ -590,6 +570,7 @@ export class PermissionsAdminComponent implements OnDestroy {
     try {
       this.setSaved(await firstValueFrom(this.accessApi.saveGrants(this.changes())));
       this.toast.success(`Saved ${n} permission ${n === 1 ? 'change' : 'changes'}`);
+      this.unsaved.markSaved();
     } catch (e) {
       this.stale.set(e instanceof HttpErrorResponse && e.status === 409 && e.error?.error?.code === 'STALE_GRANT');
       this.saveError.set(errorMessage(e));

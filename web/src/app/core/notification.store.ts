@@ -8,7 +8,8 @@ import {
   signal,
 } from '@angular/core';
 import { AuthStore } from './auth.store';
-import { Notification } from './api.types';
+import { AdminPresence, Notification } from './api.types';
+import { AdminPresenceStore } from './admin-presence.store';
 
 /**
  * Live notifications. An `EventSource` on `/api/notifications/stream`
@@ -24,6 +25,7 @@ import { Notification } from './api.types';
 export class NotificationStore {
   private readonly notificationsApi = inject(NotificationsApi);
   private readonly auth = inject(AuthStore);
+  private readonly presence = inject(AdminPresenceStore);
 
   private readonly _feed = signal<Notification[]>([]);
   private readonly _unreadCount = signal(0);
@@ -54,6 +56,15 @@ export class NotificationStore {
     // immediately, and EventSource auto-reconnects (each reconnect re-syncs). The
     // periodic `ping` keepalive is intentionally ignored.
     es.addEventListener('sync', () => void this.reconcile());
+    // Other admins' editing state on admin pages; the API sends these only to people
+    // allowed to see the page.
+    es.addEventListener('admin-presence', (e) => {
+      try {
+        this.presence.receive(JSON.parse((e as MessageEvent<string>).data) as AdminPresence);
+      } catch {
+        // A malformed event is dropped; presence is a courtesy, not state.
+      }
+    });
     this.source = es;
   }
 

@@ -931,6 +931,40 @@ export interface paths {
         patch: operations["updateRequestTemplate"];
         trace?: never;
     };
+    "/memberships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every membership in the divisions and teams the caller may read */
+        get: operations["listMemberships"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memberships/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply the membership editor's staged changes, all or nothing */
+        post: operations["batchMemberships"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/divisions/{id}/members": {
         parameters: {
             query?: never;
@@ -1546,10 +1580,30 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Live "sync" pings (server-sent events) */
+        /** Live "sync" pings and admin-presence events (server-sent events) */
         get: operations["notificationStream"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tell the other admins on an admin page that you are changing it
+         * @description Gated by the `config:update` action.
+         */
+        post: operations["announceAdminPresence"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1867,13 +1921,24 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_MEMBERSHIP" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
                 message: string;
                 details?: unknown;
             };
+        };
+        AdminPresenceEvent: {
+            /** @enum {string} */
+            page: "roles" | "divisions" | "teams" | "users" | "permissions" | "settings" | "integrations";
+            /** Format: uuid */
+            userId: string;
+            displayName: string;
+            /** @enum {string} */
+            state: "editing" | "idle" | "saved";
+            /** Format: date-time */
+            at: string;
         };
         Health: {
             /** @enum {string} */
@@ -2083,6 +2148,28 @@ export interface components {
             isDefault: boolean;
             version: number;
             questions: components["schemas"]["Question"][];
+        };
+        Membership: {
+            /** Format: uuid */
+            userId: string;
+            /** @enum {string} */
+            unitType: "division" | "team";
+            /** Format: uuid */
+            unitId: string;
+            /** @enum {string} */
+            source: "patrice" | "integration";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        Memberships: {
+            items: components["schemas"]["Membership"][];
+            units: {
+                /** @enum {string} */
+                unitType: "division" | "team";
+                /** Format: uuid */
+                unitId: string;
+                allowedActions: string[];
+            }[];
         };
         Member: {
             /** Format: uuid */
@@ -3708,6 +3795,16 @@ export interface operations {
                     requireDiscordLink?: boolean;
                     discordClientId?: string;
                     discordClientSecret?: string;
+                    expected?: {
+                        requireVerifiedEmailToLogIn?: boolean;
+                        selfReviewAllowed?: boolean;
+                        anonymizeLabel?: boolean;
+                        sessionAbsoluteDays?: number;
+                        sessionIdleDays?: number;
+                        gracePeriodHours?: number;
+                        requireDiscordLink?: boolean;
+                        discordClientId?: string | null;
+                    };
                 };
             };
         };
@@ -3811,6 +3908,7 @@ export interface operations {
             content: {
                 "application/json": {
                     name: string;
+                    version?: number;
                 };
             };
         };
@@ -4697,6 +4795,79 @@ export interface operations {
             };
         };
     };
+    listMemberships: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every membership in the divisions and teams the caller may read */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Memberships"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    batchMemberships: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    changes: {
+                        /** @enum {string} */
+                        op: "add" | "remove";
+                        /** @enum {string} */
+                        unitType: "division" | "team";
+                        /** Format: uuid */
+                        unitId: string;
+                        /** Format: uuid */
+                        userId: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Apply the membership editor's staged changes, all or nothing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Memberships"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listDivisionMembers: {
         parameters: {
             query?: never;
@@ -4978,6 +5149,7 @@ export interface operations {
                 "application/json": {
                     name?: string;
                     restrictClaims?: boolean;
+                    version?: number;
                 };
             };
         };
@@ -6246,7 +6418,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Server-sent events; each event is a content-free "sync" ping */
+            /** @description Server-sent events: content-free "sync" pings, and "admin-presence" events whose data is an AdminPresenceEvent */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6254,6 +6426,42 @@ export interface operations {
                 content: {
                     "text/event-stream": string;
                 };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    announceAdminPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    page: "roles" | "divisions" | "teams" | "users" | "permissions" | "settings" | "integrations";
+                    /** @enum {string} */
+                    state: "editing" | "idle" | "saved";
+                };
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description An error; `error.code` is one of `ErrorCode` */
             default: {

@@ -1,54 +1,85 @@
 import { OrgApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Division } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
+import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
 import { divisionColor as computeDivColor } from '../tasks/task-presentation';
+import { SaveBarComponent } from './save-bar.component';
+import { StagedRows } from './staged-rows';
+import { StagedOp, isStale, runStaged, stagedErrorMessage } from './staged';
 
-/** Divisions editor: name, default openings, openings-locked, restrict-claims. */
+interface Fields {
+  name: string;
+  defaultOpenings: number;
+  openingsLocked: boolean;
+  restrictClaims: boolean;
+}
+
+/**
+ * Divisions editor: name, default openings, openings-locked, restrict-claims, and
+ * retire/revive. Every change, new divisions included, is staged until Save. The
+ * request template builder below a row is its own editor with its own Save.
+ */
 @Component({
   selector: 'divisions-admin',
   standalone: true,
-  imports: [FormsModule, RequestTemplateBuilderComponent],
+  imports: [FormsModule, RequestTemplateBuilderComponent, SaveBarComponent],
   template: `
     <div class="panel">
       <h2>Divisions</h2>
       <div class="row">
-        <input [(ngModel)]="newName" placeholder="New division name" />
-        <button [disabled]="busy() || !newName.trim()" (click)="create()">Create division</button>
+        <button class="secondary" (click)="rows.addCreate()">Add division</button>
       </div>
-      @if (error()) { <p class="error">{{ error() }}</p> }
+      @if (loadError()) { <p class="error">{{ loadError() }}</p> }
       <table>
         <thead>
           <tr><th>Name</th><th>Color</th><th>Default openings</th><th>Locked</th><th>Restrict claims</th><th>State</th><th></th></tr>
         </thead>
         <tbody>
-          @for (d of divisions(); track d.id) {
-            <tr [class.row--retired]="d.lifecycleState === 'retired'" [class.row--deactivated]="d.lifecycleState === 'deactivated'">
-              <td class="name-cell" [style.--c]="computeColor(d)"><input [(ngModel)]="d.name" (blur)="save(d, { name: d.name })" aria-label="Name" /></td>
+          @for (c of rows.creates(); track c.key) {
+            <tr class="is-staged">
+              <td><input [ngModel]="c.fields.name" (ngModelChange)="rows.updateCreate(c.key, 'name', $event)" placeholder="New division name" aria-label="Name" /></td>
+              <td></td>
+              <td><input type="number" min="1" [ngModel]="c.fields.defaultOpenings" (ngModelChange)="rows.updateCreate(c.key, 'defaultOpenings', +$event)" style="width:5rem" aria-label="Default openings" /></td>
+              <td><input type="checkbox" [ngModel]="c.fields.openingsLocked" (ngModelChange)="rows.updateCreate(c.key, 'openingsLocked', $event)" aria-label="Openings locked" /></td>
+              <td><input type="checkbox" [ngModel]="c.fields.restrictClaims" (ngModelChange)="rows.updateCreate(c.key, 'restrictClaims', $event)" aria-label="Restrict claims" /></td>
+              <td><span class="staged-note">New, added on save</span></td>
+              <td><button class="quiet" (click)="rows.removeCreate(c.key)">Remove</button></td>
+            </tr>
+          }
+          @for (d of rows.saved(); track d.id) {
+            @let lc = rows.lifecycleOf(d);
+            <tr [class.row--retired]="d.lifecycleState === 'retired'" [class.is-staged]="rows.isChanged(d)" [class.is-retiring]="lc === 'retire'">
+              <td class="name-cell" [style.--c]="computeColor(d)">
+                <input [class.is-changed]="rows.isChanged(d, 'name')" [ngModel]="rows.value(d, 'name')" (ngModelChange)="rows.set(d, 'name', $event)" aria-label="Name" />
+              </td>
               <td>
                 <span [style.background]="computeColor(d)" title="Computed from the name"
-                      style="display:inline-block;width:26px;height:20px;border-radius:3px"></span>
+                      style="display:inline-block;width:26px;height:20px;border-radius:2px"></span>
               </td>
               <td>
-                <input type="number" min="0" [(ngModel)]="d.defaultOpenings"
-                       (blur)="save(d, { defaultOpenings: +d.defaultOpenings })" style="width:5rem" />
+                <input type="number" min="1" [class.is-changed]="rows.isChanged(d, 'defaultOpenings')" [ngModel]="rows.value(d, 'defaultOpenings')"
+                       (ngModelChange)="rows.set(d, 'defaultOpenings', +$event)" style="width:5rem" aria-label="Default openings" />
               </td>
-              <td><input type="checkbox" [(ngModel)]="d.openingsLocked"
-                         (change)="save(d, { openingsLocked: d.openingsLocked })" /></td>
-              <td><input type="checkbox" [(ngModel)]="d.restrictClaims"
-                         (change)="save(d, { restrictClaims: d.restrictClaims })" /></td>
-              <td><span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span></td>
+              <td><input type="checkbox" [ngModel]="rows.value(d, 'openingsLocked')" (ngModelChange)="rows.set(d, 'openingsLocked', $event)" aria-label="Openings locked" /></td>
+              <td><input type="checkbox" [ngModel]="rows.value(d, 'restrictClaims')" (ngModelChange)="rows.set(d, 'restrictClaims', $event)" aria-label="Restrict claims" /></td>
+              <td>
+                @if (lc) { <span class="staged-note">{{ lc === 'retire' ? 'Retires on save' : 'Revives on save' }}</span> }
+                @else { <span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span> }
+              </td>
               <td>
                 <button class="secondary" (click)="toggleRequestTemplate(d.id)">
                   {{ openRequestTemplate() === d.id ? 'Hide request template' : 'Request template' }}
                 </button>
-                @if (d.lifecycleState === 'active') {
-                  <button class="quiet danger" (click)="retire(d)">Retire</button>
+                @if (lc) {
+                  <button class="quiet" (click)="rows.toggleLifecycle(d, lc)">Undo</button>
+                } @else if (d.lifecycleState === 'active') {
+                  <button class="quiet danger" (click)="rows.toggleLifecycle(d, 'retire')">Retire</button>
                 } @else if (d.lifecycleState === 'retired') {
-                  <button class="quiet" (click)="revive(d)">Revive</button>
+                  <button class="quiet" (click)="rows.toggleLifecycle(d, 'revive')">Revive</button>
                 }
               </td>
             </tr>
@@ -59,77 +90,107 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
         </tbody>
       </table>
     </div>
+    <save-bar [count]="rows.count()" [where]="where()" [saving]="busy()" [error]="saveError()" [stale]="stale()"
+              (save)="save()" (discard)="discard()" (reload)="reload()" />
   `,
 })
-export class DivisionsAdminComponent {
-  readonly orgApi = inject(OrgApi);
-  readonly divisions = signal<Division[]>([]);
+export class DivisionsAdminComponent implements OnDestroy {
+  private readonly orgApi = inject(OrgApi);
+  private readonly unsaved = inject(UnsavedChangesService);
+  readonly rows = new StagedRows<Division, Fields>(
+    (d) => ({ name: d.name, defaultOpenings: d.defaultOpenings, openingsLocked: d.openingsLocked, restrictClaims: d.restrictClaims }),
+    () => ({ name: '', defaultOpenings: 1, openingsLocked: false, restrictClaims: false }),
+  );
   readonly busy = signal(false);
-  readonly error = signal<string | null>(null);
+  readonly loadError = signal<string | null>(null);
+  readonly saveError = signal<string | null>(null);
+  readonly stale = signal(false);
   /** Id of the division whose request template builder is expanded (one at a time). */
   readonly openRequestTemplate = signal<string | null>(null);
-  newName = '';
+
+  readonly where = computed(() => {
+    const names = this.rows.saved().filter((d) => this.rows.isChanged(d)).map((d) => d.name);
+    const added = this.rows.creates().length;
+    return [...names, ...(added ? [`${added} new`] : [])].join(', ') || null;
+  });
 
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
   computeColor(d: Division): string { return computeDivColor(d.name); }
-
 
   toggleRequestTemplate(id: string): void {
     this.openRequestTemplate.update((cur) => (cur === id ? null : id));
   }
 
   constructor() {
-    void this.refresh();
+    effect(() => this.unsaved.pending.set(this.rows.count()));
+    void this.load(true);
   }
 
-  private async refresh(): Promise<void> {
+  ngOnDestroy(): void {
+    this.unsaved.pending.set(0);
+  }
+
+  /** Read the divisions; `discard` also drops anything staged. */
+  private async load(discard: boolean): Promise<void> {
     try {
       // Admin view opts into retired rows so retired divisions (and their Revive
-      // action) remain visible (the admin/history opt-in).
-      this.divisions.set(await firstValueFrom(this.orgApi.listDivisions(true)));
+      // action) remain visible.
+      const divisions = await firstValueFrom(this.orgApi.listDivisions(true));
+      if (discard) this.rows.reset(divisions);
+      else this.rows.saved.set(divisions);
+      this.loadError.set(null);
     } catch (e) {
-      this.error.set(errorMessage(e));
+      this.loadError.set(errorMessage(e));
     }
   }
 
-  async create(): Promise<void> {
+  discard(): void {
+    this.rows.discard();
+    this.saveError.set(null);
+    this.stale.set(false);
+  }
+
+  async reload(): Promise<void> {
+    this.saveError.set(null);
+    this.stale.set(false);
+    await this.load(true);
+  }
+
+  async save(): Promise<void> {
+    const blank = this.rows.creates().find((c) => !c.fields.name.trim());
+    if (blank) {
+      this.saveError.set('Give every new division a name, or remove it.');
+      return;
+    }
+    const ops: StagedOp[] = [
+      ...this.rows.creates().map((c) => ({
+        run: () => firstValueFrom(this.orgApi.createDivision({ ...c.fields, name: c.fields.name.trim() })),
+        clear: () => this.rows.removeCreate(c.key),
+      })),
+      ...Object.entries(this.rows.edits()).map(([id, patch]) => ({
+        run: () => {
+          const d = this.rows.saved().find((x) => x.id === id)!;
+          return firstValueFrom(this.orgApi.updateDivision(id, { ...patch, version: d.version }));
+        },
+        clear: () => this.rows.clearEdit(id),
+      })),
+      ...Object.entries(this.rows.lifecycle()).map(([id, op]) => ({
+        run: () => firstValueFrom(op === 'retire' ? this.orgApi.retireDivision(id) : this.orgApi.reviveDivision(id)),
+        clear: () => this.rows.clearLifecycle(id),
+      })),
+    ];
     this.busy.set(true);
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.orgApi.createDivision({ name: this.newName.trim() }));
-      this.newName = '';
-      await this.refresh();
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    } finally {
-      this.busy.set(false);
+    this.saveError.set(null);
+    this.stale.set(false);
+    const result = await runStaged(ops);
+    // Re-read without dropping what's still staged, so a halfway stop keeps the rest.
+    await this.load(false);
+    if (result.error) {
+      this.stale.set(isStale(result.error));
+      this.saveError.set(stagedErrorMessage(result));
+    } else {
+      this.unsaved.markSaved();
     }
-  }
-
-  async save(d: Division, patch: Partial<Division>): Promise<void> {
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.orgApi.updateDivision(d.id, patch));
-    } catch (e) {
-      this.error.set(errorMessage(e));
-      await this.refresh();
-    }
-  }
-
-  async retire(d: Division): Promise<void> {
-    await this.guard(() => firstValueFrom(this.orgApi.retireDivision(d.id)));
-  }
-  async revive(d: Division): Promise<void> {
-    await this.guard(() => firstValueFrom(this.orgApi.reviveDivision(d.id)));
-  }
-
-  private async guard(fn: () => Promise<unknown>): Promise<void> {
-    this.error.set(null);
-    try {
-      await fn();
-      await this.refresh();
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    }
+    this.busy.set(false);
   }
 }

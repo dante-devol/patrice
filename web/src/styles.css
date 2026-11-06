@@ -213,6 +213,12 @@ td.name-cell { box-shadow: inset 3px 0 0 var(--c, #c9ccd1); padding-left: 11px; 
 tr.row--retired > td { color: var(--ink-soft); }
 tr.row--retired > td.name-cell { box-shadow: inset 3px 0 0 #c9ccd1; }
 tr.row--retired > td.name-cell > input { text-decoration: line-through; }
+/* Staged admin edits (DESIGN.md "Admin"): a changed row takes a rust left edge, a
+   changed control a rust border, and a row staged to retire is struck through. */
+tr.is-staged > td:first-child { box-shadow: inset 3px 0 0 var(--rust); }
+tr.is-retiring > td:first-child > input, tr.is-retiring .row-name { text-decoration: line-through; }
+.is-changed:is(input, select) { border-color: var(--rust); }
+.staged-note { font-size: 12px; color: var(--rust); white-space: nowrap; }
 tr.row--deactivated > td { color: var(--ink-soft); }
 
 /* Settings panel grouping. */

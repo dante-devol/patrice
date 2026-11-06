@@ -5,6 +5,7 @@ import { NotificationsApi } from './api/work.api';
 import { AuthStore } from './auth.store';
 import { Notification } from './api.types';
 import { NotificationStore } from './notification.store';
+import { AdminPresenceStore } from './admin-presence.store';
 
 function notif(id: string, readAt: string | null = null): Notification {
   return {
@@ -40,6 +41,7 @@ describe('NotificationStore', () => {
         { provide: NotificationsApi, useValue: api },
         // Unauthenticated → the SSE stream stays closed; we drive reconcile directly.
         { provide: AuthStore, useValue: { isAuthenticated: signal(false) } },
+        { provide: AdminPresenceStore, useValue: { receive: jest.fn() } },
       ],
     });
     store = TestBed.inject(NotificationStore);

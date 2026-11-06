@@ -2,10 +2,34 @@ import { LookupStore } from '../../core/lookup.store';
 import { OrgApi } from '../../core/api/org.api';
 import { IntegrationsApi } from '../../core/api/work.api';
 import { firstValueFrom } from 'rxjs';
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ExternalGroupMapping, IntegrationConnection, Role, SyncDirection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
+import { UnsavedChangesService } from '../../core/unsaved-changes.service';
+import { SaveBarComponent } from './save-bar.component';
+import { StagedOp, isStale, runStaged, stagedErrorMessage } from './staged';
+
+/** A server to connect on Save. */
+interface NewConnection {
+  key: string;
+  displayName: string;
+  guildId: string;
+  botToken: string;
+}
+
+/** A mapping to add on Save. */
+interface NewMapping {
+  key: string;
+  connectionId: string;
+  /** `role:<id>`, `division:<id>` or `team:<id>`. */
+  target: string;
+  groupId: string;
+  direction: SyncDirection;
+}
+
+type Grants = 'keep' | 'revoke';
+type ConnectionOp = { op: 'retire'; grants: Grants } | { op: 'revive' };
 
 interface ConnectionRow extends IntegrationConnection {
   mappings: ExternalGroupMapping[];
@@ -22,14 +46,16 @@ interface ConnectionRow extends IntegrationConnection {
 }
 
 /**
- * Discord integration management. Admins connect guild(s), manage
- * role↔group mappings, and trigger syncs. Users link their own Discord account
- * from profile settings (not here).
+ * Discord integration management. Admins connect guild(s), manage role↔group mappings,
+ * and trigger syncs. Configuration (connecting a server, adding or removing a mapping,
+ * disconnecting or reconnecting) is staged until Save; Sync now, Retry and Refresh are
+ * operations on the current setup and run straight away. Users link their own Discord
+ * account from profile settings (not here).
  */
 @Component({
   selector: 'integrations-admin',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, SaveBarComponent],
   styles: [`
     .status-badge {
       font-size: 11px;
@@ -100,6 +126,8 @@ interface ConnectionRow extends IntegrationConnection {
     .health-actions { display: flex; gap: 8px; margin-top: 12px; }
     .health-actions button { margin-top: 0; padding: 5px 12px; font-size: 12px; }
     .retry-pill { font-size: 11px; margin-top: 0; padding: 2px 8px; }
+    .is-staged-row { box-shadow: inset 3px 0 0 var(--rust); padding-left: 8px; }
+    .is-staged-row.is-removing > span:first-child { text-decoration: line-through; }
   `],
   template: `
     <div class="panel">
@@ -108,7 +136,7 @@ interface ConnectionRow extends IntegrationConnection {
         Connect external services to sync role membership. Discord is the only provider in v1.
       </p>
 
-      @if (error()) { <p class="error">{{ error() }}</p> }
+      @if (loadError()) { <p class="error">{{ loadError() }}</p> }
 
       <!-- ── Health panel (pinned to top when a connection exists) ──── -->
       @if (healthConnections().length > 0) {
@@ -182,15 +210,27 @@ interface ConnectionRow extends IntegrationConnection {
             <input [(ngModel)]="form.botToken" placeholder="MTA…" type="password" style="font-family:monospace" />
           </label>
           <div>
-            <button [disabled]="busy() || !form.displayName.trim() || !form.guildId.trim()" (click)="connect()">
-              Connect server
+            <button class="secondary" [disabled]="!form.displayName.trim() || !form.guildId.trim()" (click)="connect()">
+              Add server
             </button>
           </div>
         </div>
       </details>
 
+      <!-- ── Servers to connect on Save ──────────────────────────────── -->
+      @for (n of newConnections(); track n.key) {
+        <div class="connection-card">
+          <div class="connection-header is-staged-row" style="cursor:default">
+            <span class="connection-name">{{ n.displayName }}</span>
+            <span class="connection-meta" style="font-family:monospace">{{ n.guildId }}</span>
+            <span class="staged-note">Connects on save</span>
+            <button class="quiet" (click)="removeNewConnection(n.key)">Remove</button>
+          </div>
+        </div>
+      }
+
       <!-- ── Connection list ──────────────────────────────────────── -->
-      @if (connections().length === 0) {
+      @if (connections().length === 0 && newConnections().length === 0) {
         <p class="muted">No Discord servers connected yet.</p>
       }
 
@@ -214,39 +254,55 @@ interface ConnectionRow extends IntegrationConnection {
 
               <!-- Mappings table -->
               <div class="section-label">Role ↔ Discord role mappings</div>
-              @if (c.mappings.length === 0) {
+              @if (c.mappings.length === 0 && newMappingsFor(c.id).length === 0) {
                 <p class="muted" style="font-size:13px;margin:0 0 8px">No mappings yet.</p>
               } @else {
                 @for (m of c.mappings; track m.id) {
-                  <div class="mapping-row">
+                  @let removal = mappingRemovals()[m.id];
+                  <div class="mapping-row" [class.is-staged-row]="!!removal" [class.is-removing]="!!removal">
                     <span style="flex:1">{{ targetName(m) }}</span>
                     <span class="muted">↔</span>
                     <span class="mapping-ids">{{ m.externalGroupId }}</span>
                     <span class="badge">{{ m.syncDirection }}</span>
-                    @if (m.isBroken) {
-                      <span class="broken-pill">broken</span>
-                      <button class="secondary retry-pill" (click)="retryMapping(c, m)">Retry</button>
+                    @if (removal) {
+                      <span class="staged-note">Removed on save{{ m.grantedCount > 0 ? (removal.grants === 'keep' ? ', keeps ' + m.grantedCount : ', revokes ' + m.grantedCount) : '' }}</span>
+                      <button class="quiet" (click)="undoRemoval(m)">Undo</button>
+                    } @else {
+                      @if (m.isBroken) {
+                        <span class="broken-pill">broken</span>
+                        <button class="secondary retry-pill" (click)="retryMapping(c, m)">Retry</button>
+                      }
+                      <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px"
+                              (click)="askDelete(c, m)">Remove</button>
                     }
-                    <button class="secondary" style="margin-top:0;padding:4px 10px;font-size:12px"
-                            (click)="askDelete(c, m)">Remove</button>
                   </div>
-                  @if (c._deleting?.id === m.id) {
+                  @if (c._deleting?.id === m.id && !removal) {
                     <div class="mapping-row" style="flex-wrap:wrap;gap:8px">
                       @if (m.grantedCount > 0) {
                         <span style="flex:1 1 100%;font-size:13px">
                           This mapping granted {{ m.grantedCount }} {{ m.grantedCount === 1 ? 'person' : 'people' }} {{ targetName(m) }}.
-                          Keep those as regular grants, or take them away?
+                          When it's removed on save, keep those as regular grants, or take them away?
                         </span>
-                        <button class="secondary" (click)="deleteMapping(c, m, 'keep')">Remove, keep {{ m.grantedCount }}</button>
-                        <button class="quiet danger" (click)="deleteMapping(c, m, 'revoke')">Remove and revoke</button>
+                        <button class="secondary" (click)="stageRemoval(c, m, 'keep')">Remove, keep {{ m.grantedCount }}</button>
+                        <button class="quiet danger" (click)="stageRemoval(c, m, 'revoke')">Remove and revoke</button>
                       } @else {
-                        <span style="flex:1">Remove this mapping?</span>
-                        <button class="quiet danger" (click)="deleteMapping(c, m, 'keep')">Remove</button>
+                        <span style="flex:1">Remove this mapping on save?</span>
+                        <button class="quiet danger" (click)="stageRemoval(c, m, 'keep')">Remove</button>
                       }
                       <button class="quiet" (click)="c._deleting = null">Cancel</button>
                     </div>
                   }
                 }
+              }
+              @for (n of newMappingsFor(c.id); track n.key) {
+                <div class="mapping-row is-staged-row">
+                  <span style="flex:1">{{ newTargetName(n.target) }}</span>
+                  <span class="muted">↔</span>
+                  <span class="mapping-ids">{{ n.groupId }}</span>
+                  <span class="badge">{{ n.direction }}</span>
+                  <span class="staged-note">Added on save</span>
+                  <button class="quiet" (click)="removeNewMapping(n.key)">Remove</button>
+                </div>
               }
 
               <!-- Add mapping form -->
@@ -272,8 +328,8 @@ interface ConnectionRow extends IntegrationConnection {
                   <option value="outbound">outbound</option>
                   <option value="bidirectional">bidirectional</option>
                 </select>
-                <button
-                  [disabled]="busy() || !c._newRoleId || !c._newGroupId"
+                <button class="secondary"
+                  [disabled]="!c._newRoleId || !c._newGroupId"
                   (click)="addMapping(c)">
                   Add mapping
                 </button>
@@ -285,7 +341,11 @@ interface ConnectionRow extends IntegrationConnection {
                         (click)="sync(c)">
                   {{ c.syncBusy ? 'Queued…' : 'Sync now' }}
                 </button>
-                @if (c.lifecycleState === 'active' && !c._retiring) {
+                @let cop = connectionOps()[c.id];
+                @if (cop) {
+                  <span class="staged-note">{{ cop.op === 'revive' ? 'Reconnects on save' : (cop.grants === 'keep' ? 'Disconnects on save, keeps what it granted' : 'Disconnects on save, revokes what it granted') }}</span>
+                  <button class="quiet" (click)="undoConnectionOp(c)">Undo</button>
+                } @else if (c.lifecycleState === 'active' && !c._retiring) {
                   <button class="secondary" (click)="c._retiring = true">Disconnect</button>
                 } @else if (c._retiring) {
                   <span style="font-size:13px">When this connection is removed after the grace period, what happens to the roles and memberships it granted?</span>
@@ -302,23 +362,59 @@ interface ConnectionRow extends IntegrationConnection {
         </div>
       }
     </div>
+    <save-bar [count]="count()" [where]="where()" [saving]="saving()" [error]="saveError()" [stale]="stale()"
+              (save)="save()" (discard)="discard()" (reload)="reload()" />
   `,
 })
-export class IntegrationsAdminComponent {
+export class IntegrationsAdminComponent implements OnDestroy {
   private readonly integrationsApi = inject(IntegrationsApi);
   readonly lookup = inject(LookupStore);
   private readonly orgApi = inject(OrgApi);
-
+  private readonly unsaved = inject(UnsavedChangesService);
   readonly connections = signal<ConnectionRow[]>([]);
   readonly roles = signal<Role[]>([]);
   readonly busy = signal(false);
-  readonly error = signal<string | null>(null);
+  readonly saving = signal(false);
+  /** Load and operation (sync, retry) failures. */
+  readonly loadError = signal<string | null>(null);
+  readonly saveError = signal<string | null>(null);
+  readonly stale = signal(false);
+
+  // ---- Staged configuration, applied on Save
+  readonly newConnections = signal<NewConnection[]>([]);
+  readonly newMappings = signal<NewMapping[]>([]);
+  readonly mappingRemovals = signal<Record<string, { connectionId: string; grants: Grants }>>({});
+  readonly connectionOps = signal<Record<string, ConnectionOp>>({});
+  private nextKey = 1;
+
+  readonly count = computed(
+    () =>
+      this.newConnections().length +
+      this.newMappings().length +
+      Object.keys(this.mappingRemovals()).length +
+      Object.keys(this.connectionOps()).length,
+  );
+  readonly where = computed(() => {
+    const ids = new Set([
+      ...this.newMappings().map((m) => m.connectionId),
+      ...Object.values(this.mappingRemovals()).map((r) => r.connectionId),
+      ...Object.keys(this.connectionOps()),
+    ]);
+    const names = this.connections().filter((c) => ids.has(c.id)).map((c) => c.displayName);
+    const added = this.newConnections().length;
+    return [...names, ...(added ? [`${added} new`] : [])].join(', ') || null;
+  });
 
   readonly form = { displayName: '', guildId: '', botToken: '' };
 
   constructor() {
+    effect(() => this.unsaved.pending.set(this.count()));
     void this.lookup.ensureLoaded();
     void this.refresh();
+  }
+
+  ngOnDestroy(): void {
+    this.unsaved.pending.set(0);
   }
 
   private async refresh(): Promise<void> {
@@ -347,29 +443,28 @@ export class IntegrationsAdminComponent {
       this.connections.set(rows);
       this.roles.set(roles);
     } catch (e) {
-      this.error.set(errorMessage(e));
+      this.loadError.set(errorMessage(e));
     }
   }
 
-  async connect(): Promise<void> {
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.integrationsApi.connectIntegration({
-        provider: 'discord',
-        externalWorkspaceId: this.form.guildId.trim(),
+  /** Stage a server to connect on Save. */
+  connect(): void {
+    this.newConnections.update((ns) => [
+      ...ns,
+      {
+        key: `new:${this.nextKey++}`,
         displayName: this.form.displayName.trim(),
-        ...(this.form.botToken.trim() ? { botToken: this.form.botToken.trim() } : {}),
-      }));
-      this.form.displayName = '';
-      this.form.guildId = '';
-      this.form.botToken = '';
-      await this.refresh();
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    } finally {
-      this.busy.set(false);
-    }
+        guildId: this.form.guildId.trim(),
+        botToken: this.form.botToken.trim(),
+      },
+    ]);
+    this.form.displayName = '';
+    this.form.guildId = '';
+    this.form.botToken = '';
+  }
+
+  removeNewConnection(key: string): void {
+    this.newConnections.update((ns) => ns.filter((n) => n.key !== key));
   }
 
   async toggle(c: ConnectionRow): Promise<void> {
@@ -379,30 +474,42 @@ export class IntegrationsAdminComponent {
         c.mappings = await firstValueFrom(this.integrationsApi.listMappings(c.id));
         this.connections.update((cs) => [...cs]);
       } catch (e) {
-        this.error.set(errorMessage(e));
+        this.loadError.set(errorMessage(e));
       }
     }
   }
 
-  async addMapping(c: ConnectionRow): Promise<void> {
-    this.busy.set(true);
-    this.error.set(null);
-    try {
-      const [kind, targetId] = c._newRoleId.split(':');
-      const m = await firstValueFrom(this.integrationsApi.createMapping(c.id, {
-        ...(kind === 'role' ? { roleId: targetId } : kind === 'division' ? { divisionId: targetId } : { teamId: targetId }),
-        externalGroupId: c._newGroupId,
-        syncDirection: c._newDirection as SyncDirection,
-      }));
-      c.mappings = [...c.mappings, m];
-      c._newRoleId = '';
-      c._newGroupId = '';
-      this.connections.update((cs) => [...cs]);
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    } finally {
-      this.busy.set(false);
-    }
+  /** Stage a mapping to add on Save. */
+  addMapping(c: ConnectionRow): void {
+    this.newMappings.update((ms) => [
+      ...ms,
+      {
+        key: `new:${this.nextKey++}`,
+        connectionId: c.id,
+        target: c._newRoleId,
+        groupId: c._newGroupId.trim(),
+        direction: (c._newDirection || 'inbound') as SyncDirection,
+      },
+    ]);
+    c._newRoleId = '';
+    c._newGroupId = '';
+    this.connections.update((cs) => [...cs]);
+  }
+
+  newMappingsFor(connectionId: string): NewMapping[] {
+    return this.newMappings().filter((m) => m.connectionId === connectionId);
+  }
+
+  removeNewMapping(key: string): void {
+    this.newMappings.update((ms) => ms.filter((m) => m.key !== key));
+  }
+
+  /** What a staged mapping grants, by name. */
+  newTargetName(target: string): string {
+    const [kind, id] = target.split(':');
+    if (kind === 'division') return `${this.lookup.divisionName(id)} (division)`;
+    if (kind === 'team') return `${this.lookup.teamName(id)} (team)`;
+    return this.roleName(id);
   }
 
   askDelete(c: ConnectionRow, m: ExternalGroupMapping): void {
@@ -410,16 +517,16 @@ export class IntegrationsAdminComponent {
     this.connections.update((cs) => [...cs]);
   }
 
-  async deleteMapping(c: ConnectionRow, m: ExternalGroupMapping, grants: 'keep' | 'revoke'): Promise<void> {
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.integrationsApi.deleteMapping(c.id, m.id, grants));
-      c.mappings = c.mappings.filter((x) => x.id !== m.id);
-      c._deleting = null;
-      this.connections.update((cs) => [...cs]);
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    }
+  /** Stage removing a mapping on Save, with what happens to what it granted. */
+  stageRemoval(c: ConnectionRow, m: ExternalGroupMapping, grants: Grants): void {
+    this.mappingRemovals.update((rs) => ({ ...rs, [m.id]: { connectionId: c.id, grants } }));
+    c._deleting = null;
+    this.connections.update((cs) => [...cs]);
+  }
+
+  undoRemoval(m: ExternalGroupMapping): void {
+    const { [m.id]: _undone, ...rest } = this.mappingRemovals();
+    this.mappingRemovals.set(rest);
   }
 
   async sync(c: ConnectionRow): Promise<void> {
@@ -428,7 +535,7 @@ export class IntegrationsAdminComponent {
     try {
       await firstValueFrom(this.integrationsApi.triggerSync(c.id));
     } catch (e) {
-      this.error.set(errorMessage(e));
+      this.loadError.set(errorMessage(e));
     } finally {
       setTimeout(() => {
         c.syncBusy = false;
@@ -437,34 +544,112 @@ export class IntegrationsAdminComponent {
     }
   }
 
-  async retire(c: ConnectionRow, grants: 'keep' | 'revoke'): Promise<void> {
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.integrationsApi.retireIntegration(c.id, grants));
-      await this.refresh();
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    }
+  /** Stage disconnecting on Save, with what happens to what it granted. */
+  retire(c: ConnectionRow, grants: Grants): void {
+    this.connectionOps.update((ops) => ({ ...ops, [c.id]: { op: 'retire', grants } }));
+    c._retiring = false;
+    this.connections.update((cs) => [...cs]);
   }
 
-  async revive(c: ConnectionRow): Promise<void> {
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.integrationsApi.reviveIntegration(c.id));
-      await this.refresh();
-    } catch (e) {
-      this.error.set(errorMessage(e));
+  /** Stage reconnecting on Save. */
+  revive(c: ConnectionRow): void {
+    this.connectionOps.update((ops) => ({ ...ops, [c.id]: { op: 'revive' } }));
+  }
+
+  undoConnectionOp(c: ConnectionRow): void {
+    const { [c.id]: _undone, ...rest } = this.connectionOps();
+    this.connectionOps.set(rest);
+  }
+
+  // ---- Save / Cancel
+
+  discard(): void {
+    this.newConnections.set([]);
+    this.newMappings.set([]);
+    this.mappingRemovals.set({});
+    this.connectionOps.set({});
+    this.saveError.set(null);
+    this.stale.set(false);
+  }
+
+  async reload(): Promise<void> {
+    this.discard();
+    this.connections.set([]);
+    await this.refresh();
+  }
+
+  async save(): Promise<void> {
+    const ops: StagedOp[] = [
+      ...this.newConnections().map((n) => ({
+        run: () =>
+          firstValueFrom(
+            this.integrationsApi.connectIntegration({
+              provider: 'discord',
+              externalWorkspaceId: n.guildId,
+              displayName: n.displayName,
+              ...(n.botToken ? { botToken: n.botToken } : {}),
+            }),
+          ),
+        clear: () => this.removeNewConnection(n.key),
+      })),
+      ...Object.entries(this.mappingRemovals()).map(([id, r]) => ({
+        run: () => firstValueFrom(this.integrationsApi.deleteMapping(r.connectionId, id, r.grants)),
+        clear: () => {
+          const { [id]: _done, ...rest } = this.mappingRemovals();
+          this.mappingRemovals.set(rest);
+        },
+      })),
+      ...this.newMappings().map((n) => {
+        const [kind, targetId] = n.target.split(':');
+        return {
+          run: () =>
+            firstValueFrom(
+              this.integrationsApi.createMapping(n.connectionId, {
+                ...(kind === 'role' ? { roleId: targetId } : kind === 'division' ? { divisionId: targetId } : { teamId: targetId }),
+                externalGroupId: n.groupId,
+                syncDirection: n.direction,
+              }),
+            ),
+          clear: () => this.removeNewMapping(n.key),
+        };
+      }),
+      ...Object.entries(this.connectionOps()).map(([id, op]) => ({
+        run: () =>
+          firstValueFrom(
+            op.op === 'retire'
+              ? this.integrationsApi.retireIntegration(id, op.grants)
+              : this.integrationsApi.reviveIntegration(id),
+          ),
+        clear: () => {
+          const { [id]: _done, ...rest } = this.connectionOps();
+          this.connectionOps.set(rest);
+        },
+      })),
+    ];
+    this.saving.set(true);
+    this.saveError.set(null);
+    this.stale.set(false);
+    const result = await runStaged(ops);
+    // Mappings are cached per row; drop them so the refresh reads what landed.
+    this.connections.set([]);
+    await this.refresh();
+    if (result.error) {
+      this.stale.set(isStale(result.error));
+      this.saveError.set(stagedErrorMessage(result));
+    } else {
+      this.unsaved.markSaved();
     }
+    this.saving.set(false);
   }
 
   async retryMapping(c: ConnectionRow, m: ExternalGroupMapping): Promise<void> {
-    this.error.set(null);
+    this.loadError.set(null);
     try {
       const updated = await firstValueFrom(this.integrationsApi.retryMapping(c.id, m.id));
       c.mappings = c.mappings.map((x) => (x.id === updated.id ? updated : x));
       this.connections.update((cs) => [...cs]);
     } catch (e) {
-      this.error.set(errorMessage(e));
+      this.loadError.set(errorMessage(e));
     }
   }
 

@@ -1,10 +1,14 @@
 import { OrgApi } from '../../core/api/org.api';
 import { IntegrationsApi } from '../../core/api/work.api';
 import { firstValueFrom } from 'rxjs';
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Role, SyncDirection } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
+import { UnsavedChangesService } from '../../core/unsaved-changes.service';
+import { SaveBarComponent } from './save-bar.component';
+import { StagedRows } from './staged-rows';
+import { StagedOp, isStale, runStaged, stagedErrorMessage } from './staged';
 
 /** One role↔Discord-group mapping, flattened for display in the roles table. */
 interface RoleMapping {
@@ -14,11 +18,11 @@ interface RoleMapping {
   isBroken: boolean;
 }
 
-/** Role list/editor. */
+/** Role list/editor. New roles, renames and retire/revive are staged until Save. */
 @Component({
   selector: 'roles-admin',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, SaveBarComponent],
   styles: [`
     .map-chip {
       display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
@@ -33,19 +37,27 @@ interface RoleMapping {
     <div class="panel">
       <h2>Roles</h2>
       <div class="row">
-        <input [(ngModel)]="newName" placeholder="New role name" />
-        <button [disabled]="busy() || !newName.trim()" (click)="create()">Create role</button>
+        <button class="secondary" (click)="rows.addCreate()">Add role</button>
       </div>
-      @if (error()) { <p class="error">{{ error() }}</p> }
+      @if (loadError()) { <p class="error">{{ loadError() }}</p> }
       <table>
         <thead><tr><th>Name</th><th>Integration</th><th>State</th><th></th></tr></thead>
         <tbody>
-          @for (r of roles(); track r.id) {
-            <tr [class.row--retired]="r.lifecycleState === 'retired'" [class.row--deactivated]="r.lifecycleState === 'deactivated'">
+          @for (c of rows.creates(); track c.key) {
+            <tr class="is-staged">
+              <td><input [ngModel]="c.fields.name" (ngModelChange)="rows.updateCreate(c.key, 'name', $event)" placeholder="New role name" aria-label="Name" /></td>
+              <td></td>
+              <td><span class="staged-note">New, added on save</span></td>
+              <td><button class="quiet" (click)="rows.removeCreate(c.key)">Remove</button></td>
+            </tr>
+          }
+          @for (r of rows.saved(); track r.id) {
+            @let lc = rows.lifecycleOf(r);
+            <tr [class.row--retired]="r.lifecycleState === 'retired'" [class.is-staged]="rows.isChanged(r)" [class.is-retiring]="lc === 'retire'">
               <td>
                 @if (r.lifecycleState === 'active') {
-                  <input [(ngModel)]="r.name" (blur)="rename(r)" />
-                } @else { {{ r.name }} }
+                  <input [class.is-changed]="rows.isChanged(r, 'name')" [ngModel]="rows.value(r, 'name')" (ngModelChange)="rows.set(r, 'name', $event)" aria-label="Name" />
+                } @else { <span class="row-name">{{ r.name }}</span> }
               </td>
               <td>
                 @if (roleMappings(r.id); as maps) {
@@ -63,12 +75,17 @@ interface RoleMapping {
                   }
                 }
               </td>
-              <td><span [class]="lcStamp(r.lifecycleState)">{{ r.lifecycleState }}</span></td>
               <td>
-                @if (r.lifecycleState === 'active') {
-                  <button class="quiet danger" (click)="retire(r)">Retire</button>
+                @if (lc) { <span class="staged-note">{{ lc === 'retire' ? 'Retires on save' : 'Revives on save' }}</span> }
+                @else { <span [class]="lcStamp(r.lifecycleState)">{{ r.lifecycleState }}</span> }
+              </td>
+              <td>
+                @if (lc) {
+                  <button class="quiet" (click)="rows.toggleLifecycle(r, lc)">Undo</button>
+                } @else if (r.lifecycleState === 'active') {
+                  <button class="quiet danger" (click)="rows.toggleLifecycle(r, 'retire')">Retire</button>
                 } @else if (r.lifecycleState === 'retired') {
-                  <button class="quiet" (click)="revive(r)">Revive</button>
+                  <button class="quiet" (click)="rows.toggleLifecycle(r, 'revive')">Revive</button>
                 }
               </td>
             </tr>
@@ -76,27 +93,48 @@ interface RoleMapping {
         </tbody>
       </table>
     </div>
+    <save-bar [count]="rows.count()" [where]="where()" [saving]="busy()" [error]="saveError()" [stale]="stale()"
+              (save)="save()" (discard)="discard()" (reload)="reload()" />
   `,
 })
-export class RolesAdminComponent {
+export class RolesAdminComponent implements OnDestroy {
   private readonly integrationsApi = inject(IntegrationsApi);
   private readonly orgApi = inject(OrgApi);
-  readonly roles = signal<Role[]>([]);
+  private readonly unsaved = inject(UnsavedChangesService);
+  readonly rows = new StagedRows<Role, { name: string }>(
+    (r) => ({ name: r.name }),
+    () => ({ name: '' }),
+  );
   readonly mappingsByRole = signal<Map<string, RoleMapping[]>>(new Map());
   readonly busy = signal(false);
-  readonly error = signal<string | null>(null);
-  newName = '';
+  readonly loadError = signal<string | null>(null);
+  readonly saveError = signal<string | null>(null);
+  readonly stale = signal(false);
+
+  readonly where = computed(() => {
+    const names = this.rows.saved().filter((r) => this.rows.isChanged(r)).map((r) => r.name);
+    const added = this.rows.creates().length;
+    return [...names, ...(added ? [`${added} new`] : [])].join(', ') || null;
+  });
 
   constructor() {
-    void this.refresh();
+    effect(() => this.unsaved.pending.set(this.rows.count()));
+    void this.load(true);
   }
 
-  private async refresh(): Promise<void> {
+  ngOnDestroy(): void {
+    this.unsaved.pending.set(0);
+  }
+
+  private async load(discard: boolean): Promise<void> {
     try {
-      this.roles.set(await firstValueFrom(this.orgApi.listRoles(true)));
+      const roles = await firstValueFrom(this.orgApi.listRoles(true));
+      if (discard) this.rows.reset(roles);
+      else this.rows.saved.set(roles);
+      this.loadError.set(null);
       void this.loadMappings();
     } catch (e) {
-      this.error.set(errorMessage(e));
+      this.loadError.set(errorMessage(e));
     }
   }
 
@@ -156,45 +194,53 @@ export class RolesAdminComponent {
 
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
 
-  async create(): Promise<void> {
+  discard(): void {
+    this.rows.discard();
+    this.saveError.set(null);
+    this.stale.set(false);
+  }
+
+  async reload(): Promise<void> {
+    this.saveError.set(null);
+    this.stale.set(false);
+    await this.load(true);
+  }
+
+  async save(): Promise<void> {
+    const named = (n: string) => n.trim().length > 0;
+    if (this.rows.creates().some((c) => !named(c.fields.name)) || Object.values(this.rows.edits()).some((e) => e.name !== undefined && !named(e.name))) {
+      this.saveError.set('Every role needs a name.');
+      return;
+    }
+    const ops: StagedOp[] = [
+      ...this.rows.creates().map((c) => ({
+        run: () => firstValueFrom(this.orgApi.createRole(c.fields.name.trim())),
+        clear: () => this.rows.removeCreate(c.key),
+      })),
+      ...Object.entries(this.rows.edits()).map(([id, patch]) => ({
+        run: () => {
+          const r = this.rows.saved().find((x) => x.id === id)!;
+          return firstValueFrom(this.orgApi.updateRole(id, { name: (patch.name ?? r.name).trim(), version: r.version }));
+        },
+        clear: () => this.rows.clearEdit(id),
+      })),
+      // Retiring a role can remove authority; the API refuses one that would leave no admin.
+      ...Object.entries(this.rows.lifecycle()).map(([id, op]) => ({
+        run: () => firstValueFrom(op === 'retire' ? this.orgApi.retireRole(id) : this.orgApi.reviveRole(id)),
+        clear: () => this.rows.clearLifecycle(id),
+      })),
+    ];
     this.busy.set(true);
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.orgApi.createRole(this.newName.trim()));
-      this.newName = '';
-      await this.refresh();
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    } finally {
-      this.busy.set(false);
+    this.saveError.set(null);
+    this.stale.set(false);
+    const result = await runStaged(ops);
+    await this.load(false);
+    if (result.error) {
+      this.stale.set(isStale(result.error));
+      this.saveError.set(stagedErrorMessage(result));
+    } else {
+      this.unsaved.markSaved();
     }
-  }
-
-  async rename(r: Role): Promise<void> {
-    this.error.set(null);
-    try {
-      await firstValueFrom(this.orgApi.updateRole(r.id, { name: r.name }));
-    } catch (e) {
-      this.error.set(errorMessage(e));
-      await this.refresh();
-    }
-  }
-
-
-  async retire(r: Role): Promise<void> {
-    await this.guard(() => firstValueFrom(this.orgApi.retireRole(r.id)));
-  }
-  async revive(r: Role): Promise<void> {
-    await this.guard(() => firstValueFrom(this.orgApi.reviveRole(r.id)));
-  }
-
-  private async guard(fn: () => Promise<unknown>): Promise<void> {
-    this.error.set(null);
-    try {
-      await fn();
-      await this.refresh();
-    } catch (e) {
-      this.error.set(errorMessage(e));
-    }
+    this.busy.set(false);
   }
 }

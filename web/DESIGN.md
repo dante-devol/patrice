@@ -145,9 +145,23 @@ A task row, left to right:
   the row's meta line beneath it, and the stamp on the right. The sidebar is a ruled sheet
   of label / value rows; claimants are its first rows, then the margin rule, then details.
   History is a ruled sheet of events; comments sit in the event's row, not in nested cards.
-- **Admin**: every table is a ruled sheet with alternate rows. Inline-editable cells stay
-  editable as they are today, but inputs inside a sheet drop their border until hovered or
-  focused, so a table reads as text first.
+- **Admin**: every table is a ruled sheet with alternate rows. Inputs inside a sheet drop
+  their border until hovered or focused, so a table reads as text first. **Nothing on an
+  admin tab applies on edit or blur**: edits, new rows, retire/revive, role and membership
+  changes are all staged, and the shared save bar (`<save-bar>`: count, what it touches,
+  **Cancel** and **Save**) floats at the bottom once something is unsaved. A staged row
+  takes the 3px rust left edge, a changed control a rust border, a row staged to retire is
+  struck through, and a staged lifecycle change reads as a rust note ("Retires on save")
+  with **Undo**. A save someone else's change refused offers **Reload** in the bar.
+- **Another admin editing**: a thin bar above the tab in the In review amber (`#7A5B00`
+  text, `#A9810F` outline), naming who is changing the page, or who just saved it, with
+  **Reload**. Amber because it's someone else's work in progress, not a fault.
+- **Users**: the same two-list shape as Permissions. Left: Overall, then each division
+  with its teams indented beneath it, each carrying its colour edge and a member count.
+  Right: Overall lists everyone with role chips (× to take away, **Give a role** as a
+  dashed picker) and account state; a division or team lists its members with **Add
+  someone** and **Remove**. A membership made by a Discord sync carries a dashed
+  "Synced" tag.
 - **Auth pages**: a single small sheet on the board, under the app header's wordmark. The "or" divider between password and Discord sign-in is a plain 1px `line`
   rule, not the margin rule. Continue with Discord is a secondary button with the Discord
   mark in its brand colour; no blurple fill.
@@ -159,7 +173,7 @@ A task row, left to right:
   divisions, teams; teams collapsed) beside one role's grants, grouped by resource, with
   each action named in words and its code name in `soft`. "By action" flips it: pick an
   action, see every role holding it. Both views edit one working copy; nothing saves until
-  **Save changes**, in a save bar that floats (float shadow) at the bottom of the sheet.
+  **Save**, in the shared save bar.
   An unsaved row gets a 3px **rust** left edge and its old scope struck through beneath
   it; roles and actions with unsaved edits carry a small rust dot. "Not granted" and a
   target still to pick use the dashed outline. Every scope picker has a tooltip (`.hint`)

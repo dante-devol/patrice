@@ -25,6 +25,7 @@ const D = 24 * H;
 const me = {
   id: 'u-devin', organizationId: 'org', email: 'devin@example.com', displayName: 'Devin',
   emailVerified: true, capabilities: { inviteCreate: true, manageOrg: true },
+  allowedActions: ['config:update', 'grant:create', 'grant:update', 'integration:create', 'invite:create', 'task:create'],
 };
 
 const divisions = [
@@ -37,14 +38,39 @@ const divisions = [
 }));
 
 const teams = [
-  { name: 'USA', id: 't-usa' }, { name: 'Artists', id: 't-artists' },
+  { name: 'USA', id: 't-usa', divisionId: 'd-writing' }, { name: 'Artists', id: 't-artists', divisionId: 'd-art' },
 ].map((t) => ({
   ...t, restrictClaims: false, lifecycleState: 'active', retiredAt: null, version: 1, inherentRoleId: 'r-' + t.id,
 }));
 
 const users = [
   ['u-devin', 'Devin'], ['u-maya', 'Maya'], ['u-aric', 'Aric'], ['u-sela', 'Sela'], ['u-joon', 'Joon'],
-].map(([id, displayName]) => ({ id, email: null, displayName, lifecycleState: 'active', roleIds: [] }));
+].map(([id, displayName]) => ({
+  id, email: `${displayName.toLowerCase()}@example.com`, displayName, lifecycleState: 'active', avatarUrl: null,
+  roleIds: id === 'u-devin' ? ['r-admin'] : id === 'u-maya' ? ['r-lead'] : [],
+}));
+
+// Division and team membership for the Users tab's membership editor.
+const membership = (userId, unitType, unitId, source = 'patrice') => ({ userId, unitType, unitId, source, createdAt: ago(3 * D) });
+const memberships = {
+  items: [
+    membership('u-maya', 'division', 'd-writing'),
+    membership('u-aric', 'division', 'd-writing'),
+    membership('u-devin', 'division', 'd-writing', 'integration'),
+    membership('u-maya', 'team', 't-usa'),
+    membership('u-sela', 'division', 'd-art'),
+    membership('u-joon', 'division', 'd-testing'),
+  ],
+  units: [
+    ...['d-writing', 'd-art', 'd-scripting', 'd-testing', 'd-leadership'].map((id) => ({ unitType: 'division', unitId: id, allowedActions: ['division:manage_members'] })),
+    ...['t-usa', 't-artists'].map((id) => ({ unitType: 'team', unitId: id, allowedActions: ['team:manage_members'] })),
+  ],
+};
+
+// Another admin editing the Users page, delivered on the notification stream.
+const presenceStream = [
+  `event: admin-presence\ndata: ${JSON.stringify({ page: 'users', userId: 'u-sela', displayName: 'Sela', state: 'editing', at: new Date().toISOString() })}\n\n`,
+].join('');
 
 const task = (o) => ({
   claimsClosed: false, lifecycleState: 'active', retiredAt: null, version: 1,
@@ -172,7 +198,11 @@ async function mock(page) {
     if (p === '/teams') return json(route, teams);
     if (p === '/users') return json(route, users);
     if (p === '/notifications') return json(route, { items: [], unreadCount: 0, nextCursor: null });
-    if (p.endsWith('/notifications/stream')) return route.abort();
+    if (p.endsWith('/notifications/stream')) {
+      return route.fulfill({ status: 200, contentType: 'text/event-stream', body: presenceStream });
+    }
+    if (p === '/memberships') return json(route, memberships);
+    if (p === '/admin/presence') return route.fulfill({ status: 204, body: '' });
     if (p === '/integrations') return json(route, []);
     if (p === '/invitations') return json(route, []);
     if (p === '/roles') return json(route, roles);
@@ -245,6 +275,20 @@ await page.getByRole('button', { name: 'By action' }).click();
 await page.getByRole('button', { name: /^Review submissions/ }).click();
 await page.getByText(/task:review, held by/).waitFor();
 await page.screenshot({ path: join(OUT, 'admin-permissions-by-action.png'), fullPage: true });
+
+// Users: the Overall list (roles + lifecycle), then a division's members with staged
+// changes, while another admin (Sela) is editing the same page.
+await page.getByRole('button', { name: 'users' }).click();
+await page.getByText('Everyone').waitFor();
+await page.getByRole('button', { name: 'Take away Writing lead' }).click();
+await page.screenshot({ path: join(OUT, 'admin-users-overall.png'), fullPage: true });
+await page.getByRole('button', { name: /^Writing/ }).first().click();
+await page.getByText(/Division, \d+ members?/).waitFor();
+await page.getByRole('combobox', { name: 'Add someone' }).selectOption({ label: 'Joon' });
+await page.getByRole('button', { name: 'Remove' }).first().click();
+await page.getByText(/is changing this page/).waitFor({ timeout: 5000 }).catch(() => {});
+await page.screenshot({ path: join(OUT, 'admin-users-membership.png'), fullPage: true });
+await page.getByRole('button', { name: 'Cancel' }).click();
 
 // Login renders only when unauthenticated → drop the /me mock for this one.
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
