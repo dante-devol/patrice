@@ -211,6 +211,26 @@ export const MyUnit = z
   .strict()
   .openapi('MyUnit');
 
+const days = z.number().nullable();
+export const UnitStats = z
+  .object({
+    from: timestamp,
+    to: timestamp,
+    truncated: z.boolean(),
+    byStatus: z.object({ open: z.number().int(), claimed: z.number().int(), review: z.number().int(), revising: z.number().int(), approved: z.number().int() }).strict(),
+    completed: z.number().int(),
+    retired: z.number().int(),
+    weekly: z.array(z.object({ weekStart: timestamp, created: z.number().int(), completed: z.number().int() }).strict()),
+    medianDaysToComplete: days,
+    openAge: z.object({ medianDays: days, oldestDays: days }).strict(),
+    medianReviewDays: days,
+    teams: z
+      .array(z.object({ teamId: id, name: z.string(), open: z.number().int(), completed: z.number().int() }).strict())
+      .optional(),
+  })
+  .strict()
+  .openapi('UnitStats');
+
 export const Grant = z
   .object({
     id,

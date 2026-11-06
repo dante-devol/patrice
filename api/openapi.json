@@ -1116,6 +1116,155 @@
         ],
         "additionalProperties": false
       },
+      "UnitStats": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "byStatus": {
+            "type": "object",
+            "properties": {
+              "open": {
+                "type": "integer"
+              },
+              "claimed": {
+                "type": "integer"
+              },
+              "review": {
+                "type": "integer"
+              },
+              "revising": {
+                "type": "integer"
+              },
+              "approved": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "open",
+              "claimed",
+              "review",
+              "revising",
+              "approved"
+            ],
+            "additionalProperties": false
+          },
+          "completed": {
+            "type": "integer"
+          },
+          "retired": {
+            "type": "integer"
+          },
+          "weekly": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "weekStart": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "created": {
+                  "type": "integer"
+                },
+                "completed": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "weekStart",
+                "created",
+                "completed"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "medianDaysToComplete": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "openAge": {
+            "type": "object",
+            "properties": {
+              "medianDays": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "oldestDays": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "medianDays",
+              "oldestDays"
+            ],
+            "additionalProperties": false
+          },
+          "medianReviewDays": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "teamId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "open": {
+                  "type": "integer"
+                },
+                "completed": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "teamId",
+                "name",
+                "open",
+                "completed"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "truncated",
+          "byStatus",
+          "completed",
+          "retired",
+          "weekly",
+          "medianDaysToComplete",
+          "openAge",
+          "medianReviewDays"
+        ],
+        "additionalProperties": false
+      },
       "Team": {
         "type": "object",
         "properties": {
@@ -7578,6 +7727,144 @@
         "responses": {
           "204": {
             "description": "No content"
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/divisions/{id}/stats": {
+      "get": {
+        "operationId": "divisionStats",
+        "tags": [
+          "org"
+        ],
+        "summary": "A division's stats (with its teams), over the tasks you can see",
+        "description": "Gated by the `division:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A division's stats (with its teams), over the tasks you can see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitStats"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams/{id}/stats": {
+      "get": {
+        "operationId": "teamStats",
+        "tags": [
+          "org"
+        ],
+        "summary": "A team's stats, over the tasks you can see",
+        "description": "Gated by the `team:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "from",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "to",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A team's stats, over the tasks you can see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitStats"
+                }
+              }
+            }
           },
           "default": {
             "description": "An error; `error.code` is one of `ErrorCode`",

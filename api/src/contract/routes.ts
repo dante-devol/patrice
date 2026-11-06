@@ -15,6 +15,7 @@ import {
 } from '../auth/auth.dto';
 import { createDivisionSchema, updateDivisionSchema } from '../divisions/divisions.dto';
 import { assignUnitRoleSchema } from '../unit-roles/unit-roles.dto';
+import { unitStatsQuerySchema } from '../unit-stats/unit-stats.dto';
 import { batchGrantsSchema, createGrantSchema, updateGrantSchema } from '../grants/grants.dto';
 import {
   connectIntegrationSchema,
@@ -178,6 +179,8 @@ export const ROUTES = {
   teamAssignableRoles: r({ method: 'get', path: '/teams/:id/assignable-roles', tag: 'org', summary: 'The unit roles you may assign at a team', action: 'team:read', status: 200, kind: 'json', response: z.array(S.AssignableRole) }),
   assignTeamRole: r({ method: 'post', path: '/teams/:id/role-assignments', tag: 'org', summary: 'Assign a unit role at a team (adds membership if missing)', body: assignUnitRoleSchema, authorizedInService: 'team:assign_roles', status: 201, kind: 'json', response: S.UnitRoleAssignment }),
   unassignTeamRole: r({ method: 'delete', path: '/teams/:id/role-assignments/:assignmentId', tag: 'org', summary: 'Remove a unit role assignment at a team (membership stays)', authorizedInService: 'team:assign_roles', status: 204, kind: 'empty' }),
+  divisionStats: r({ method: 'get', path: '/divisions/:id/stats', tag: 'org', summary: "A division's stats (with its teams), over the tasks you can see", action: 'division:read', query: unitStatsQuerySchema, status: 200, kind: 'json', response: S.UnitStats }),
+  teamStats: r({ method: 'get', path: '/teams/:id/stats', tag: 'org', summary: "A team's stats, over the tasks you can see", action: 'team:read', query: unitStatsQuerySchema, status: 200, kind: 'json', response: S.UnitStats }),
   listTeams: r({ method: 'get', path: '/teams', tag: 'org', summary: 'List teams', query: includeRetired, authorizedInService: 'team:read', status: 200, kind: 'json', response: z.array(S.Team) }),
   createTeam: r({ method: 'post', path: '/teams', tag: 'org', summary: 'Create a team', body: createTeamSchema, authorizedInService: 'team:create', status: 201, kind: 'json', response: S.Team }),
   updateTeam: r({ method: 'patch', path: '/teams/:id', tag: 'org', summary: 'Edit a team', action: 'team:update', body: updateTeamSchema, status: 200, kind: 'json', response: S.Team }),

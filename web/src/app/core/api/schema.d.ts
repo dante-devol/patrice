@@ -1152,6 +1152,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/divisions/{id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A division's stats (with its teams), over the tasks you can see
+         * @description Gated by the `division:read` action.
+         */
+        get: operations["divisionStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A team's stats, over the tasks you can see
+         * @description Gated by the `team:read` action.
+         */
+        get: operations["teamStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/teams": {
         parameters: {
             query?: never;
@@ -2255,6 +2295,41 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        UnitStats: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            truncated: boolean;
+            byStatus: {
+                open: number;
+                claimed: number;
+                review: number;
+                revising: number;
+                approved: number;
+            };
+            completed: number;
+            retired: number;
+            weekly: {
+                /** Format: date-time */
+                weekStart: string;
+                created: number;
+                completed: number;
+            }[];
+            medianDaysToComplete: number | null;
+            openAge: {
+                medianDays: number | null;
+                oldestDays: number | null;
+            };
+            medianReviewDays: number | null;
+            teams?: {
+                /** Format: uuid */
+                teamId: string;
+                name: string;
+                open: number;
+                completed: number;
+            }[];
         };
         Team: {
             /** Format: uuid */
@@ -5344,6 +5419,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    divisionStats: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A division's stats (with its teams), over the tasks you can see */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitStats"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    teamStats: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A team's stats, over the tasks you can see */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitStats"];
+                };
             };
             /** @description An error; `error.code` is one of `ErrorCode` */
             default: {
