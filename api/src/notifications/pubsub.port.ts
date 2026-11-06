@@ -10,17 +10,39 @@
  */
 export const PUBSUB_PORT = Symbol('PUBSUB_PORT');
 
-/** The only event v1 fans out: a content-free "go reconcile" nudge. */
+/** A content-free "go reconcile" nudge for the user's notifications. */
 export interface SyncEvent {
   type: 'sync';
 }
 
+/** The admin pages whose editors announce that someone is changing them. */
+export const ADMIN_PAGES = ['roles', 'divisions', 'teams', 'users', 'permissions', 'settings', 'integrations'] as const;
+export type AdminPage = (typeof ADMIN_PAGES)[number];
+
+/**
+ * Another admin's editing state on an admin page: `editing` while they hold unsaved
+ * changes (repeated as a heartbeat), `idle` when they discard or leave, `saved` after
+ * a save. Ephemeral: never stored, and only sent to people allowed to view that page.
+ */
+export interface AdminPresenceEvent {
+  type: 'admin-presence';
+  page: AdminPage;
+  userId: string;
+  displayName: string;
+  state: 'editing' | 'idle' | 'saved';
+  at: string;
+}
+
+export type StreamEvent = SyncEvent | AdminPresenceEvent;
+
 export interface PubSubPort {
   /** Push an event to every open subscription for `userId`. Fire-and-forget. */
-  publish(userId: string, ev: SyncEvent): void;
+  publish(userId: string, ev: StreamEvent): void;
   /**
    * Subscribe `cb` to `userId`'s events. Returns an unsubscribe function the caller
    * MUST invoke when the stream closes (else the subscription leaks).
    */
-  subscribe(userId: string, cb: (ev: SyncEvent) => void): () => void;
+  subscribe(userId: string, cb: (ev: StreamEvent) => void): () => void;
+  /** The users with at least one open stream (the audience for presence events). */
+  subscribedUserIds(): string[];
 }

@@ -91,10 +91,15 @@ export class RolesService {
     if (role.lifecycleState === LifecycleState.retired) {
       throw new UnprocessableError('ROLE_RETIRED', 'Role is retired');
     }
-    const updated = await this.prisma.role.update({
-      where: { id: role.id },
+    // Version-guarded when the client says which version it edited.
+    const { count } = await this.prisma.role.updateMany({
+      where: { id: role.id, ...(dto.version !== undefined ? { version: dto.version } : {}) },
       data: { name: dto.name, version: { increment: 1 } },
     });
+    if (count === 0) {
+      throw new ConflictError('STALE_VERSION', 'The role changed since it was read; reload and retry');
+    }
+    const updated = await this.prisma.role.findUniqueOrThrow({ where: { id: role.id } });
     await this.activity.logActivity({
       actorUserId,
       subjectType: 'role',

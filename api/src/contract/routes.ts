@@ -26,6 +26,7 @@ import {
 } from '../integrations/integrations.dto';
 import { createMessageSchema, listMessagesQuerySchema, updateMessageSchema } from '../messages/messages.dto';
 import { listNotificationsQuerySchema } from '../notifications/notifications.dto';
+import { adminPresenceSchema } from '../notifications/admin-presence.dto';
 import {
   createRequestTemplateSchema,
   putRequestTemplateSchema,
@@ -41,7 +42,7 @@ import {
   updateTaskSchema,
 } from '../tasks/tasks.dto';
 import { createTeamSchema, updateTeamSchema } from '../teams/teams.dto';
-import { addMemberSchema } from '../membership/membership.dto';
+import { addMemberSchema, batchMembershipsSchema } from '../membership/membership.dto';
 import { grantRoleSchema, updateConfigSchema, updateUserSchema } from '../users/users.dto';
 
 /**
@@ -162,6 +163,8 @@ export const ROUTES = {
   getRequestTemplate: r({ method: 'get', path: '/request-templates/:id', tag: 'templates', summary: 'A library template', action: 'request_template:read', status: 200, kind: 'json', response: S.RequestTemplate }),
   updateRequestTemplate: r({ method: 'patch', path: '/request-templates/:id', tag: 'templates', summary: 'Edit a library template (questions diffed by id)', action: 'request_template:update', body: updateRequestTemplateSchema, status: 200, kind: 'json', response: S.RequestTemplate }),
   deleteRequestTemplate: r({ method: 'delete', path: '/request-templates/:id', tag: 'templates', summary: 'Delete a library template (permanent, audited; tasks keep their snapshots)', action: 'request_template:delete', status: 204, kind: 'empty' }),
+  listMemberships: r({ method: 'get', path: '/memberships', tag: 'org', summary: 'Every membership in the divisions and teams the caller may read', authorizedInService: 'division:read', status: 200, kind: 'json', response: S.Memberships }),
+  batchMemberships: r({ method: 'post', path: '/memberships/batch', tag: 'org', summary: "Apply the membership editor's staged changes, all or nothing", authorizedInService: 'division:manage_members', body: batchMembershipsSchema, status: 200, kind: 'json', response: S.Memberships }),
   listDivisionMembers: r({ method: 'get', path: '/divisions/:id/members', tag: 'org', summary: "A division's members", action: 'division:read', status: 200, kind: 'json', response: z.array(S.Member) }),
   addDivisionMember: r({ method: 'post', path: '/divisions/:id/members', tag: 'org', summary: 'Add a member to a division', action: 'division:manage_members', body: addMemberSchema, status: 200, kind: 'json', response: z.array(S.Member) }),
   removeDivisionMember: r({ method: 'delete', path: '/divisions/:id/members/:userId', tag: 'org', summary: 'Remove a member from a division', action: 'division:manage_members', status: 204, kind: 'empty' }),
@@ -209,7 +212,8 @@ export const ROUTES = {
   downloadAttachment: r({ method: 'get', path: '/attachments/:id', tag: 'messages', summary: 'Download an attachment', action: 'attachment:read', status: 200, kind: 'binary' }),
 
   // ---- Notifications, activity ----
-  notificationStream: r({ method: 'get', path: '/notifications/stream', tag: 'notifications', summary: 'Live "sync" pings (server-sent events)', status: 200, kind: 'sse' }),
+  notificationStream: r({ method: 'get', path: '/notifications/stream', tag: 'notifications', summary: 'Live "sync" pings and admin-presence events (server-sent events)', status: 200, kind: 'sse' }),
+  announceAdminPresence: r({ method: 'post', path: '/admin/presence', tag: 'notifications', summary: 'Tell the other admins on an admin page that you are changing it', action: 'config:update', body: adminPresenceSchema, status: 204, kind: 'empty' }),
   listNotifications: r({ method: 'get', path: '/notifications', tag: 'notifications', summary: 'Your notifications', query: listNotificationsQuerySchema, status: 200, kind: 'json', response: S.NotificationListResult }),
   markNotificationRead: r({ method: 'post', path: '/notifications/:id/read', tag: 'notifications', summary: 'Mark a notification read', status: 200, kind: 'json', response: z.object({ unreadCount: z.number().int() }).strict() }),
   markAllNotificationsRead: r({ method: 'post', path: '/notifications/read-all', tag: 'notifications', summary: 'Mark every notification read', status: 200, kind: 'json', response: z.object({ unreadCount: z.number().int() }).strict() }),

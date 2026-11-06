@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PubSubPort, SyncEvent } from './pubsub.port';
+import { PubSubPort, StreamEvent } from './pubsub.port';
 
 /**
  * Single-instance {@link PubSubPort} adapter. Keeps an in-memory map of
@@ -10,9 +10,9 @@ import { PubSubPort, SyncEvent } from './pubsub.port';
  */
 @Injectable()
 export class InProcessPubSub implements PubSubPort {
-  private readonly subscribers = new Map<string, Set<(ev: SyncEvent) => void>>();
+  private readonly subscribers = new Map<string, Set<(ev: StreamEvent) => void>>();
 
-  publish(userId: string, ev: SyncEvent): void {
+  publish(userId: string, ev: StreamEvent): void {
     const set = this.subscribers.get(userId);
     if (!set) return;
     for (const cb of set) {
@@ -25,7 +25,7 @@ export class InProcessPubSub implements PubSubPort {
     }
   }
 
-  subscribe(userId: string, cb: (ev: SyncEvent) => void): () => void {
+  subscribe(userId: string, cb: (ev: StreamEvent) => void): () => void {
     let set = this.subscribers.get(userId);
     if (!set) {
       set = new Set();
@@ -38,5 +38,9 @@ export class InProcessPubSub implements PubSubPort {
       current.delete(cb);
       if (current.size === 0) this.subscribers.delete(userId);
     };
+  }
+
+  subscribedUserIds(): string[] {
+    return [...this.subscribers.keys()];
   }
 }

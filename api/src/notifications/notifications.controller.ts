@@ -39,7 +39,8 @@ export class NotificationsController {
   /**
    * Per-user SSE stream. Emits an initial `sync` on connect (so the client reconciles
    * immediately) and a further `sync` on every new notification for this user; a
-   * periodic `ping` keeps the connection warm. No payload rides the stream.
+   * periodic `ping` keeps the connection warm. Notifications never ride the stream.
+   * It also carries `admin-presence` events: who else is changing an admin page.
    */
   @Contract(ROUTES.notificationStream)
   @Sse('stream')
@@ -47,9 +48,11 @@ export class NotificationsController {
     const userId = user.id;
     return new Observable<MessageEvent>((subscriber) => {
       subscriber.next({ type: 'sync', data: '{}' });
-      const unsubscribe = this.pubsub.subscribe(userId, () =>
-        subscriber.next({ type: 'sync', data: '{}' }),
-      );
+      const unsubscribe = this.pubsub.subscribe(userId, (ev) => {
+        if (ev.type === 'sync') return subscriber.next({ type: 'sync', data: '{}' });
+        const { type, ...data } = ev;
+        subscriber.next({ type, data: JSON.stringify(data) });
+      });
       const heartbeat = setInterval(
         () => subscriber.next({ type: 'ping', data: '{}' }),
         HEARTBEAT_MS,

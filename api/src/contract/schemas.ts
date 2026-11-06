@@ -2,6 +2,7 @@ import { extendZodWithOpenApi } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { ERROR_CODES, ErrorCode } from '../common/error-codes';
 import { TIMELINE_EVENT_TYPES, domainEventPayloadSchemas } from '../events/event.types';
+import { ADMIN_PAGES } from '../notifications/pubsub.port';
 
 // Adds `.openapi()` to every Zod schema. Must run before any schema below is built.
 extendZodWithOpenApi(z);
@@ -189,6 +190,40 @@ export const Member = z
   .object({ userId: id, source: z.enum(['patrice', 'integration']), createdAt: timestamp })
   .strict()
   .openapi('Member');
+
+/** Data of an `admin-presence` event on the notification stream. */
+export const AdminPresenceEvent = z
+  .object({
+    page: z.enum(ADMIN_PAGES),
+    userId: id,
+    displayName: z.string(),
+    state: z.enum(['editing', 'idle', 'saved']),
+    at: timestamp,
+  })
+  .strict()
+  .openapi('AdminPresenceEvent');
+
+export const Membership = z
+  .object({
+    userId: id,
+    unitType: z.enum(['division', 'team']),
+    unitId: id,
+    source: z.enum(['patrice', 'integration']),
+    createdAt: timestamp,
+  })
+  .strict()
+  .openapi('Membership');
+
+export const Memberships = z
+  .object({
+    items: z.array(Membership),
+    /** Every unit the caller may read; `allowedActions` holds `*:manage_members` when they may change it. */
+    units: z.array(
+      z.object({ unitType: z.enum(['division', 'team']), unitId: id, allowedActions: z.array(z.string()) }).strict(),
+    ),
+  })
+  .strict()
+  .openapi('Memberships');
 
 export const Grant = z
   .object({

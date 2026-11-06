@@ -94,14 +94,19 @@ export class TeamsService {
       throw new ConflictError('TEAM_RETIRED', 'Team is retired');
     }
     const row = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.team.update({
-        where: { id: team.id },
+      // Version-guarded when the client says which version it edited.
+      const { count } = await tx.team.updateMany({
+        where: { id: team.id, ...(dto.version !== undefined ? { version: dto.version } : {}) },
         data: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.restrictClaims !== undefined ? { restrictClaims: dto.restrictClaims } : {}),
           version: { increment: 1 },
         },
       });
+      if (count === 0) {
+        throw new ConflictError('STALE_VERSION', 'The team changed since it was read; reload and retry');
+      }
+      const updated = await tx.team.findUniqueOrThrow({ where: { id: team.id } });
       await this.activity.logActivity({
         tx,
         actorUserId,

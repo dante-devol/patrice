@@ -18,6 +18,8 @@ export const updateTeamSchema = z
   .object({
     name: name.optional(),
     restrictClaims: z.boolean().optional(),
+    // Optional optimistic-lock check: the version the client last read.
+    version: z.number().int().nonnegative().optional(),
   })
   .strict();
 

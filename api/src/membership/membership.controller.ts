@@ -6,12 +6,36 @@ import { CurrentUser, type CurrentUserRef } from '../auth/current-user';
 import { Contract } from '../contract/contract.decorator';
 import { ROUTES } from '../contract/routes';
 import { MembershipService } from './membership.service';
-import { addMemberSchema, type AddMemberDto } from './membership.dto';
+import {
+  addMemberSchema,
+  batchMembershipsSchema,
+  type AddMemberDto,
+  type BatchMembershipsDto,
+} from './membership.dto';
 
 /** Division and team membership. Reading a unit's members needs only `*:read`. */
 @Controller()
 export class MembershipController {
   constructor(private readonly members: MembershipService) {}
+
+  /** Every membership in the units the caller may read, for the membership editor. */
+  @Contract(ROUTES.listMemberships)
+  @Get('memberships')
+  async listAll(@CurrentUser() user: CurrentUserRef) {
+    // Filtered per unit in the service (`division:read` / `team:read`).
+    return this.members.listAll(user.id);
+  }
+
+  /** The membership editor's staged changes, all-or-nothing; each unit is authorized in the service. */
+  @Contract(ROUTES.batchMemberships)
+  @Post('memberships/batch')
+  @HttpCode(200)
+  async batch(
+    @Body(new ZodValidationPipe(batchMembershipsSchema)) body: BatchMembershipsDto,
+    @CurrentUser() user: CurrentUserRef,
+  ) {
+    return this.members.applyBatch(user.id, body);
+  }
 
   @Contract(ROUTES.listDivisionMembers)
   @Get('divisions/:id/members')

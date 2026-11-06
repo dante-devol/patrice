@@ -43,6 +43,7 @@ export const ERROR_CODES = {
   ALREADY_EXISTS: { status: 409, description: 'That value is already in use' },
   REFERENCE_CONFLICT: { status: 409, description: 'Another record still references this one, or a referenced record is gone' },
   STALE_GRANT: { status: 409, description: 'Someone else changed these permissions; reload' },
+  STALE_MEMBERSHIP: { status: 409, description: 'Someone else changed these memberships; reload' },
   STALE_VERSION: { status: 409, description: 'The record changed since it was read; reload and retry' },
   ALREADY_CLAIMED: { status: 409, description: 'You already hold a seat on this task' },
   ALREADY_RETIRED: { status: 409, description: 'Already retired' },

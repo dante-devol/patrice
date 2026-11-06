@@ -41,7 +41,8 @@ function successResponse(route: ContractRoute): RouteConfig['responses'][string]
       };
     case 'sse':
       return {
-        description: 'Server-sent events; each event is a content-free "sync" ping',
+        description:
+          'Server-sent events: content-free "sync" pings, and "admin-presence" events whose data is an AdminPresenceEvent',
         content: { 'text/event-stream': { schema: z.string() } },
       };
   }
@@ -51,6 +52,8 @@ function successResponse(route: ContractRoute): RouteConfig['responses'][string]
 export function buildOpenApiDocument(): ReturnType<OpenApiGeneratorV31['generateDocument']> {
   const registry = new OpenAPIRegistry();
   registry.register('ErrorBody', S.ErrorBody);
+  // Carried on the SSE stream rather than a JSON route, so it's registered by hand.
+  registry.register('AdminPresenceEvent', S.AdminPresenceEvent);
   registry.registerComponent('securitySchemes', 'session', {
     type: 'apiKey',
     in: 'cookie',

@@ -18,6 +18,18 @@ export const grantRoleSchema = z
  * PATCH /config — typed `system_settings` editor. All flags optional;
  * `.strict()` rejects unknown keys. Defaults live in ConfigService.
  */
+/** The settings columns an admin edits (everything but the write-only secret). */
+const settingsFields = {
+  requireVerifiedEmailToLogIn: z.boolean().optional(),
+  selfReviewAllowed: z.boolean().optional(),
+  anonymizeLabel: z.boolean().optional(),
+  sessionAbsoluteDays: z.number().int().positive().max(3650).optional(),
+  sessionIdleDays: z.number().int().positive().max(3650).optional(),
+  gracePeriodHours: z.number().int().nonnegative().max(8760).optional(),
+  requireDiscordLink: z.boolean().optional(),
+  discordClientId: z.string().max(64).nullable().optional(),
+};
+
 export const updateConfigSchema = z
   .object({
     requireVerifiedEmailToLogIn: z.boolean().optional(),
@@ -34,6 +46,10 @@ export const updateConfigSchema = z
     // write-only (encrypted at rest, never returned). Empty string clears it.
     discordClientId: z.string().max(64).optional(),
     discordClientSecret: z.string().max(256).optional(),
+    // Optional stale check: the values the editor last read for the fields it changes.
+    // Settings share one row whose `updated_at` moves with every permission change, so
+    // the check is per field rather than by version.
+    expected: z.object(settingsFields).strict().optional(),
   })
   .strict();
 

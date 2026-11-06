@@ -6,6 +6,7 @@ import { SettingsService, SYSTEM_SUBJECT_ID } from '../settings/settings.service
 import { SecretStore } from '../settings/secret-store.service';
 import { UpdateConfigDto } from './users.dto';
 import { diffFields } from '../activity/changes';
+import { ConflictError } from '../common/errors';
 
 /** The public view: the client *id* is shown, the secret is replaced by a boolean. */
 export type OrgSettings = {
@@ -54,11 +55,20 @@ export class ConfigService {
 
   async update(actorUserId: string, dto: UpdateConfigDto): Promise<OrgSettings> {
     // The secret is handled separately (encrypt / clear); everything else is a column.
-    const { discordClientSecret, ...rest } = dto;
-    const changedKeys = Object.keys(dto);
+    const { discordClientSecret, expected, ...rest } = dto;
+    const changedKeys = Object.keys(dto).filter((k) => k !== 'expected');
     const before = await this.settings.get();
 
     await this.prisma.$transaction(async (tx) => {
+      if (expected) {
+        const current = await this.settings.get(tx);
+        const stale = (Object.keys(expected) as (keyof typeof expected)[]).some(
+          (k) => (current[k] ?? null) !== (expected[k] ?? null),
+        );
+        if (stale) {
+          throw new ConflictError('STALE_VERSION', 'Someone else changed these settings; reload and retry');
+        }
+      }
       await this.settings.update(
         { ...rest, ...(rest.discordClientId === '' ? { discordClientId: null } : {}) },
         tx,

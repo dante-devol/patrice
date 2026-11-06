@@ -14,6 +14,8 @@ export const createRoleSchema = z
 export const updateRoleSchema = z
   .object({
     name: z.string().trim().min(1, 'Role name is required').max(120),
+    // Optional optimistic-lock check: the version the client last read.
+    version: z.number().int().nonnegative().optional(),
   })
   .strict();
 
