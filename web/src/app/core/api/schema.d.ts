@@ -2148,6 +2148,16 @@ export interface components {
             displayName: string;
             lifecycleState: components["schemas"]["Lifecycle"];
             roleIds: string[];
+            unitRoles: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                roleId: string;
+                /** @enum {string} */
+                unitType: "division" | "team";
+                /** Format: uuid */
+                unitId: string;
+            }[];
             avatarUrl: string | null;
         };
         OrgSettings: {

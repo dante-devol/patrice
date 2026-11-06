@@ -541,6 +541,40 @@
               "format": "uuid"
             }
           },
+          "unitRoles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "roleId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "unitType": {
+                  "type": "string",
+                  "enum": [
+                    "division",
+                    "team"
+                  ]
+                },
+                "unitId": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "id",
+                "roleId",
+                "unitType",
+                "unitId"
+              ],
+              "additionalProperties": false
+            }
+          },
           "avatarUrl": {
             "type": [
               "string",
@@ -554,6 +588,7 @@
           "displayName",
           "lifecycleState",
           "roleIds",
+          "unitRoles",
           "avatarUrl"
         ],
         "additionalProperties": false

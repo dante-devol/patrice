@@ -171,6 +171,10 @@ describe('Unit roles', () => {
 
     const list = await auth(http().get(`/api/divisions/${writingId}/role-assignments`));
     expect(list.body.map((a: { id: string }) => a.id)).toContain(res.body.id);
+    // The users list carries each user's unit roles (Admin > Users).
+    const users = await auth(http().get('/api/users'));
+    const row = users.body.find((u: { id: string }) => u.id === userId);
+    expect(row.unitRoles).toEqual([{ id: res.body.id, roleId: projectLeadId, unitType: 'division', unitId: writingId }]);
 
     const del = await auth(http().delete(`/api/divisions/${writingId}/role-assignments/${res.body.id}`));
     expect(del.status).toBe(204);

@@ -122,6 +122,7 @@ export const AdminUser = z
     displayName: z.string(),
     lifecycleState: Lifecycle,
     roleIds: z.array(id),
+    unitRoles: z.array(z.object({ id, roleId: id, unitType: z.enum(['division', 'team']), unitId: id }).strict()),
     avatarUrl: z.string().nullable(),
   })
   .strict()

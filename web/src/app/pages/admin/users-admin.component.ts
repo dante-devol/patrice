@@ -3,11 +3,18 @@ import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AdminUser, Role } from '../../core/api.types';
+import { LookupStore } from '../../core/lookup.store';
 import { errorMessage } from '../../core/errors';
 import { UserAvatarComponent } from '../tasks/user-avatar.component';
 import { avatarColor, initials } from '../tasks/task-presentation';
 
-/** Users list + per-user role-assignment panel. */
+type UnitRole = AdminUser['unitRoles'][number];
+
+/**
+ * Users list + per-user role-assignment panel. Org roles are granted org-wide; unit
+ * roles are assigned at a division or team (through the unit's role-assignment
+ * endpoints, which also add membership).
+ */
 @Component({
   selector: 'users-admin',
   standalone: true,
@@ -17,7 +24,7 @@ import { avatarColor, initials } from '../tasks/task-presentation';
       <h2>Users</h2>
       @if (error()) { <p class="error">{{ error() }}</p> }
       <table>
-        <thead><tr><th>User</th><th>Roles</th><th>State</th><th>Add role</th><th></th></tr></thead>
+        <thead><tr><th>User</th><th>Roles</th><th>Unit roles</th><th>State</th><th>Add role</th><th></th></tr></thead>
         <tbody>
           @for (u of users(); track u.id) {
             <tr [class.row--retired]="u.lifecycleState === 'retired'" [class.row--deactivated]="u.lifecycleState === 'deactivated'">
@@ -34,6 +41,33 @@ import { avatarColor, initials } from '../tasks/task-presentation';
                     <a href="javascript:void(0)" (click)="revoke(u, rid)">×</a>
                   </span>
                 } @empty { <span class="muted">none</span> }
+              </td>
+              <td>
+                @for (a of u.unitRoles; track a.id) {
+                  <span class="badge" [title]="unitLabel(a) + ' (' + (a.unitType === 'division' ? 'division, covers its teams' : 'team') + ')'">
+                    {{ roleName(a.roleId) }} at {{ unitLabel(a) }}
+                    <a href="javascript:void(0)" (click)="unassign(u, a)" [attr.aria-label]="'Remove ' + roleName(a.roleId) + ' at ' + unitLabel(a)">×</a>
+                  </span>
+                } @empty { <span class="muted">none</span> }
+                @if (u.lifecycleState === 'active' && unitRoles().length) {
+                  <div class="row" style="gap:6px;flex-wrap:nowrap;margin-top:6px">
+                    <select #urole style="flex:1;min-width:0;margin:0" aria-label="Unit role">
+                      <option value="">Unit role…</option>
+                      @for (r of unitRoles(); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
+                    </select>
+                    <select #unit style="flex:1;min-width:0;margin:0" aria-label="Division or team">
+                      <option value="">At…</option>
+                      @for (d of lookup.divisionList(); track d.id) {
+                        <optgroup [label]="d.name">
+                          <option [value]="'division:' + d.id">{{ d.name }} (whole division)</option>
+                          @for (t of teamsOf(d.id); track t.id) { <option [value]="'team:' + t.id">{{ t.name }}</option> }
+                        </optgroup>
+                      }
+                    </select>
+                    <button class="secondary" style="margin:0;white-space:nowrap"
+                            (click)="assign(u, urole.value, unit.value); urole.value=''; unit.value=''">Assign</button>
+                  </div>
+                }
               </td>
               <td><span [class]="lcStamp(u.lifecycleState)">{{ u.lifecycleState }}</span></td>
               <td>
@@ -59,7 +93,7 @@ import { avatarColor, initials } from '../tasks/task-presentation';
                 }
               </td>
             </tr>
-          } @empty { <tr><td colspan="5" class="muted">No users.</td></tr> }
+          } @empty { <tr><td colspan="6" class="muted">No users.</td></tr> }
         </tbody>
       </table>
     </div>
@@ -68,6 +102,7 @@ import { avatarColor, initials } from '../tasks/task-presentation';
 export class UsersAdminComponent {
   readonly accessApi = inject(AccessApi);
   readonly orgApi = inject(OrgApi);
+  readonly lookup = inject(LookupStore);
   readonly users = signal<AdminUser[]>([]);
   readonly roles = signal<Role[]>([]);
   readonly error = signal<string | null>(null);
@@ -86,6 +121,7 @@ export class UsersAdminComponent {
       ]);
       this.users.set(users);
       this.roles.set(roles);
+      await this.lookup.ensureLoaded();
     } catch (e) {
       this.error.set(errorMessage(e));
     }
@@ -99,10 +135,38 @@ export class UsersAdminComponent {
     return this.roles().find((r) => r.id === id)?.name ?? id.slice(0, 8);
   }
 
+  /** Org roles only: unit roles are assigned at a division or team, not org-wide. */
   grantableRoles(u: AdminUser): Role[] {
     return this.roles().filter(
-      (r) => r.lifecycleState === 'active' && !u.roleIds.includes(r.id),
+      (r) => r.kind === 'org' && r.lifecycleState === 'active' && !u.roleIds.includes(r.id),
     );
+  }
+
+  unitRoles(): Role[] {
+    return this.roles().filter((r) => r.kind === 'unit' && r.lifecycleState === 'active');
+  }
+
+  teamsOf(divisionId: string) {
+    return this.lookup.teamList().filter((t) => t.divisionId === divisionId);
+  }
+
+  unitLabel(a: UnitRole): string {
+    if (a.unitType === 'division') return this.lookup.divisionName(a.unitId);
+    const team = this.lookup.teamList().find((t) => t.id === a.unitId);
+    return team ? `${team.name} (${this.lookup.divisionName(team.divisionId)})` : this.lookup.teamName(a.unitId);
+  }
+
+  /** `unit` is "division:<id>" or "team:<id>" from the picker. */
+  async assign(u: AdminUser, roleId: string, unit: string): Promise<void> {
+    const [unitType, unitId] = unit.split(':') as ['division' | 'team', string];
+    if (!roleId || !unitId) {
+      this.error.set('Pick a unit role and where it applies.');
+      return;
+    }
+    await this.guard(() => firstValueFrom(this.orgApi.assignRole(unitType, unitId, u.id, roleId)));
+  }
+  async unassign(_u: AdminUser, a: UnitRole): Promise<void> {
+    await this.guard(() => firstValueFrom(this.orgApi.unassignRole(a.unitType, a.unitId, a.id)));
   }
 
   async grant(u: AdminUser, roleId: string): Promise<void> {
