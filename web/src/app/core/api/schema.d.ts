@@ -2090,7 +2090,11 @@ export interface components {
             /** Format: uuid */
             divisionId: string | null;
             member: boolean;
-            roleIds: string[];
+            roles: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            }[];
         };
         Session: {
             /** Format: uuid */
@@ -2286,6 +2290,7 @@ export interface components {
             userId: string;
             /** Format: uuid */
             roleId: string;
+            roleName: string;
             /** Format: uuid */
             grantedBy: string | null;
             /** Format: date-time */

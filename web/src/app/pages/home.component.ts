@@ -1,10 +1,11 @@
 import { TasksApi } from '../core/api/work.api';
+import { OrgApi } from '../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthStore } from '../core/auth.store';
 import { LookupStore } from '../core/lookup.store';
-import { Task, TaskStatus } from '../core/api.types';
+import { MyUnit, Task, TaskStatus } from '../core/api.types';
 import { errorMessage } from '../core/errors';
 import { UserAvatarComponent } from './tasks/user-avatar.component';
 import { TaskRowComponent } from './tasks/task-row.component';
@@ -14,10 +15,26 @@ const ACTIVE_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising'];
 const LEDGER_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising', 'approved'];
 
 
+interface UnitCard {
+  unit: MyUnit;
+  open: number | null;
+}
+
+interface WorkGroup {
+  key: string;
+  label: string;
+  unit: MyUnit | null;
+  tasks: Task[];
+}
+
 /**
  * Home dashboard. Shows the signed-in user's identity sheet with per-status counts, then
  * their claimed tasks as rows on a ruled sheet (`task-row`), with a status switcher and a
  * "Show done" toggle for approved tasks.
+ *
+ * "Your divisions and teams" has a card per unit you belong to or lead, and your
+ * claimed work is grouped under them: a task goes under its team if you're in that
+ * team, else under its division if you're in that, else under "Other".
  */
 @Component({
   standalone: true,
@@ -47,6 +64,27 @@ const LEDGER_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising', 'approve
           }
         </dl>
       </div>
+
+      <!-- Your units -->
+      @if (cards().length) {
+        <h2 class="font-display font-bold text-[18px] mb-2">Your divisions and teams</h2>
+        <div class="grid gap-3 mb-7" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr))">
+          @for (c of cards(); track c.unit.unitType + c.unit.unitId) {
+            <a [routerLink]="['/' + (c.unit.unitType === 'division' ? 'divisions' : 'teams'), c.unit.unitId]"
+               class="paper block px-4 py-3 relative overflow-hidden hover:bg-paper-hover">
+              <span class="absolute left-0 top-0 bottom-0 w-[3px]" [style.background]="unitColor(c.unit)"></span>
+              <div class="text-[13px] text-ink-soft">
+                @if (c.unit.unitType === 'team' && c.unit.divisionId) { Team in {{ lookup.divisionName(c.unit.divisionId) }} } @else { Division }
+                @if (c.unit.roles.length) { <span class="ml-2.5 font-bold text-ink">{{ roleNames(c.unit) }}</span> }
+              </div>
+              <div class="font-display font-bold text-[18px] leading-tight mt-0.5">{{ c.unit.name }}</div>
+              <div class="text-[13px] text-ink-soft mt-1">
+                @if (c.open !== null) { {{ c.open }} open, }{{ claimedIn(c.unit) }} claimed by you
+              </div>
+            </a>
+          }
+        </div>
+      }
 
       <!-- Section header + filters -->
       <div class="flex items-end justify-between gap-4 mb-3 flex-wrap border-b border-line">
@@ -87,9 +125,16 @@ const LEDGER_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising', 'approve
           </p>
         </div>
       } @else {
-        @if (activeTasks().length) {
+        @for (g of groups(); track g.key) {
+          @if (groups().length > 1) {
+            <h3 class="text-[13px] font-bold mt-4 mb-1.5">
+              @if (g.unit) {
+                <a [routerLink]="['/' + (g.unit.unitType === 'division' ? 'divisions' : 'teams'), g.unit.unitId]" class="hover:underline">{{ g.label }}</a>
+              } @else { {{ g.label }} }
+            </h3>
+          }
           <div class="sheet">
-            @for (t of activeTasks(); track t.id) { <task-row [task]="t" /> }
+            @for (t of g.tasks; track t.id) { <task-row [task]="t" /> }
           </div>
         }
 
@@ -112,6 +157,7 @@ const LEDGER_STATUSES: TaskStatus[] = ['claimed', 'review', 'revising', 'approve
 export class HomeComponent implements OnInit {
   readonly auth = inject(AuthStore);
   private readonly tasksApi = inject(TasksApi);
+  private readonly orgApi = inject(OrgApi);
   readonly lookup = inject(LookupStore);
 
   readonly tasks = signal<Task[]>([]);
@@ -119,6 +165,8 @@ export class HomeComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly statusFilter = signal<TaskStatus | null>(null);
   readonly showDone = signal(false);
+  readonly units = signal<MyUnit[]>([]);
+  readonly openByUnit = signal<Map<string, number>>(new Map());
 
   readonly ledger = LEDGER_STATUSES;
   readonly activeStatuses = ACTIVE_STATUSES;
@@ -136,6 +184,42 @@ export class HomeComponent implements OnInit {
   readonly activeCount = computed(() => this.tasks().filter((t) => t.statusCache !== 'approved').length);
   readonly approvedCount = computed(() => this.doneTasks().length);
 
+  readonly cards = computed<UnitCard[]>(() =>
+    this.units().map((unit) => ({ unit, open: this.openByUnit().get(unitKey(unit)) ?? null })),
+  );
+
+  /** Active work, grouped under your units (team first, then division, then Other). */
+  readonly groups = computed<WorkGroup[]>(() => {
+    const units = this.units();
+    const teams = new Map(units.filter((u) => u.unitType === 'team').map((u) => [u.unitId, u]));
+    const divisions = new Map(units.filter((u) => u.unitType === 'division').map((u) => [u.unitId, u]));
+    const groups = new Map<string, WorkGroup>();
+    for (const t of this.activeTasks()) {
+      const unit = (t.teamId ? teams.get(t.teamId) : undefined) ?? divisions.get(t.divisionId) ?? null;
+      const key = unit ? unitKey(unit) : 'other';
+      let g = groups.get(key);
+      if (!g) {
+        g = { key, label: unit ? unit.name : 'Other', unit, tasks: [] };
+        groups.set(key, g);
+      }
+      g.tasks.push(t);
+    }
+    const order = new Map(units.map((u, i) => [unitKey(u), i]));
+    return [...groups.values()].sort((a, b) => (order.get(a.key) ?? 1e9) - (order.get(b.key) ?? 1e9));
+  });
+
+  unitColor(u: MyUnit): string {
+    return this.lookup.divisionColor(u.unitType === 'division' ? u.unitId : (u.divisionId ?? ''));
+  }
+  roleNames(u: MyUnit): string {
+    return u.roles.map((r) => r.name).join(', ');
+  }
+  claimedIn(u: MyUnit): number {
+    return this.tasks().filter((t) =>
+      t.statusCache !== 'approved' && (u.unitType === 'division' ? t.divisionId === u.unitId : t.teamId === u.unitId),
+    ).length;
+  }
+
   statusCount(s: TaskStatus): number {
     return this.tasks().filter((t) => t.statusCache === s).length;
   }
@@ -147,18 +231,42 @@ export class HomeComponent implements OnInit {
     void this.load();
   }
 
+  /** Open counts per card, from each unit's stats (over the tasks you can see). */
+  private async loadOpenCounts(units: MyUnit[]): Promise<void> {
+    const entries = await Promise.all(
+      units.map(async (u) => {
+        try {
+          const s = await firstValueFrom(this.orgApi.unitStats(u.unitType, u.unitId));
+          return [unitKey(u), s.byStatus.open] as const;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    this.openByUnit.set(new Map(entries.filter((e): e is readonly [string, number] => e !== null)));
+  }
+
   private async load(): Promise<void> {
     const userId = this.auth.user()?.id;
     if (!userId) return;
     this.loading.set(true);
     try {
       await this.lookup.ensureLoaded();
-      const result = await firstValueFrom(this.tasksApi.listTasks({ claimant: userId }));
+      const [result, units] = await Promise.all([
+        firstValueFrom(this.tasksApi.listTasks({ claimant: userId })),
+        firstValueFrom(this.orgApi.myUnits()),
+      ]);
       this.tasks.set(result.items);
+      this.units.set(units);
+      void this.loadOpenCounts(units);
     } catch (e) {
       this.error.set(errorMessage(e));
     } finally {
       this.loading.set(false);
     }
   }
+}
+
+function unitKey(u: MyUnit): string {
+  return `${u.unitType}:${u.unitId}`;
 }

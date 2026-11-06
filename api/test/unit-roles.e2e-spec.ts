@@ -308,8 +308,8 @@ describe('Unit roles', () => {
     const res = await as(session)(http().get('/api/me/units'));
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
-      { unitType: 'division', unitId: artId, name: 'Art', divisionId: null, member: true, roleIds: [] },
-      { unitType: 'team', unitId: draftsTeamId, name: 'Drafts', divisionId: writingId, member: true, roleIds: [projectLeadId] },
+      { unitType: 'division', unitId: artId, name: 'Art', divisionId: null, member: true, roles: [] },
+      { unitType: 'team', unitId: draftsTeamId, name: 'Drafts', divisionId: writingId, member: true, roles: [{ id: projectLeadId, name: 'Project lead' }] },
     ]);
   });
 });

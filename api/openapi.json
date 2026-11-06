@@ -308,11 +308,24 @@
           "member": {
             "type": "boolean"
           },
-          "roleIds": {
+          "roles": {
             "type": "array",
             "items": {
-              "type": "string",
-              "format": "uuid"
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
             }
           }
         },
@@ -322,7 +335,7 @@
           "name",
           "divisionId",
           "member",
-          "roleIds"
+          "roles"
         ],
         "additionalProperties": false
       },
@@ -1078,6 +1091,9 @@
             "type": "string",
             "format": "uuid"
           },
+          "roleName": {
+            "type": "string"
+          },
           "grantedBy": {
             "type": [
               "string",
@@ -1094,6 +1110,7 @@
           "id",
           "userId",
           "roleId",
+          "roleName",
           "grantedBy",
           "createdAt"
         ],

@@ -193,7 +193,7 @@ export const Member = z
   .openapi('Member');
 
 export const UnitRoleAssignment = z
-  .object({ id, userId: id, roleId: id, grantedBy: id.nullable(), createdAt: timestamp })
+  .object({ id, userId: id, roleId: id, roleName: z.string(), grantedBy: id.nullable(), createdAt: timestamp })
   .strict()
   .openapi('UnitRoleAssignment');
 
@@ -206,7 +206,7 @@ export const MyUnit = z
     name: z.string(),
     divisionId: id.nullable(),
     member: z.boolean(),
-    roleIds: z.array(id),
+    roles: z.array(z.object({ id, name: z.string() }).strict()),
   })
   .strict()
   .openapi('MyUnit');

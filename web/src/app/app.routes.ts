@@ -42,6 +42,18 @@ export const routes: Routes = [
       import('./pages/tasks/task-detail.component').then((m) => m.TaskDetailComponent),
   },
   {
+    path: 'divisions/:id',
+    canActivate: [authGuard],
+    data: { kind: 'division' },
+    loadComponent: () => import('./pages/units/unit-page.component').then((m) => m.UnitPageComponent),
+  },
+  {
+    path: 'teams/:id',
+    canActivate: [authGuard],
+    data: { kind: 'team' },
+    loadComponent: () => import('./pages/units/unit-page.component').then((m) => m.UnitPageComponent),
+  },
+  {
     path: 'admin',
     canActivate: [authGuard, adminGuard],
     canDeactivate: [() => inject(UnsavedChangesService).confirmLeave()],

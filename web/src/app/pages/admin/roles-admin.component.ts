@@ -34,11 +34,19 @@ interface RoleMapping {
       <h2>Roles</h2>
       <div class="row">
         <input [(ngModel)]="newName" placeholder="New role name" />
+        <select [(ngModel)]="newKind" aria-label="Role kind"
+                title="An org role applies wherever its grants say. A unit role is assigned at a division or team, and its grants apply only there.">
+          <option value="org">Org role</option>
+          <option value="unit">Unit role</option>
+        </select>
+        @if (newKind === 'unit') {
+          <label class="inline-flex items-center gap-1.5"><input type="checkbox" [(ngModel)]="newLeads" /> Assignable by leads</label>
+        }
         <button [disabled]="busy() || !newName.trim()" (click)="create()">Create role</button>
       </div>
       @if (error()) { <p class="error">{{ error() }}</p> }
       <table>
-        <thead><tr><th>Name</th><th>Integration</th><th>State</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Kind</th><th>Integration</th><th>State</th><th></th></tr></thead>
         <tbody>
           @for (r of roles(); track r.id) {
             <tr [class.row--retired]="r.lifecycleState === 'retired'" [class.row--deactivated]="r.lifecycleState === 'deactivated'">
@@ -46,6 +54,16 @@ interface RoleMapping {
                 @if (r.lifecycleState === 'active') {
                   <input [(ngModel)]="r.name" (blur)="rename(r)" />
                 } @else { {{ r.name }} }
+              </td>
+              <td>
+                @if (r.kind === 'unit') {
+                  Unit role
+                  @if (r.lifecycleState === 'active') {
+                    <label class="inline-flex items-center gap-1.5 ml-3" title="Leads at a division or team may assign this role there">
+                      <input type="checkbox" [ngModel]="r.assignableByLeads" (ngModelChange)="setLeads(r, $event)" /> Assignable by leads
+                    </label>
+                  }
+                } @else { <span class="muted">Org role</span> }
               </td>
               <td>
                 @if (roleMappings(r.id); as maps) {
@@ -72,7 +90,7 @@ interface RoleMapping {
                 }
               </td>
             </tr>
-          } @empty { <tr><td colspan="4" class="muted">No roles.</td></tr> }
+          } @empty { <tr><td colspan="5" class="muted">No roles.</td></tr> }
         </tbody>
       </table>
     </div>
@@ -86,6 +104,8 @@ export class RolesAdminComponent {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   newName = '';
+  newKind: 'org' | 'unit' = 'org';
+  newLeads = false;
 
   constructor() {
     void this.refresh();
@@ -160,8 +180,9 @@ export class RolesAdminComponent {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await firstValueFrom(this.orgApi.createRole(this.newName.trim()));
+      await firstValueFrom(this.orgApi.createRole(this.newName.trim(), this.newKind, this.newLeads));
       this.newName = '';
+      this.newLeads = false;
       await this.refresh();
     } catch (e) {
       this.error.set(errorMessage(e));
@@ -180,6 +201,10 @@ export class RolesAdminComponent {
     }
   }
 
+
+  async setLeads(r: Role, value: boolean): Promise<void> {
+    await this.guard(() => firstValueFrom(this.orgApi.updateRole(r.id, { assignableByLeads: value })));
+  }
 
   async retire(r: Role): Promise<void> {
     await this.guard(() => firstValueFrom(this.orgApi.retireRole(r.id)));

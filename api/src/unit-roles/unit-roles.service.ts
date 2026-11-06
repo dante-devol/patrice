@@ -16,6 +16,7 @@ export interface UnitRoleAssignmentView {
   id: string;
   userId: string;
   roleId: string;
+  roleName: string;
   grantedBy: string | null;
   createdAt: Date;
 }
@@ -29,10 +30,20 @@ export interface MyUnitView {
   divisionId: string | null;
   member: boolean;
   /** The unit roles the caller holds there. */
-  roleIds: string[];
+  roles: { id: string; name: string }[];
 }
 
-const VIEW = { id: true, userId: true, roleId: true, grantedBy: true, createdAt: true } as const;
+const VIEW = {
+  id: true,
+  userId: true,
+  roleId: true,
+  grantedBy: true,
+  createdAt: true,
+  role: { select: { name: true } },
+} as const;
+
+type ViewRow = { id: string; userId: string; roleId: string; grantedBy: string | null; createdAt: Date; role: { name: string } };
+const toView = ({ role, ...a }: ViewRow): UnitRoleAssignmentView => ({ ...a, roleName: role.name });
 
 const ASSIGN_ACTION: Record<UnitType, string> = {
   division: ACTIONS.divisionAssignRoles.action,
@@ -94,11 +105,12 @@ export class UnitRolesService {
   /** Who holds which unit role at the unit (the leadership list). */
   async list(unitType: UnitType, unitId: string): Promise<UnitRoleAssignmentView[]> {
     await this.loadUnit(unitType, unitId);
-    return this.prisma.unitRoleAssignment.findMany({
+    const rows = await this.prisma.unitRoleAssignment.findMany({
       where: this.unitWhere(unitType, unitId),
       orderBy: { createdAt: 'asc' },
       select: VIEW,
     });
+    return rows.map(toView);
   }
 
   /** The unit roles the caller may assign at the unit (feeds the role picker). */
@@ -141,7 +153,7 @@ export class UnitRolesService {
 
     const where = { userId: dto.userId, roleId: role.id, ...this.unitWhere(unitType, unitId) };
     const existing = await this.prisma.unitRoleAssignment.findFirst({ where, select: VIEW });
-    if (existing) return existing; // idempotent
+    if (existing) return toView(existing); // idempotent
 
     const created = await this.prisma.$transaction(async (tx) => {
       const a = await tx.unitRoleAssignment.create({ data: { ...where, grantedBy: actorUserId }, select: VIEW });
@@ -164,7 +176,7 @@ export class UnitRolesService {
       return a;
     });
     await this.events.deliver();
-    return created;
+    return toView(created);
   }
 
   async unassign(unitType: UnitType, unitId: string, assignmentId: string, actorUserId: string): Promise<void> {
@@ -203,7 +215,7 @@ export class UnitRolesService {
       this.prisma.unitRoleAssignment.findMany({
         where: { userId, role: { lifecycleState: LifecycleState.active } },
         select: {
-          roleId: true,
+          role: { select: { id: true, name: true } },
           division: { select: { id: true, name: true, lifecycleState: true } },
           team: { select: { id: true, name: true, divisionId: true, lifecycleState: true } },
         },
@@ -218,7 +230,7 @@ export class UnitRolesService {
       const key = `${unitType}:${u.id}`;
       let v = units.get(key);
       if (!v) {
-        v = { unitType, unitId: u.id, name: u.name, divisionId: u.divisionId ?? null, member: false, roleIds: [] };
+        v = { unitType, unitId: u.id, name: u.name, divisionId: u.divisionId ?? null, member: false, roles: [] };
         units.set(key, v);
       }
       return v;
@@ -229,7 +241,7 @@ export class UnitRolesService {
     }
     for (const a of assignments) {
       const v = a.division ? upsert(a.division, 'division') : a.team ? upsert(a.team, 'team') : null;
-      if (v && !v.roleIds.includes(a.roleId)) v.roleIds.push(a.roleId);
+      if (v && !v.roles.some((r) => r.id === a.role.id)) v.roles.push(a.role);
     }
     return [...units.values()].sort((x, y) => x.name.localeCompare(y.name));
   }

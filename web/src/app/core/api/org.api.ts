@@ -1,6 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiClient, RequestBody } from './client';
 
+export type UnitKind = 'division' | 'team';
+
 const retired = (includeRetired: boolean) => (includeRetired ? { include: 'retired' as const } : undefined);
 
 /** Roles, divisions, teams and their memberships. */
@@ -12,8 +14,8 @@ export class OrgApi {
   listRoles(includeRetired = false) {
     return this.api.get('/roles', { query: retired(includeRetired) });
   }
-  createRole(name: string) {
-    return this.api.post('/roles', { name });
+  createRole(name: string, kind: 'org' | 'unit' = 'org', assignableByLeads?: boolean) {
+    return this.api.post('/roles', { name, kind, ...(kind === 'unit' && assignableByLeads ? { assignableByLeads } : {}) });
   }
   updateRole(id: string, body: RequestBody<'/roles/{id}', 'patch'>) {
     return this.api.patch('/roles/{id}', body, { path: { id } });
@@ -49,6 +51,42 @@ export class OrgApi {
   }
   removeDivisionMember(id: string, userId: string) {
     return this.api.delete('/divisions/{id}/members/{userId}', { path: { id, userId } });
+  }
+
+  /** The divisions and teams the caller belongs to or leads. */
+  myUnits() {
+    return this.api.get('/me/units');
+  }
+
+  // ---- Unit roles and stats, by unit kind (the division and team pages)
+  listRoleAssignments(kind: UnitKind, id: string) {
+    return kind === 'division'
+      ? this.api.get('/divisions/{id}/role-assignments', { path: { id } })
+      : this.api.get('/teams/{id}/role-assignments', { path: { id } });
+  }
+  /** The unit roles the caller may assign there; empty means no leadership controls. */
+  assignableRoles(kind: UnitKind, id: string) {
+    return kind === 'division'
+      ? this.api.get('/divisions/{id}/assignable-roles', { path: { id } })
+      : this.api.get('/teams/{id}/assignable-roles', { path: { id } });
+  }
+  assignRole(kind: UnitKind, id: string, userId: string, roleId: string) {
+    return kind === 'division'
+      ? this.api.post('/divisions/{id}/role-assignments', { userId, roleId }, { path: { id } })
+      : this.api.post('/teams/{id}/role-assignments', { userId, roleId }, { path: { id } });
+  }
+  unassignRole(kind: UnitKind, id: string, assignmentId: string) {
+    return kind === 'division'
+      ? this.api.delete('/divisions/{id}/role-assignments/{assignmentId}', { path: { id, assignmentId } })
+      : this.api.delete('/teams/{id}/role-assignments/{assignmentId}', { path: { id, assignmentId } });
+  }
+  unitStats(kind: UnitKind, id: string) {
+    return kind === 'division'
+      ? this.api.get('/divisions/{id}/stats', { path: { id } })
+      : this.api.get('/teams/{id}/stats', { path: { id } });
+  }
+  listUnitMembers(kind: UnitKind, id: string) {
+    return kind === 'division' ? this.listDivisionMembers(id) : this.listTeamMembers(id);
   }
 
   // ---- Teams
