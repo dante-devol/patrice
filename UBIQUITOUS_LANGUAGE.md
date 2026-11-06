@@ -19,7 +19,10 @@ described in [`docs/architecture.md`](docs/architecture.md). The action vocabula
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
 | **Organization** | The singleton owner of all data and configuration in a deployment. | Tenant, Workspace, Account |
-| **Role** | The authorization atom: it holds Grants, and a User may hold many. Roles carry no unit; belonging to a unit is a Membership. | Group, Permission Set (Discord roles are external groups, not Roles) |
+| **Role** | The authorization atom: it holds Grants, and a User may hold many. An **Org Role** is held org-wide; a **Unit Role** is held at a division or team. Belonging to a unit is a Membership. | Group, Permission Set (Discord roles are external groups, not Roles) |
+| **Unit Role** | A Role assigned to a User *at* a Division or Team (a Unit Role Assignment). Its grants use the `assigned` scope and apply only there; a division assignment covers its teams. Project lead is the seeded one. | Project Role, Scoped Role, Lead Role |
+| **Unit Role Assignment** | One User holding one Unit Role at one Division or Team. Assigning adds Membership if missing; unassigning keeps it. | Membership (that grants nothing), Appointment |
+| **Assignable by leads** | A Unit Role flag: people who hold `*:assign_roles` through a unit role may assign it. Admins can assign any Unit Role. | Delegable, Lead-grantable |
 | **Membership** | A User's belonging to a Division or Team (a `membership` row). It grants nothing by itself; `own_division`/`own_team` scopes and claim restrictions read it. | Assignment, Enrollment, Inherent Role (gone) |
 | **Division** | The core axis of *labor* (Writing, Art, Testing…); keeps a Template Library, may allow Custom Templates, and is a permission scope. | Department, Category |
 | **Team** | A grouping inside exactly one Division (e.g. "USA") that *may* restrict who claims its tasks. | Squad, Subdivision, Group |
