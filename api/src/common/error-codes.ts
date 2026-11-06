@@ -21,6 +21,7 @@ export const ERROR_CODES = {
   // 404
   NOT_FOUND: { status: 404, description: 'Not found' },
   RECORD_NOT_FOUND: { status: 404, description: 'The record was removed while the request ran' },
+  ASSIGNMENT_NOT_FOUND: { status: 404, description: 'Unit role assignment not found' },
   ATTACHMENT_NOT_FOUND: { status: 404, description: 'Attachment not found' },
   CLAIMANT_NOT_FOUND: { status: 404, description: 'That user does not hold a seat on this task' },
   CONNECTION_NOT_FOUND: { status: 404, description: 'Integration connection not found' },
@@ -100,6 +101,9 @@ export const ERROR_CODES = {
   NOT_LINKED: { status: 422, description: 'The account is not linked' },
   REPLY_TO_REPLY: { status: 422, description: 'Threads are one level deep' },
   ROLE_RETIRED: { status: 422, description: 'Role is retired' },
+  NOT_A_UNIT_ROLE: { status: 422, description: 'That role is not a unit role' },
+  UNIT_ROLE_NOT_GRANTABLE: { status: 422, description: 'A unit role is assigned at a division or team, not held org-wide' },
+  UNIT_ROLE_SCOPE: { status: 422, description: 'A unit role takes only unit actions at the assigned scope; org roles cannot use that scope' },
   WRONG_PASSWORD: { status: 422, description: 'The current password is wrong' },
 
   // 429

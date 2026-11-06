@@ -19,7 +19,7 @@ const nullableTimestamp = timestamp.nullable();
 
 export const Lifecycle = z.enum(['active', 'deactivated', 'retired']).openapi('Lifecycle');
 export const ScopeKind = z
-  .enum(['global', 'own', 'own_division', 'own_team', 'specific_division', 'specific_team', 'role'])
+  .enum(['global', 'own', 'own_division', 'own_team', 'specific_division', 'specific_team', 'role', 'assigned'])
   .openapi('ScopeKind');
 export const QuestionType = z
   .enum(['detail_text', 'multiline', 'text', 'numeric', 'dropdown', 'radio', 'attachment'])
@@ -123,6 +123,7 @@ export const AdminUser = z
     displayName: z.string(),
     lifecycleState: Lifecycle,
     roleIds: z.array(id),
+    unitRoles: z.array(z.object({ id, roleId: id, unitType: z.enum(['division', 'team']), unitId: id }).strict()),
     avatarUrl: z.string().nullable(),
   })
   .strict()
@@ -149,6 +150,8 @@ export const Role = z
   .object({
     id,
     name: z.string(),
+    kind: z.enum(['org', 'unit']),
+    assignableByLeads: z.boolean(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
@@ -224,6 +227,45 @@ export const Memberships = z
   })
   .strict()
   .openapi('Memberships');
+
+export const UnitRoleAssignment = z
+  .object({ id, userId: id, roleId: id, roleName: z.string(), grantedBy: id.nullable(), createdAt: timestamp })
+  .strict()
+  .openapi('UnitRoleAssignment');
+
+export const AssignableRole = z.object({ id, name: z.string() }).strict().openapi('AssignableRole');
+
+export const MyUnit = z
+  .object({
+    unitType: z.enum(['division', 'team']),
+    unitId: id,
+    name: z.string(),
+    divisionId: id.nullable(),
+    member: z.boolean(),
+    roles: z.array(z.object({ id, name: z.string() }).strict()),
+  })
+  .strict()
+  .openapi('MyUnit');
+
+const days = z.number().nullable();
+export const UnitStats = z
+  .object({
+    from: timestamp,
+    to: timestamp,
+    truncated: z.boolean(),
+    byStatus: z.object({ open: z.number().int(), claimed: z.number().int(), review: z.number().int(), revising: z.number().int(), approved: z.number().int() }).strict(),
+    completed: z.number().int(),
+    retired: z.number().int(),
+    weekly: z.array(z.object({ weekStart: timestamp, created: z.number().int(), completed: z.number().int() }).strict()),
+    medianDaysToComplete: days,
+    openAge: z.object({ medianDays: days, oldestDays: days }).strict(),
+    medianReviewDays: days,
+    teams: z
+      .array(z.object({ teamId: id, name: z.string(), open: z.number().int(), completed: z.number().int() }).strict())
+      .optional(),
+  })
+  .strict()
+  .openapi('UnitStats');
 
 export const Grant = z
   .object({

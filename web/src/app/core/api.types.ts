@@ -46,6 +46,11 @@ export type MembershipChange = JsonBody<'batchMemberships'>['changes'][number];
 /** Another admin's editing state on an admin page (an `admin-presence` stream event). */
 export type AdminPresence = Schemas['AdminPresenceEvent'];
 export type AdminPage = AdminPresence['page'];
+export type UnitRoleAssignment = Schemas['UnitRoleAssignment'];
+export type AssignableRole = Schemas['AssignableRole'];
+export type MyUnit = Schemas['MyUnit'];
+export type UnitStats = Schemas['UnitStats'];
+export type Member = Schemas['Member'];
 
 export type ChoiceOption = Schemas['ChoiceOption'];
 export type QuestionConstraints = Schemas['QuestionConstraints'];

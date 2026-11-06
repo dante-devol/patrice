@@ -2,6 +2,7 @@ import { OrgApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Division } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
@@ -26,7 +27,7 @@ interface Fields {
 @Component({
   selector: 'divisions-admin',
   standalone: true,
-  imports: [FormsModule, RequestTemplateBuilderComponent, SaveBarComponent],
+  imports: [FormsModule, RouterLink, RequestTemplateBuilderComponent, SaveBarComponent],
   template: `
     <div class="panel">
       <h2>Divisions</h2>
@@ -71,6 +72,7 @@ interface Fields {
                 @else { <span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span> }
               </td>
               <td>
+                <a class="quiet" [routerLink]="['/divisions', d.id]">Open page</a>
                 <button class="secondary" (click)="toggleRequestTemplate(d.id)">
                   {{ openRequestTemplate() === d.id ? 'Hide request template' : 'Request template' }}
                 </button>

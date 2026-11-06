@@ -48,6 +48,8 @@ const users = [
 ].map(([id, displayName]) => ({
   id, email: `${displayName.toLowerCase()}@example.com`, displayName, lifecycleState: 'active', avatarUrl: null,
   roleIds: id === 'u-devin' ? ['r-admin'] : id === 'u-maya' ? ['r-lead'] : [],
+  // Unit roles held at a division or team (only Maya leads somewhere).
+  unitRoles: id === 'u-maya' ? [{ id: 'ua-1', roleId: 'r-dlead', unitType: 'division', unitId: 'd-writing' }] : [],
 }));
 
 // Division and team membership for the Users tab's membership editor.
@@ -125,7 +127,10 @@ const messages = [
   ] }),
 ];
 
-const role = (id, name, kind, extra = {}) => ({ id, name, kind, divisionId: null, teamId: null, lifecycleState: 'active', retiredAt: null, version: 1, color: null, ...extra });
+const role = (id, name, kind, extra = {}) => ({
+  id, name, kind: kind === 'unit' ? 'unit' : 'org', assignableByLeads: false, divisionId: null, teamId: null,
+  lifecycleState: 'active', retiredAt: null, version: 1, color: null, ...extra,
+});
 // Enough roles to show the permissions editor at the scale it's built for (25+).
 const roles = [
   role('r-admin', 'Org Admin', 'standalone'),
@@ -134,6 +139,8 @@ const roles = [
   role('r-mod', 'Moderator', 'standalone'),
   role('r-producer', 'Producer', 'standalone'),
   role('r-guest', 'Guest contributor', 'standalone'),
+  role('r-dlead', 'Lead', 'unit', { assignableByLeads: false }),
+  role('r-mentor', 'Mentor', 'unit', { assignableByLeads: true }),
   ...divisions.map((d) => role(`r-${d.id}`, d.name, 'division', { divisionId: d.id })),
   ...['USA', 'EU', 'Japan', 'Korea', 'Brazil', 'Voice cast', 'Combat', 'Narrative', 'UI', 'Audio', 'QA nights', 'Localization', 'Lore', 'Tools', 'Events', 'Community', 'Docs']
     .map((n, i) => role(`r-team-${i}`, n, 'team', { teamId: `t-${i}` })),

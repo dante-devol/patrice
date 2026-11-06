@@ -211,6 +211,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The divisions and teams you belong to or lead */
+        get: operations["myUnits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/sessions": {
         parameters: {
             query?: never;
@@ -1048,6 +1065,162 @@ export interface paths {
          * @description Gated by the `team:manage_members` action.
          */
         delete: operations["removeTeamMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/divisions/{id}/role-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who holds unit roles at a division
+         * @description Gated by the `division:read` action.
+         */
+        get: operations["listDivisionRoleAssignments"];
+        put?: never;
+        /** Assign a unit role at a division (adds membership if missing) */
+        post: operations["assignDivisionRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/divisions/{id}/assignable-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The unit roles you may assign at a division
+         * @description Gated by the `division:read` action.
+         */
+        get: operations["divisionAssignableRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/divisions/{id}/role-assignments/{assignmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a unit role assignment at a division (membership stays) */
+        delete: operations["unassignDivisionRole"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/role-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who holds unit roles at a team
+         * @description Gated by the `team:read` action.
+         */
+        get: operations["listTeamRoleAssignments"];
+        put?: never;
+        /** Assign a unit role at a team (adds membership if missing) */
+        post: operations["assignTeamRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/assignable-roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The unit roles you may assign at a team
+         * @description Gated by the `team:read` action.
+         */
+        get: operations["teamAssignableRoles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/role-assignments/{assignmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a unit role assignment at a team (membership stays) */
+        delete: operations["unassignTeamRole"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/divisions/{id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A division's stats (with its teams), over the tasks you can see
+         * @description Gated by the `division:read` action.
+         */
+        get: operations["divisionStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A team's stats, over the tasks you can see
+         * @description Gated by the `team:read` action.
+         */
+        get: operations["teamStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1921,7 +2094,7 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_MEMBERSHIP" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ASSIGNMENT_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_MEMBERSHIP" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "NOT_A_UNIT_ROLE" | "UNIT_ROLE_NOT_GRANTABLE" | "UNIT_ROLE_SCOPE" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
@@ -1972,6 +2145,21 @@ export interface components {
         Ok: {
             /** @enum {boolean} */
             ok: true;
+        };
+        MyUnit: {
+            /** @enum {string} */
+            unitType: "division" | "team";
+            /** Format: uuid */
+            unitId: string;
+            name: string;
+            /** Format: uuid */
+            divisionId: string | null;
+            member: boolean;
+            roles: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            }[];
         };
         Session: {
             /** Format: uuid */
@@ -2025,6 +2213,16 @@ export interface components {
             displayName: string;
             lifecycleState: components["schemas"]["Lifecycle"];
             roleIds: string[];
+            unitRoles: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                roleId: string;
+                /** @enum {string} */
+                unitType: "division" | "team";
+                /** Format: uuid */
+                unitId: string;
+            }[];
             avatarUrl: string | null;
         };
         OrgSettings: {
@@ -2042,6 +2240,9 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /** @enum {string} */
+            kind: "org" | "unit";
+            assignableByLeads: boolean;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
             retiredAt: string | null;
@@ -2052,7 +2253,7 @@ export interface components {
             updatedAt: string;
         };
         /** @enum {string} */
-        ScopeKind: "global" | "own" | "own_division" | "own_team" | "specific_division" | "specific_team" | "role";
+        ScopeKind: "global" | "own" | "own_division" | "own_team" | "specific_division" | "specific_team" | "role" | "assigned";
         ActionInfo: {
             action: string;
             resourceType: string;
@@ -2178,6 +2379,59 @@ export interface components {
             source: "patrice" | "integration";
             /** Format: date-time */
             createdAt: string;
+        };
+        UnitRoleAssignment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            userId: string;
+            /** Format: uuid */
+            roleId: string;
+            roleName: string;
+            /** Format: uuid */
+            grantedBy: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AssignableRole: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        UnitStats: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            truncated: boolean;
+            byStatus: {
+                open: number;
+                claimed: number;
+                review: number;
+                revising: number;
+                approved: number;
+            };
+            completed: number;
+            retired: number;
+            weekly: {
+                /** Format: date-time */
+                weekStart: string;
+                created: number;
+                completed: number;
+            }[];
+            medianDaysToComplete: number | null;
+            openAge: {
+                medianDays: number | null;
+                oldestDays: number | null;
+            };
+            medianReviewDays: number | null;
+            teams?: {
+                /** Format: uuid */
+                teamId: string;
+                name: string;
+                open: number;
+                completed: number;
+            }[];
         };
         Team: {
             /** Format: uuid */
@@ -3054,6 +3308,35 @@ export interface operations {
             };
         };
     };
+    myUnits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The divisions and teams you belong to or lead */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyUnit"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listMySessions: {
         parameters: {
             query?: never;
@@ -3871,6 +4154,9 @@ export interface operations {
             content: {
                 "application/json": {
                     name: string;
+                    /** @enum {string} */
+                    kind?: "org" | "unit";
+                    assignableByLeads?: boolean;
                 };
             };
         };
@@ -3907,7 +4193,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    name: string;
+                    name?: string;
+                    assignableByLeads?: boolean;
                     version?: number;
                 };
             };
@@ -4072,7 +4359,7 @@ export interface operations {
                      */
                     effect?: "permit" | "forbid";
                     /** @enum {string} */
-                    scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role";
+                    scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role" | "assigned";
                     /** Format: uuid */
                     scopeDivisionId?: string | null;
                     /** Format: uuid */
@@ -4123,7 +4410,7 @@ export interface operations {
                          */
                         effect?: "permit" | "forbid";
                         /** @enum {string} */
-                        scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role";
+                        scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role" | "assigned";
                         /** Format: uuid */
                         scopeDivisionId?: string | null;
                         /** Format: uuid */
@@ -4141,7 +4428,7 @@ export interface operations {
                         /** @enum {string} */
                         effect?: "permit" | "forbid";
                         /** @enum {string} */
-                        scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role";
+                        scopeKind: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role" | "assigned";
                         /** Format: uuid */
                         scopeDivisionId?: string | null;
                         /** Format: uuid */
@@ -4224,7 +4511,7 @@ export interface operations {
                     /** @enum {string} */
                     effect?: "permit" | "forbid";
                     /** @enum {string} */
-                    scopeKind?: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role";
+                    scopeKind?: "global" | "specific_division" | "specific_team" | "own_division" | "own_team" | "own" | "role" | "assigned";
                     /** Format: uuid */
                     scopeDivisionId?: string | null;
                     /** Format: uuid */
@@ -5054,6 +5341,338 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listDivisionRoleAssignments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Who holds unit roles at a division */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitRoleAssignment"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    assignDivisionRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                    /** Format: uuid */
+                    roleId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Assign a unit role at a division (adds membership if missing) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitRoleAssignment"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    divisionAssignableRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The unit roles you may assign at a division */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignableRole"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    unassignDivisionRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                assignmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    listTeamRoleAssignments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Who holds unit roles at a team */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitRoleAssignment"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    assignTeamRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    userId: string;
+                    /** Format: uuid */
+                    roleId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Assign a unit role at a team (adds membership if missing) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitRoleAssignment"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    teamAssignableRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The unit roles you may assign at a team */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignableRole"][];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    unassignTeamRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                assignmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    divisionStats: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A division's stats (with its teams), over the tasks you can see */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitStats"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    teamStats: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A team's stats, over the tasks you can see */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitStats"];
+                };
             };
             /** @description An error; `error.code` is one of `ErrorCode` */
             default: {

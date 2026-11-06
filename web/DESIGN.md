@@ -159,9 +159,10 @@ A task row, left to right:
 - **Users**: the same two-list shape as Permissions. Left: Overall, then each division
   with its teams indented beneath it, each carrying its colour edge and a member count.
   Right: Overall lists everyone with role chips (× to take away, **Give a role** as a
-  dashed picker) and account state; a division or team lists its members with **Add
-  someone** and **Remove**. A membership made by a Discord sync carries a dashed
-  "Synced" tag.
+  dashed picker, org roles only) and account state, plus each unit role as "Lead at
+  Writing" to take away; a division or team lists its members with **Add someone** and
+  **Remove**, and each member's unit roles there with **Give a unit role**. A membership
+  made by a Discord sync carries a dashed "Synced" tag.
 - **Auth pages**: a single small sheet on the board, under the app header's wordmark. The "or" divider between password and Discord sign-in is a plain 1px `line`
   rule, not the margin rule. Continue with Discord is a secondary button with the Discord
   mark in its brand colour; no blurple fill.

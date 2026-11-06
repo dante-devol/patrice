@@ -17,6 +17,8 @@ export const scopeKindSchema = z.enum([
   'own_team',
   'own',
   'role',
+  // Unit roles only: wherever the role is assigned.
+  'assigned',
 ]);
 
 export const createGrantSchema = z

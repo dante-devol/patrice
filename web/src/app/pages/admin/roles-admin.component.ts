@@ -18,7 +18,7 @@ interface RoleMapping {
   isBroken: boolean;
 }
 
-/** Role list/editor. New roles, renames and retire/revive are staged until Save. */
+/** Role list/editor. New roles (org or unit), renames, leads-assignable and retire/revive are staged until Save. */
 @Component({
   selector: 'roles-admin',
   standalone: true,
@@ -41,11 +41,23 @@ interface RoleMapping {
       </div>
       @if (loadError()) { <p class="error">{{ loadError() }}</p> }
       <table>
-        <thead><tr><th>Name</th><th>Integration</th><th>State</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Kind</th><th>Integration</th><th>State</th><th></th></tr></thead>
         <tbody>
           @for (c of rows.creates(); track c.key) {
             <tr class="is-staged">
               <td><input [ngModel]="c.fields.name" (ngModelChange)="rows.updateCreate(c.key, 'name', $event)" placeholder="New role name" aria-label="Name" /></td>
+              <td>
+                <select [ngModel]="c.fields.kind" (ngModelChange)="rows.updateCreate(c.key, 'kind', $event)" aria-label="Role kind"
+                        title="An org role applies wherever its grants say. A unit role is assigned at a division or team, and its grants apply only there.">
+                  <option value="org">Org role</option>
+                  <option value="unit">Unit role</option>
+                </select>
+                @if (c.fields.kind === 'unit') {
+                  <label class="inline-flex items-center gap-1.5 ml-3" title="Leads at a division or team may assign this role there">
+                    <input type="checkbox" [ngModel]="c.fields.assignableByLeads" (ngModelChange)="rows.updateCreate(c.key, 'assignableByLeads', $event)" /> Assignable by leads
+                  </label>
+                }
+              </td>
               <td></td>
               <td><span class="staged-note">New, added on save</span></td>
               <td><button class="quiet" (click)="rows.removeCreate(c.key)">Remove</button></td>
@@ -58,6 +70,16 @@ interface RoleMapping {
                 @if (r.lifecycleState === 'active') {
                   <input [class.is-changed]="rows.isChanged(r, 'name')" [ngModel]="rows.value(r, 'name')" (ngModelChange)="rows.set(r, 'name', $event)" aria-label="Name" />
                 } @else { <span class="row-name">{{ r.name }}</span> }
+              </td>
+              <td>
+                @if (r.kind === 'unit') {
+                  Unit role
+                  @if (r.lifecycleState === 'active') {
+                    <label class="inline-flex items-center gap-1.5 ml-3" title="Leads at a division or team may assign this role there">
+                      <input type="checkbox" [class.is-changed]="rows.isChanged(r, 'assignableByLeads')" [ngModel]="rows.value(r, 'assignableByLeads')" (ngModelChange)="rows.set(r, 'assignableByLeads', $event)" /> Assignable by leads
+                    </label>
+                  }
+                } @else { <span class="muted">Org role</span> }
               </td>
               <td>
                 @if (roleMappings(r.id); as maps) {
@@ -89,7 +111,7 @@ interface RoleMapping {
                 }
               </td>
             </tr>
-          } @empty { <tr><td colspan="4" class="muted">No roles.</td></tr> }
+          } @empty { <tr><td colspan="5" class="muted">No roles.</td></tr> }
         </tbody>
       </table>
     </div>
@@ -101,9 +123,10 @@ export class RolesAdminComponent implements OnDestroy {
   private readonly integrationsApi = inject(IntegrationsApi);
   private readonly orgApi = inject(OrgApi);
   private readonly unsaved = inject(UnsavedChangesService);
-  readonly rows = new StagedRows<Role, { name: string }>(
-    (r) => ({ name: r.name }),
-    () => ({ name: '' }),
+  /** `kind` is picked when a role is added and fixed after; leads-assignable applies to unit roles only. */
+  readonly rows = new StagedRows<Role, { name: string; kind: 'org' | 'unit'; assignableByLeads: boolean }>(
+    (r) => ({ name: r.name, kind: r.kind, assignableByLeads: r.assignableByLeads }),
+    () => ({ name: '', kind: 'org', assignableByLeads: false }),
   );
   readonly mappingsByRole = signal<Map<string, RoleMapping[]>>(new Map());
   readonly busy = signal(false);
@@ -214,13 +237,17 @@ export class RolesAdminComponent implements OnDestroy {
     }
     const ops: StagedOp[] = [
       ...this.rows.creates().map((c) => ({
-        run: () => firstValueFrom(this.orgApi.createRole(c.fields.name.trim())),
+        run: () => firstValueFrom(this.orgApi.createRole(c.fields.name.trim(), c.fields.kind, c.fields.assignableByLeads)),
         clear: () => this.rows.removeCreate(c.key),
       })),
       ...Object.entries(this.rows.edits()).map(([id, patch]) => ({
         run: () => {
           const r = this.rows.saved().find((x) => x.id === id)!;
-          return firstValueFrom(this.orgApi.updateRole(id, { name: (patch.name ?? r.name).trim(), version: r.version }));
+          return firstValueFrom(this.orgApi.updateRole(id, {
+            name: (patch.name ?? r.name).trim(),
+            ...(r.kind === 'unit' && patch.assignableByLeads !== undefined ? { assignableByLeads: patch.assignableByLeads } : {}),
+            version: r.version,
+          }));
         },
         clear: () => this.rows.clearEdit(id),
       })),

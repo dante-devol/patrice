@@ -21,6 +21,8 @@ export class LookupStore {
 
   readonly divisionList = signal<Division[]>([]);
   readonly teamList = signal<Team[]>([]);
+  /** Active users by name, for people pickers. */
+  readonly userList = signal<{ id: string; displayName: string }[]>([]);
   private readonly divisionNames = signal<Map<string, string>>(new Map());
   private readonly teamNames = signal<Map<string, string>>(new Map());
   private readonly userNames = signal<Map<string, string>>(new Map());
@@ -55,6 +57,12 @@ export class LookupStore {
     this.teamList.set(teams);
     this.divisionNames.set(new Map(divs.map((d) => [d.id, d.name])));
     this.teamNames.set(new Map(teams.map((t) => [t.id, t.name])));
+    this.userList.set(
+      users
+        .filter((u) => u.lifecycleState === 'active')
+        .map((u) => ({ id: u.id, displayName: u.displayName }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName)),
+    );
     this.userNames.set(new Map(users.map((u) => [u.id, u.displayName])));
     this.userAvatars.set(new Map(users.map((u) => [u.id, u.avatarUrl])));
   }

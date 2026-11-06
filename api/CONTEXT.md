@@ -24,6 +24,10 @@ _Avoid_: Permission (that's the engine verdict), Policy (that's Cedar's term)
 One of five enums on `grant.scope_kind`: `global`, `specific_group` (a fixed division or team), `own_group` (any division or team the actor is a member of), `own` (the actor is the resource's owner), `role` (the granted role is pinned). The projector picks one Cedar template per shape — and for `own`, one template per resource owner-relation (see Own Family).
 _Avoid_: Permission Scope, Scope Type
 
+**Assigned Scope**:
+The `assigned` scope kind, used only by Unit Roles. A grant at `assigned` applies to resources in the divisions and teams where its role is assigned (a division covers its teams); the projector emits one policy per assignment unit. See ADR 0019.
+_Avoid_: Unit Scope, Lead Scope
+
 **Own Family**:
 The four Cedar templates the projector binds when a Grant's `scope_kind='own'`: `own_as_requester`, `own_as_claimant`, `own_as_sender`, `own_as_uploader`. Admins see only `own` in the matrix UI; the action→template map in the projector picks the right one.
 _Avoid_: Owner Templates, Ownership Policies

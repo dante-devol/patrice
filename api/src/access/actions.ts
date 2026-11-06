@@ -84,6 +84,8 @@ export const ACTIONS = {
   divisionRetire: { action: 'division:retire', resourceType: 'Division' },
   divisionRevive: { action: 'division:revive', resourceType: 'Division' },
   divisionManageMembers: { action: 'division:manage_members', resourceType: 'Division' },
+  /** Assign or unassign unit roles at the division (the resource carries the role). */
+  divisionAssignRoles: { action: 'division:assign_roles', resourceType: 'Division' },
   requestTemplateRead: { action: 'request_template:read', resourceType: 'Division' },
   requestTemplateCreate: { action: 'request_template:create', resourceType: 'Division' },
   requestTemplateUpdate: { action: 'request_template:update', resourceType: 'Division' },
@@ -99,6 +101,7 @@ export const ACTIONS = {
   teamRetire: { action: 'team:retire', resourceType: 'Team' },
   teamRevive: { action: 'team:revive', resourceType: 'Team' },
   teamManageMembers: { action: 'team:manage_members', resourceType: 'Team' },
+  teamAssignRoles: { action: 'team:assign_roles', resourceType: 'Team' },
   // ---- System.
   configUpdate: { action: 'config:update', resourceType: 'Organization' },
   /** See background jobs that exhausted their retries. */
@@ -117,6 +120,14 @@ export const ALL_ACTION_STRINGS: readonly string[] = Object.values(ACTIONS).map(
 /** Map action string → resource entity type. */
 export const RESOURCE_TYPE_BY_ACTION: Readonly<Record<string, CedarEntityType>> =
   Object.fromEntries(Object.values(ACTIONS).map((a) => [a.action, a.resourceType]));
+
+/** Resource types a unit role's grants may target: things that live inside a unit. */
+export const UNIT_SHAPED_RESOURCES: ReadonlySet<CedarEntityType> = new Set(['Task', 'Message', 'Attachment', 'Division', 'Team']);
+
+/** Actions a unit role may be granted. */
+export const UNIT_ROLE_ACTIONS: readonly string[] = Object.values(ACTIONS)
+  .filter((a) => UNIT_SHAPED_RESOURCES.has(a.resourceType))
+  .map((a) => a.action);
 
 /** Actions gated by `requireDiscordLink` (task access, reads included). */
 export const TASK_FAMILY_ACTIONS: readonly string[] = Object.values(ACTIONS)
@@ -174,3 +185,27 @@ export const MEMBER_SEED_GRANTS: ReadonlyArray<{ action: string; scopeKind: 'glo
   { action: 'task:manage_claims', scopeKind: 'own' },
   { action: 'task:configure_request_template', scopeKind: 'own' },
 ];
+
+/**
+ * The seeded "Project lead" unit role's starter grants (all scope `assigned`): run the
+ * unit's work, moderate its threads, shape the unit and its teams, keep its request
+ * templates, and appoint the unit roles admins mark assignable by leads.
+ */
+const PROJECT_LEAD_EXTRA = new Set([
+  'message:update',
+  'message:delete',
+  'attachment:delete',
+  'division:update',
+  'division:manage_members',
+  'team:create',
+  'team:update',
+  'team:manage_members',
+  'division:assign_roles',
+  'team:assign_roles',
+]);
+export const PROJECT_LEAD_SEED_ACTIONS: readonly string[] = UNIT_ROLE_ACTIONS.filter(
+  (a) =>
+    (a.startsWith('task:') && a !== 'task:bypass_discord_gate') ||
+    a.startsWith('request_template:') ||
+    PROJECT_LEAD_EXTRA.has(a),
+);

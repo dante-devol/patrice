@@ -20,6 +20,8 @@ export interface UserView {
   displayName: string;
   lifecycleState: LifecycleState;
   roleIds: string[];
+  /** Unit roles held at a division or team (ADR 0019); `id` is the assignment. */
+  unitRoles: { id: string; roleId: string; unitType: 'division' | 'team'; unitId: string }[];
   /** Discord avatar CDN URL when linked + a hash is known (#52). */
   avatarUrl: string | null;
 }
@@ -59,6 +61,10 @@ export class UsersService {
           displayName: true,
           lifecycleState: true,
           userRoles: { select: { roleId: true } },
+          unitRoles: {
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, roleId: true, divisionId: true, teamId: true },
+          },
           externalIdentities: {
             where: { externalAvatarHash: { not: null }, connection: { lifecycleState: 'active' } },
             orderBy: { lastSyncedAt: { sort: 'desc', nulls: 'last' } },
@@ -92,6 +98,12 @@ export class UsersService {
           : u.displayName,
       lifecycleState: u.lifecycleState,
       roleIds: u.userRoles.map((r) => r.roleId),
+      unitRoles: u.unitRoles.map((a) => ({
+        id: a.id,
+        roleId: a.roleId,
+        unitType: a.divisionId ? ('division' as const) : ('team' as const),
+        unitId: (a.divisionId ?? a.teamId)!,
+      })),
       avatarUrl: discordAvatarUrl(
         u.externalIdentities[0]?.externalUserId,
         u.externalIdentities[0]?.externalAvatarHash,
@@ -307,9 +319,12 @@ export class UsersService {
     const user = await this.loadUser(targetUserId);
     const role = await this.prisma.role.findFirst({
       where: { id: roleId },
-      select: { id: true, lifecycleState: true },
+      select: { id: true, lifecycleState: true, kind: true },
     });
     if (!role) throw new NotFoundError('ROLE_NOT_FOUND', 'Role not found');
+    if (role.kind === 'unit') {
+      throw new UnprocessableError('UNIT_ROLE_NOT_GRANTABLE', 'A unit role is assigned at a division or team, not held org-wide');
+    }
     // Retired things accept no new references.
     if (user.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('USER_RETIRED', 'User is retired');

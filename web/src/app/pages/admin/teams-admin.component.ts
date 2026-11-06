@@ -2,6 +2,7 @@ import { OrgApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Division, Team } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
@@ -24,7 +25,7 @@ interface Fields {
 @Component({
   selector: 'teams-admin',
   standalone: true,
-  imports: [FormsModule, SaveBarComponent],
+  imports: [FormsModule, RouterLink, SaveBarComponent],
   template: `
     <div class="panel">
       <h2>Teams</h2>

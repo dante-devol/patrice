@@ -27,6 +27,8 @@ export const NOTIFICATION_TYPES = [
   'message.submission_thread_replied',
   // Admin alert: an outbound Discord role push was refused (e.g. bot permissions).
   'integration.push_failed',
+  // You were given a unit role at a division or team.
+  'unit_role.assigned',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

@@ -67,6 +67,11 @@ queue's due jobs in-process before returning.
 - **Membership is not authority** (ADR 0007): belonging to a division or team is a
   `membership` row. Teams belong to exactly one division. Authority comes only from
   **Roles** holding **Grants** (action × scope × effect).
+- **Unit roles** (ADR 0019): a role is an org role or a unit role. A unit role is assigned
+  to a person at a division or team, and its grants (scope `assigned`) apply only there;
+  a division assignment covers its teams. Leads can assign only unit roles marked
+  assignable by leads. The division and team pages (`/divisions/:id`, `/teams/:id`) show
+  the unit's leadership, members, tasks and stats, counted over the tasks you can see.
 - **Cedar decides** every access question. Grants are projected to Cedar policies (cached
   per `config_version`); one `EntityLoader` builds every resource. Lists are filtered per
   row, and responses carry `allowedActions` so the web never guesses. Static policies add
@@ -78,7 +83,8 @@ queue's due jobs in-process before returning.
   would remain.
 - **Seeded roles** (ADR 0016): Admin holds every action globally (topped up when actions
   are added). Member holds the starter grants and is pre-assigned to invitations; an
-  upgraded install gives it to everyone already there.
+  upgraded install gives it to everyone already there. Project lead is a seeded unit
+  role, unassigned, that only admins can assign.
 
 ## 5. Work
 

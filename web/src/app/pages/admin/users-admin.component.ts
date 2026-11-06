@@ -13,6 +13,15 @@ import { StagedOp, isStale, runStaged, stagedErrorMessage } from './staged';
 
 type LifecycleOp = 'deactivate' | 'reactivate' | 'retire' | 'revive';
 
+/** A unit role as the editor shows it: saved (with its assignment id) or staged. */
+interface UnitRoleChip {
+  /** The assignment id when saved; the staged key when not. */
+  key: string;
+  roleId: string;
+  unit: UnitRef;
+  staged: 'added' | 'removed' | null;
+}
+
 const LIFECYCLE_NOTE: Record<LifecycleOp, string> = {
   deactivate: 'Deactivated on save',
   reactivate: 'Reactivated on save',
@@ -28,6 +37,9 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
  * belong to. A two-list editor: pick "Overall" (everyone, with roles and lifecycle) or a
  * division or team (its members, to add and remove). Every change is staged until Save;
  * membership changes save all-or-nothing through `POST /memberships/batch`.
+ *
+ * Org roles are given on Overall and apply org-wide. Unit roles are given to a member
+ * inside a division or team and apply only there; Overall lists them too, to take away.
  */
 @Component({
   selector: 'users-admin',
@@ -99,7 +111,7 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
           <div class="sheet">
             <div class="px-3 py-2.5">
               <div class="font-display font-bold text-[18px] leading-tight">Everyone</div>
-              <div class="text-ink-soft mt-0.5">{{ users().length }} people. Roles and account state are set here; pick a division or team to change who's in it.</div>
+              <div class="text-ink-soft mt-0.5">{{ users().length }} people. Org roles and account state are set here; pick a division or team to change who's in it and their unit roles there.</div>
             </div>
             @for (u of users(); track u.id) {
               @let lc = lifecycle()[u.id];
@@ -118,7 +130,19 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
                           <button (click)="revokeRole(u, rid)" [attr.aria-label]="'Take away ' + roleName(rid)">×</button>
                         }
                       </span>
-                    } @empty { <span class="text-ink-soft">No roles</span> }
+                    }
+                    @for (c of unitRoleChips(u); track c.key) {
+                      <span class="chip" [class.chip--added]="c.staged === 'added'" [class.chip--removed]="c.staged === 'removed'"
+                            [title]="unitRoleTitle(c)">
+                        {{ roleName(c.roleId) }} at {{ unitName(c.unit) }}
+                        @if (c.staged) {
+                          <button (click)="undoUnitRole(c)" [attr.aria-label]="'Undo ' + roleName(c.roleId) + ' at ' + unitName(c.unit)">undo</button>
+                        } @else {
+                          <button (click)="unassignUnitRole(c)" [attr.aria-label]="'Take away ' + roleName(c.roleId) + ' at ' + unitName(c.unit)">×</button>
+                        }
+                      </span>
+                    }
+                    @if (shownRoles(u).length === 0 && unitRoleChips(u).length === 0) { <span class="text-ink-soft">No roles</span> }
                     <select #rolePick class="pick pick--unset" (change)="grantRole(u, rolePick.value); rolePick.value = ''" aria-label="Give a role">
                       <option value="">Give a role</option>
                       @for (r of grantableRoles(u); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
@@ -175,6 +199,32 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
                 <div class="min-w-0 flex-1">
                   <span class="person-name">{{ u?.displayName ?? 'Unknown user' }}</span>
                   <span class="text-ink-soft"> {{ u?.email }}</span>
+                  @if (u) {
+                    @let chips = unitRoleChips(u, sel);
+                    @if (chips.length || (canManage && st !== 'removed' && unitRolesFor(u, sel).length)) {
+                      <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                        @for (c of chips; track c.key) {
+                          <span class="chip" [class.chip--added]="c.staged === 'added'" [class.chip--removed]="c.staged === 'removed'"
+                                [title]="unitRoleTitle(c)">
+                            {{ roleName(c.roleId) }}
+                            @if (c.staged) {
+                              <button (click)="undoUnitRole(c)" [attr.aria-label]="'Undo ' + roleName(c.roleId)">undo</button>
+                            } @else if (canManage) {
+                              <button (click)="unassignUnitRole(c)" [attr.aria-label]="'Take away ' + roleName(c.roleId)">×</button>
+                            }
+                          </span>
+                        }
+                        @if (canManage && st !== 'removed' && unitRolesFor(u, sel).length) {
+                          <select #unitRolePick class="pick pick--unset" (change)="assignUnitRole(u, unitRolePick.value, sel); unitRolePick.value = ''"
+                                  [attr.aria-label]="'Give ' + u.displayName + ' a unit role here'"
+                                  [title]="'A unit role applies only in this ' + sel.unitType + (sel.unitType === 'division' ? ' and its teams' : '')">
+                            <option value="">Give a unit role</option>
+                            @for (r of unitRolesFor(u, sel); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
+                          </select>
+                        }
+                      </div>
+                    }
+                  }
                 </div>
                 @if (memberships.source(sel, id) === 'integration') {
                   <span class="synced" title="Added by a Discord sync. Removing it here may be undone by the next sync unless the mapping changes.">Synced</span>
@@ -211,6 +261,10 @@ export class UsersAdminComponent implements OnDestroy {
   /** Staged role changes, keyed `userId|roleId`. */
   readonly roleGrants = signal<ReadonlySet<string>>(new Set());
   readonly roleRevokes = signal<ReadonlySet<string>>(new Set());
+  /** Staged unit-role assignments, keyed `userId|roleId|unitType|unitId`. */
+  readonly unitAssigns = signal<ReadonlySet<string>>(new Set());
+  /** Saved unit-role assignment ids staged to be taken away. */
+  readonly unitUnassigns = signal<ReadonlySet<string>>(new Set());
   readonly lifecycle = signal<Record<string, LifecycleOp>>({});
 
   readonly selected = signal<Pick>({ kind: 'overall' });
@@ -223,19 +277,25 @@ export class UsersAdminComponent implements OnDestroy {
   readonly teamColor = teamColor;
   readonly key = unitKey;
 
-  readonly count = computed(
-    () => this.memberships.count() + this.roleGrants().size + this.roleRevokes().size + Object.keys(this.lifecycle()).length,
+  private readonly userChangeCount = computed(
+    () =>
+      this.roleGrants().size +
+      this.roleRevokes().size +
+      this.unitAssigns().size +
+      this.unitUnassigns().size +
+      Object.keys(this.lifecycle()).length,
   );
-  readonly rolesOrLifecycleChanged = computed(
-    () => this.roleGrants().size + this.roleRevokes().size + Object.keys(this.lifecycle()).length > 0,
-  );
+  readonly count = computed(() => this.memberships.count() + this.userChangeCount());
+  readonly rolesOrLifecycleChanged = computed(() => this.userChangeCount() > 0);
   readonly where = computed(() => {
     const parts = [...this.memberships.changedUnits()].map((k) => {
       const [unitType, unitId] = k.split(':') as [UnitRef['unitType'], string];
       return this.unitName({ unitType, unitId });
     });
     const people = new Set(
-      [...this.roleGrants(), ...this.roleRevokes()].map((k) => k.split('|')[0]).concat(Object.keys(this.lifecycle())),
+      [...this.roleGrants(), ...this.roleRevokes(), ...this.unitAssigns()]
+        .map((k) => k.split('|')[0])
+        .concat(Object.keys(this.lifecycle()), [...this.unitUnassigns()].map((id) => this.assignmentOwner(id) ?? id)),
     ).size;
     if (people > 0) parts.push(`${people} ${people === 1 ? 'person' : 'people'}`);
     return parts.join(', ') || null;
@@ -345,7 +405,8 @@ export class UsersAdminComponent implements OnDestroy {
   }
   grantableRoles(u: AdminUser): Role[] {
     const held = new Set(this.shownRoles(u));
-    return this.roles().filter((r) => r.lifecycleState === 'active' && !held.has(r.id));
+    // Org roles only: a unit role is given inside a division or team.
+    return this.roles().filter((r) => r.kind === 'org' && r.lifecycleState === 'active' && !held.has(r.id));
   }
   grantRole(u: AdminUser, roleId: string): void {
     if (!roleId) return;
@@ -367,8 +428,58 @@ export class UsersAdminComponent implements OnDestroy {
   userChanged(u: AdminUser): boolean {
     return (
       u.id in this.lifecycle() ||
-      [...this.roleGrants(), ...this.roleRevokes()].some((k) => k.startsWith(`${u.id}|`))
+      [...this.roleGrants(), ...this.roleRevokes(), ...this.unitAssigns()].some((k) => k.startsWith(`${u.id}|`)) ||
+      u.unitRoles.some((a) => this.unitUnassigns().has(a.id))
     );
+  }
+
+  // ── Unit roles (staged) ────────────────────────────────────────────────
+
+  private assignKey(userId: string, roleId: string, unit: UnitRef): string {
+    return `${userId}|${roleId}|${unit.unitType}|${unit.unitId}`;
+  }
+  private sameUnit(a: UnitRef, b: UnitRef): boolean {
+    return a.unitType === b.unitType && a.unitId === b.unitId;
+  }
+  private assignmentOwner(id: string): string | undefined {
+    return this.users().find((u) => u.unitRoles.some((a) => a.id === id))?.id;
+  }
+  /** A person's unit roles, saved and staged, everywhere or at one unit. */
+  unitRoleChips(u: AdminUser, at?: UnitRef): UnitRoleChip[] {
+    const saved: UnitRoleChip[] = u.unitRoles.map((a) => ({
+      key: a.id,
+      roleId: a.roleId,
+      unit: { unitType: a.unitType, unitId: a.unitId },
+      staged: this.unitUnassigns().has(a.id) ? 'removed' : null,
+    }));
+    const added: UnitRoleChip[] = [...this.unitAssigns()]
+      .filter((k) => k.startsWith(`${u.id}|`))
+      .map((k) => {
+        const [, roleId, unitType, unitId] = k.split('|');
+        return { key: k, roleId, unit: { unitType: unitType as UnitRef['unitType'], unitId }, staged: 'added' as const };
+      });
+    const all = [...saved, ...added];
+    return at ? all.filter((c) => this.sameUnit(c.unit, at)) : all;
+  }
+  /** Active unit roles this person doesn't already hold (or have staged) at the unit. */
+  unitRolesFor(u: AdminUser, at: UnitRef): Role[] {
+    const held = new Set(this.unitRoleChips(u, at).filter((c) => c.staged !== 'removed').map((c) => c.roleId));
+    return this.roles().filter((r) => r.kind === 'unit' && r.lifecycleState === 'active' && !held.has(r.id));
+  }
+  unitRoleTitle(c: UnitRoleChip): string {
+    const where = c.unit.unitType === 'division' ? `${this.unitName(c.unit)} and its teams` : this.unitName(c.unit);
+    return `A unit role: its grants apply only in ${where}`;
+  }
+  assignUnitRole(u: AdminUser, roleId: string, at: UnitRef): void {
+    if (!roleId) return;
+    this.unitAssigns.set(new Set([...this.unitAssigns(), this.assignKey(u.id, roleId, at)]));
+  }
+  unassignUnitRole(c: UnitRoleChip): void {
+    this.unitUnassigns.set(new Set([...this.unitUnassigns(), c.key]));
+  }
+  undoUnitRole(c: UnitRoleChip): void {
+    this.unitAssigns.set(new Set([...this.unitAssigns()].filter((k) => k !== c.key)));
+    this.unitUnassigns.set(new Set([...this.unitUnassigns()].filter((k) => k !== c.key)));
   }
 
   // ── Memberships (staged) ───────────────────────────────────────────────
@@ -382,6 +493,8 @@ export class UsersAdminComponent implements OnDestroy {
   private discardUserChanges(): void {
     this.roleGrants.set(new Set());
     this.roleRevokes.set(new Set());
+    this.unitAssigns.set(new Set());
+    this.unitUnassigns.set(new Set());
     this.lifecycle.set({});
   }
 
@@ -409,8 +522,17 @@ export class UsersAdminComponent implements OnDestroy {
         clear: () => undefined,
       });
     }
-    // Then roles (revokes before grants) and lifecycle, each checked by the API as it lands;
-    // a revoke that would leave no admin is refused there.
+    // Then roles (take-aways before gives) and lifecycle, each checked by the API as it
+    // lands; a revoke that would leave no admin is refused there.
+    const dropAssign = (sig: typeof this.unitAssigns, k: string) => sig.set(new Set([...sig()].filter((x) => x !== k)));
+    for (const id of this.unitUnassigns()) {
+      const a = this.users().flatMap((u) => u.unitRoles).find((x) => x.id === id);
+      if (!a) continue;
+      ops.push({
+        run: () => firstValueFrom(this.orgApi.unassignRole(a.unitType, a.unitId, a.id)),
+        clear: () => dropAssign(this.unitUnassigns, id),
+      });
+    }
     for (const k of this.roleRevokes()) {
       const [userId, roleId] = k.split('|');
       ops.push({ run: () => firstValueFrom(this.accessApi.revokeUserRole(userId, roleId)), clear: () => drop(this.roleRevokes, k) });
@@ -418,6 +540,14 @@ export class UsersAdminComponent implements OnDestroy {
     for (const k of this.roleGrants()) {
       const [userId, roleId] = k.split('|');
       ops.push({ run: () => firstValueFrom(this.accessApi.grantUserRole(userId, roleId)), clear: () => drop(this.roleGrants, k) });
+    }
+    // A unit role also makes the person a member, so these follow the membership batch.
+    for (const k of this.unitAssigns()) {
+      const [userId, roleId, unitType, unitId] = k.split('|');
+      ops.push({
+        run: () => firstValueFrom(this.orgApi.assignRole(unitType as UnitRef['unitType'], unitId, userId, roleId)),
+        clear: () => dropAssign(this.unitAssigns, k),
+      });
     }
     for (const [userId, op] of Object.entries(this.lifecycle())) {
       ops.push({

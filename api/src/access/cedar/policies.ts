@@ -24,7 +24,8 @@ export interface ProjectableGrant {
     | 'own_team'
     | 'specific_division'
     | 'specific_team'
-    | 'role';
+    | 'role'
+    | 'assigned';
   scopeDivisionId: string | null;
   scopeTeamId: string | null;
   scopeRoleId: string | null;
@@ -146,6 +147,9 @@ function scopeCondition(g: ProjectableGrant): string {
       return ` when { resource has targetRole && resource.targetRole == ${roleRef(
         g.scopeRoleId ?? '',
       )} }`;
+    case 'assigned':
+      // Projected per unit assignment by grantToPolicies; never on its own.
+      throw new Error('An assigned-scope grant is projected per unit assignment');
     case 'own': {
       const when = OWN_WHEN_BY_ACTION[g.action];
       if (when) return ` when { ${when} }`;
@@ -159,6 +163,48 @@ function scopeCondition(g: ProjectableGrant): string {
       return ` when { resource has ${attr} && resource.${attr} == principal }`;
     }
   }
+}
+
+/** Where a unit role is assigned: a division (covering its teams) or one team. */
+export interface UnitPlacement {
+  unitType: 'division' | 'team';
+  unitId: string;
+}
+
+/** The Cedar id of a unit role as held at one unit. */
+export function unitRoleId(roleId: string, p: UnitPlacement): string {
+  return `${roleId}@${p.unitType}:${p.unitId}`;
+}
+
+/** Actions that assign unit roles; through a unit role they're limited to lead-assignable roles. */
+const ASSIGN_ROLE_ACTIONS = new Set(['division:assign_roles', 'team:assign_roles']);
+
+/**
+ * Project a grant to its Cedar policies. Most grants are one policy. A unit role's
+ * grant (scope `assigned`) becomes one policy per unit where the role is assigned:
+ * holders there are `in UnitRole::"<role>@<unit>"`, and the policy applies to
+ * resources in that unit. Its `*:assign_roles` grants also require the target role
+ * to be assignable by leads, so leads can't hand out roles admins keep for themselves.
+ */
+export function grantToPolicies(g: ProjectableGrant, placements: readonly UnitPlacement[] = []): string[] {
+  if (g.scopeKind !== 'assigned') return [grantToPolicy(g)];
+  return placements.map((p) => {
+    const unit =
+      p.unitType === 'division'
+        ? `resource has division && resource.division == ${divisionRef(p.unitId)}`
+        : `resource has team && resource.team == ${teamRef(p.unitId)}`;
+    const leads = ASSIGN_ROLE_ACTIONS.has(g.action)
+      ? ' && resource has targetRoleAssignableByLeads && resource.targetRoleAssignableByLeads'
+      : '';
+    return [
+      `@id("grant_${g.id}_${p.unitType}_${p.unitId}")`,
+      `${g.effect}(`,
+      `  principal in ${NS}::UnitRole::"${unitRoleId(g.roleId, p)}",`,
+      `  action == ${actionRef(g.action)},`,
+      `  resource`,
+      `) when { ${unit}${leads} };`,
+    ].join('\n');
+  });
 }
 
 /** Project a single grant row to one annotated Cedar policy. */

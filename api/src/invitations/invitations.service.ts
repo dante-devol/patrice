@@ -19,6 +19,7 @@ import {
   DeniedError,
   GoneError,
   NotFoundError,
+  UnprocessableError,
   ValidationError,
 } from '../common/errors';
 import { deriveInvitationStatus, InvitationStatus } from './invitation-status';
@@ -90,6 +91,11 @@ export class InvitationsService {
     actorUserId: string,
     roleIds: string[],
   ): Promise<void> {
+    // A unit role is assigned at a division or team, never pre-assigned org-wide.
+    const unitRoles = await this.prisma.role.count({ where: { id: { in: roleIds }, kind: 'unit' } });
+    if (unitRoles > 0) {
+      throw new UnprocessableError('UNIT_ROLE_NOT_GRANTABLE', 'A unit role is assigned at a division or team, not by invitation');
+    }
     for (const roleId of roleIds) {
       const allowed = await this.access.decide({
         userId: actorUserId,

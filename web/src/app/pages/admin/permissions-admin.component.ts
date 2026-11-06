@@ -38,8 +38,9 @@ import {
 type View = 'role' | 'action';
 
 /** Roles are one kind now: belonging to a division or team is a membership, not a role. */
-const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
-  { kind: 'standalone', name: 'Roles', label: 'Role' },
+const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
+  { kind: 'org', name: 'Org roles', label: 'Org role' },
+  { kind: 'unit', name: 'Unit roles', label: 'Unit role' },
 ];
 
 /**
@@ -222,7 +223,7 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
         <div class="flex flex-col items-end gap-1.5">
           @for (d of ds; track d.key; let last = $last) {
             <div class="flex flex-wrap justify-end items-center gap-1.5">
-              @if (last && a.scopes.length > 1) {
+              @if (last && scopesFor(roleId, a).length > 1) {
                 <button class="quiet add" (click)="addAnother(roleId, a)" aria-label="Add another scope"
                         title="Add another scope">+</button>
               }
@@ -232,7 +233,7 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
                         [attr.aria-description]="hint(d, a)"
                         [ngModel]="d.scopeKind" (ngModelChange)="setScope(d, $event)">
                   <option value="">Not granted</option>
-                  @for (s of a.scopes; track s) { <option [value]="s" [title]="scopeHintFor(s, a)">{{ scopeName(s, a) }}</option> }
+                  @for (s of scopesFor(roleId, a); track s) { <option [value]="s" [title]="scopeHintFor(s, a)">{{ scopeName(s, a) }}</option> }
                 </select>
               </span>
               @if (d.scopeKind === 'specific_division') {
@@ -260,7 +261,7 @@ const ROLE_KINDS: { kind: 'standalone'; name: string; label: string }[] = [
               <select class="pick pick--unset" [class.pick--changed]="changed" [attr.aria-label]="title + ' scope'"
                       [ngModel]="''" (ngModelChange)="add(roleId, a, $event)">
                 <option value="">Not granted</option>
-                @for (s of a.scopes; track s) { <option [value]="s" [title]="scopeHintFor(s, a)">{{ scopeName(s, a) }}</option> }
+                @for (s of scopesFor(roleId, a); track s) { <option [value]="s" [title]="scopeHintFor(s, a)">{{ scopeName(s, a) }}</option> }
               </select>
             </span>
           }
@@ -319,7 +320,7 @@ export class PermissionsAdminComponent implements OnDestroy {
     return ROLE_KINDS.map((k) => ({
       ...k,
       roles: this.activeRoles()
-        .filter((r) => !q || r.name.toLowerCase().includes(q))
+        .filter((r) => r.kind === k.kind && (!q || r.name.toLowerCase().includes(q)))
         .sort((a, b) => a.name.localeCompare(b.name)),
     })).filter((g) => g.roles.length > 0);
   });
@@ -336,7 +337,7 @@ export class PermissionsAdminComponent implements OnDestroy {
   readonly roleActionGroups = computed(() => {
     const role = this.selectedRoleId();
     if (!role) return [];
-    return groupActions(this.catalog())
+    return groupActions(this.catalog().filter((a) => this.scopesFor(role, a).length > 0))
       .map((g) => {
         const shown = g.actions.filter(
           (a) =>
@@ -362,7 +363,10 @@ export class PermissionsAdminComponent implements OnDestroy {
   });
   readonly nonHolders = computed(() => {
     const held = new Set(this.holders().map((r) => r.id));
-    return this.activeRoles().filter((r) => !held.has(r.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const a = this.selectedActionInfo();
+    return this.activeRoles()
+      .filter((r) => !held.has(r.id) && (!a || this.scopesFor(r.id, a).length > 0))
+      .sort((x, y) => x.name.localeCompare(y.name));
   });
 
   constructor() {
@@ -433,8 +437,17 @@ export class PermissionsAdminComponent implements OnDestroy {
   hint(d: DraftGrant, a: ActionInfo): string {
     return scopeHint(d.scopeKind, a, this.targetName(d) ?? undefined);
   }
-  kindLabel(_r: Role): string {
-    return 'Role';
+  kindLabel(r: Role): string {
+    return r.kind === 'unit' ? 'Unit role' : 'Org role';
+  }
+
+  /**
+   * The scopes a role may use for an action: a unit role only `assigned` (and only on
+   * unit actions), an org role everything else.
+   */
+  scopesFor(roleId: string, a: ActionInfo): ScopeKind[] {
+    const unit = this.activeRoles().find((r) => r.id === roleId)?.kind === 'unit';
+    return unit ? a.scopes.filter((s) => s === 'assigned') : a.scopes.filter((s) => s !== 'assigned');
   }
   /** Roles carry no unit colour any more (units are memberships). */
   roleEdge(_r: Role): string | null {
@@ -518,7 +531,8 @@ export class PermissionsAdminComponent implements OnDestroy {
 
   addAnother(roleId: string, a: ActionInfo): void {
     const used = new Set(this.cellDrafts(roleId, a.action).map((d) => d.scopeKind));
-    const scope = a.scopes.find((s) => !used.has(s) || isTargeted(s)) ?? a.scopes[0];
+    const scopes = this.scopesFor(roleId, a);
+    const scope = scopes.find((s) => !used.has(s) || isTargeted(s)) ?? scopes[0];
     this.edit((ds) => [...ds, this.newDraft(roleId, a.action, scope)]);
   }
 
@@ -538,7 +552,8 @@ export class PermissionsAdminComponent implements OnDestroy {
 
   grantToRole(a: ActionInfo, roleId: string): void {
     if (!roleId) return;
-    const scope = (['own', 'own_division', 'global'] as ScopeKind[]).find((s) => a.scopes.includes(s)) ?? a.scopes[0];
+    const scopes = this.scopesFor(roleId, a);
+    const scope = (['own', 'own_division', 'global', 'assigned'] as ScopeKind[]).find((s) => scopes.includes(s)) ?? scopes[0];
     this.add(roleId, a, scope);
   }
 

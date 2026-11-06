@@ -1,7 +1,7 @@
 import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
 import { TasksApi, TemplatesApi } from '../../core/api/work.api';
 import { firstValueFrom } from 'rxjs';
-import { Component, ViewChild, computed, inject, signal } from '@angular/core';
+import { Component, Input, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthStore } from '../../core/auth.store';
 import { LookupStore } from '../../core/lookup.store';
@@ -17,6 +17,10 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
  * filter — over keyset "load more" paging. Tasks sit as rows on one ruled sheet
  * (`task-row`, see web/DESIGN.md). "Request a task" reveals the inline create form (a task
  * is created by its requester). The API re-authorizes every create.
+ *
+ * Embedded on a division or team page, `division` / `team` preset the facets: the
+ * division switcher and (for a team) the team filter drop out, and the create form
+ * starts in that unit.
  */
 @Component({
   selector: 'task-list',
@@ -35,11 +39,15 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
       <main class="pb-12">
         <div class="flex items-center justify-between gap-4 mb-5 flex-wrap">
           <div class="flex items-baseline gap-3 flex-wrap">
-            <h1 class="font-display font-bold text-[28px] leading-tight">Work board</h1>
+            @if (embedded) {
+              <h2 class="font-display font-bold text-[18px] leading-tight">Tasks</h2>
+            } @else {
+              <h1 class="font-display font-bold text-[28px] leading-tight">Work board</h1>
+            }
             <span class="text-[13px] text-ink-soft">{{ openCount() }} open, {{ inFlightCount() }} in progress</span>
           </div>
           <button class="shrink-0 rounded bg-accent text-paper font-bold text-[13px] px-3.5 py-2 hover:bg-accent-ink"
-                  (click)="showCreate.set(!showCreate())">Request a task</button>
+                  (click)="toggleCreate()">Request a task</button>
         </div>
 
         <!-- Create form (a task is created by its requester). -->
@@ -105,6 +113,7 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
         }
 
         <!-- Division facets: the selected division is bold and underlined in its own hue. -->
+        @if (!division) {
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2 mb-3 text-[13px]">
           <button class="pb-0.5 border-b-2"
                   [class]="!filters.division ? 'border-ink text-ink font-bold' : 'border-transparent text-ink-soft hover:text-ink'"
@@ -117,6 +126,7 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
                     (click)="setDivision(d.id)">{{ d.name }}</button>
           }
         </div>
+        }
 
         <!-- Status switcher + team filter -->
         <div class="flex flex-wrap items-end justify-between gap-3 mb-3 text-[13px] border-b border-line">
@@ -130,13 +140,17 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
                       (click)="setStatus(s)">{{ statusLabel(s) }}</button>
             }
           </div>
-          <label class="flex items-center gap-2 pb-1.5 text-ink-soft">
-            <span>Team</span>
-            <select [(ngModel)]="filters.team" (ngModelChange)="reload()" class="text-ink border border-line rounded bg-paper px-2 py-0.5">
-              <option [ngValue]="undefined">All teams</option>
-              @for (t of lookup.teamList(); track t.id) { <option [ngValue]="t.id">{{ t.name }}</option> }
-            </select>
-          </label>
+          @if (!team) {
+            <label class="flex items-center gap-2 pb-1.5 text-ink-soft">
+              <span>Team</span>
+              <select [(ngModel)]="filters.team" (ngModelChange)="reload()" class="text-ink border border-line rounded bg-paper px-2 py-0.5">
+                <option [ngValue]="undefined">All teams</option>
+                @for (t of lookup.teamList(); track t.id) {
+                  @if (!division || t.divisionId === division) { <option [ngValue]="t.id">{{ t.name }}</option> }
+                }
+              </select>
+            </label>
+          }
         </div>
 
         @if (error()) { <p class="text-[13px] text-rust mb-3">{{ error() }}</p> }
@@ -168,7 +182,14 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
      .discord-gate a { cursor: pointer; font-weight: 700; margin-left: 4px; }`,
   ],
 })
-export class TaskListComponent {
+export class TaskListComponent implements OnInit {
+  /** Preset division facet (the division and team pages). */
+  @Input() division?: string;
+  /** Preset team facet (the team page). */
+  @Input() team?: string;
+  /** Shown inside another page: a section heading instead of the page title. */
+  @Input() embedded = false;
+
   private readonly tasksApi = inject(TasksApi);
   private readonly templatesApi = inject(TemplatesApi);
   private readonly auth = inject(AuthStore);
@@ -198,10 +219,24 @@ export class TaskListComponent {
   /** The API enforces requireDiscordLink; this only explains the empty board. */
   readonly discordGated = this.auth.taskAccessBlockedByDiscord;
 
-  constructor() {
+  ngOnInit(): void {
+    if (this.division) this.filters.division = this.division;
+    if (this.team) this.filters.team = this.team;
     // Refresh (not ensureLoaded) so a division/team added elsewhere this session shows up
     // in the facets + create-form options without a hard reload.
     void this.lookup.refresh().then(() => this.reload());
+  }
+
+  /** Open the create form; inside a unit page it starts in that unit. */
+  toggleCreate(): void {
+    const opening = !this.showCreate();
+    this.showCreate.set(opening);
+    if (opening && this.division && !this.newTask.divisionId) {
+      void this.divisionChosen(this.division).then(() => {
+        if (this.team) this.newTask.teamId = this.team;
+      });
+      this.newTask.divisionId = this.division;
+    }
   }
 
   linkDiscord(): void {

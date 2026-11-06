@@ -130,6 +130,9 @@ button.secondary:not(:where(.tasks-board *, .appshell *)):hover { background: va
 button.quiet { background: none; border: 0; padding: 4px 6px; color: var(--ink-soft); font-weight: 400; }
 button.quiet:not(:where(.tasks-board *, .appshell *)):hover { background: none; color: var(--ink); text-decoration: underline; }
 button.quiet.danger { color: var(--rust); }
+/* A quiet link ("Open page") looks like a quiet button. */
+a.quiet { display: inline-block; padding: 4px 6px; color: var(--ink-soft); font-size: 13px; text-decoration: none; }
+a.quiet:hover { color: var(--ink); text-decoration: underline; }
 button.quiet.danger:not(:where(.tasks-board *, .appshell *)):hover { color: var(--rust); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 /* Buttons laid out in a row or a table cell sit on the row's line, not 14px below it. */

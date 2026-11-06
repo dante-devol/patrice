@@ -46,6 +46,10 @@ export const domainEventPayloadSchemas = {
   'message.posted': z.object({ messageId: uuid, submissionId: uuid.optional() }).strict(),
   'message.replied': z.object({ messageId: uuid, parentMessageId: uuid }).strict(),
   'integration.push_failed': z.object({ connectionId: uuid, reason: z.string() }).strict(),
+  // Someone was given a unit role at a division or team (notifies them).
+  'unit_role.assigned': z
+    .object({ roleId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid })
+    .strict(),
 } as const;
 
 export type DomainEventType = keyof typeof domainEventPayloadSchemas;
