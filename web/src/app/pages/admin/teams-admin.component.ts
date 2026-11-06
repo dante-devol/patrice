@@ -2,6 +2,7 @@ import { OrgApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Division, Team } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { teamColor as computeTeamColor } from '../tasks/task-presentation';
@@ -10,7 +11,7 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
 @Component({
   selector: 'teams-admin',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   template: `
     <div class="panel">
       <h2>Teams</h2>
@@ -37,6 +38,7 @@ import { teamColor as computeTeamColor } from '../tasks/task-presentation';
                          (change)="save(t, { restrictClaims: t.restrictClaims })" /></td>
               <td><span [class]="lcStamp(t.lifecycleState)">{{ t.lifecycleState }}</span></td>
               <td>
+                <a class="quiet" [routerLink]="['/teams', t.id]">Open page</a>
                 @if (t.lifecycleState === 'active') {
                   <button class="quiet danger" (click)="retire(t)">Retire</button>
                 } @else if (t.lifecycleState === 'retired') {

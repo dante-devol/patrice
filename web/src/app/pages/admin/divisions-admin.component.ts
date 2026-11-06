@@ -2,6 +2,7 @@ import { OrgApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Division } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
@@ -11,7 +12,7 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
 @Component({
   selector: 'divisions-admin',
   standalone: true,
-  imports: [FormsModule, RequestTemplateBuilderComponent],
+  imports: [FormsModule, RouterLink, RequestTemplateBuilderComponent],
   template: `
     <div class="panel">
       <h2>Divisions</h2>
@@ -42,6 +43,7 @@ import { divisionColor as computeDivColor } from '../tasks/task-presentation';
                          (change)="save(d, { restrictClaims: d.restrictClaims })" /></td>
               <td><span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span></td>
               <td>
+                <a class="quiet" [routerLink]="['/divisions', d.id]">Open page</a>
                 <button class="secondary" (click)="toggleRequestTemplate(d.id)">
                   {{ openRequestTemplate() === d.id ? 'Hide request template' : 'Request template' }}
                 </button>
