@@ -78,9 +78,7 @@ export class EventStore {
     });
     const pinged = new Set<string>();
     for (const e of events) {
-      const subject = e.taskId
-        ? { subjectType: 'task', subjectId: e.taskId }
-        : { subjectType: 'integration_connection', subjectId: (e.payload as { connectionId: string }).connectionId };
+      const subject = notificationSubject(e);
       await this.prisma.$transaction([
         this.prisma.notification.createMany({
           data: e.recipients.map((recipientUserId) => ({
@@ -113,4 +111,12 @@ export class EventStore {
       select: { id: true, type: true, actorUserId: true, payload: true, occurredAt: true },
     });
   }
+}
+
+/** What a notification is about: its task, or the unit or connection the event names. */
+function notificationSubject(e: { taskId: string | null; payload: unknown }): { subjectType: string; subjectId: string } {
+  if (e.taskId) return { subjectType: 'task', subjectId: e.taskId };
+  const p = e.payload as { unitType?: string; unitId?: string; connectionId?: string };
+  if (p.unitType && p.unitId) return { subjectType: p.unitType, subjectId: p.unitId };
+  return { subjectType: 'integration_connection', subjectId: p.connectionId! };
 }

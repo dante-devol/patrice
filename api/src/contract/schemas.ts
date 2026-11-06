@@ -18,7 +18,7 @@ const nullableTimestamp = timestamp.nullable();
 
 export const Lifecycle = z.enum(['active', 'deactivated', 'retired']).openapi('Lifecycle');
 export const ScopeKind = z
-  .enum(['global', 'own', 'own_division', 'own_team', 'specific_division', 'specific_team', 'role'])
+  .enum(['global', 'own', 'own_division', 'own_team', 'specific_division', 'specific_team', 'role', 'assigned'])
   .openapi('ScopeKind');
 export const QuestionType = z
   .enum(['detail_text', 'multiline', 'text', 'numeric', 'dropdown', 'radio', 'attachment'])
@@ -148,6 +148,8 @@ export const Role = z
   .object({
     id,
     name: z.string(),
+    kind: z.enum(['org', 'unit']),
+    assignableByLeads: z.boolean(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
@@ -189,6 +191,25 @@ export const Member = z
   .object({ userId: id, source: z.enum(['patrice', 'integration']), createdAt: timestamp })
   .strict()
   .openapi('Member');
+
+export const UnitRoleAssignment = z
+  .object({ id, userId: id, roleId: id, grantedBy: id.nullable(), createdAt: timestamp })
+  .strict()
+  .openapi('UnitRoleAssignment');
+
+export const AssignableRole = z.object({ id, name: z.string() }).strict().openapi('AssignableRole');
+
+export const MyUnit = z
+  .object({
+    unitType: z.enum(['division', 'team']),
+    unitId: id,
+    name: z.string(),
+    divisionId: id.nullable(),
+    member: z.boolean(),
+    roleIds: z.array(id),
+  })
+  .strict()
+  .openapi('MyUnit');
 
 export const Grant = z
   .object({

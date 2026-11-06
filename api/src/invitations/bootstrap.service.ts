@@ -4,18 +4,19 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
-import { GrantEffect, ScopeKind } from '@prisma/client';
+import { GrantEffect, RoleKind, ScopeKind } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { AdministrabilityService } from '../access/administrability.service';
-import { ADMIN_SEED_ACTIONS, MEMBER_SEED_GRANTS } from '../access/actions';
+import { ADMIN_SEED_ACTIONS, MEMBER_SEED_GRANTS, PROJECT_LEAD_SEED_ACTIONS } from '../access/actions';
 import { createHmac } from 'node:crypto';
 import { uuidv7 } from 'uuidv7';
 import { generateOpaqueToken, hashToken } from '../common/tokens';
 
 const ADMIN_ROLE_NAME = 'Admin';
 const MEMBER_ROLE_NAME = 'Member';
+const PROJECT_LEAD_ROLE_NAME = 'Project lead';
 const BOOTSTRAP_EXPIRY_MS = 365 * 24 * 60 * 60 * 1000; // long-lived; gated by passcode
 
 export interface BootstrapStatus {
@@ -123,6 +124,28 @@ export class BootstrapService implements OnApplicationBootstrap {
           where: { id: 1 },
           data: { memberRoleId: member.id, memberRoleSeeded: true },
         });
+      }
+      if (!settings.projectLeadSeeded) {
+        // Seeded once, unassigned and kept for admins to appoint; then the admins' to edit.
+        const exists = await tx.role.findFirst({
+          where: { name: { equals: PROJECT_LEAD_ROLE_NAME, mode: 'insensitive' } },
+          select: { id: true },
+        });
+        if (!exists) {
+          const lead = await tx.role.create({
+            data: { name: PROJECT_LEAD_ROLE_NAME, kind: RoleKind.unit, assignableByLeads: false },
+            select: { id: true },
+          });
+          await tx.grant.createMany({
+            data: PROJECT_LEAD_SEED_ACTIONS.map((action) => ({
+              roleId: lead.id,
+              action,
+              effect: GrantEffect.permit,
+              scopeKind: ScopeKind.assigned,
+            })),
+          });
+        }
+        await tx.systemSettings.update({ where: { id: 1 }, data: { projectLeadSeeded: true } });
       }
       await tx.systemSettings.update({ where: { id: 1 }, data: { configVersion: { increment: 1 } } });
     });

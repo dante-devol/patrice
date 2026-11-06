@@ -60,7 +60,7 @@ describe('Batch grant changes', () => {
     expect(byAction['task:review']).toEqual({
       action: 'task:review',
       resourceType: 'Task',
-      scopes: ['global', 'own_division', 'own_team', 'specific_division', 'specific_team', 'own'],
+      scopes: ['global', 'own_division', 'own_team', 'specific_division', 'specific_team', 'own', 'assigned'],
       own: 'requester',
     });
     expect(byAction['grant:create'].scopes).toEqual(['global']);

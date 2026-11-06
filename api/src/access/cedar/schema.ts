@@ -35,18 +35,25 @@ export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
     // division-targeted action (division:update, task:create) can match.
     division?: Division,
     restrictClaims?: Bool,
-    allowCustomTemplates?: Bool
+    allowCustomTemplates?: Bool,
+    // For *:assign_roles: the unit role being assigned, and whether leads may.
+    targetRole?: Role,
+    targetRoleAssignableByLeads?: Bool
   };
   entity Team {
     // Self-reference, plus the team's division so division scopes cover its teams.
     team?: Team,
     division?: Division,
-    restrictClaims?: Bool
+    restrictClaims?: Bool,
+    targetRole?: Role,
+    targetRoleAssignableByLeads?: Bool
   };
+  // A unit role as held at one unit ("<roleId>@division:<id>" / "@team:<id>").
+  entity UnitRole;
   entity Role {
     targetRole?: Role
   };
-  entity User in [Role] {
+  entity User in [Role, UnitRole] {
     memberDivisions: Set<Division>,
     memberTeams: Set<Team>,
     targetRole?: Role,

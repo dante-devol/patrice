@@ -5,7 +5,7 @@ import { DeniedError } from '../common/errors';
 import { SettingsService } from '../settings/settings.service';
 import { ACTIONS, ALL_ACTION_STRINGS, CedarEntityType, TASK_FAMILY_ACTIONS } from './actions';
 import { CedarEngine, CedarEntity, CedarUid } from './cedar/engine';
-import { ProjectableGrant, grantToPolicy, staticPolicies } from './cedar/policies';
+import { ProjectableGrant, UnitPlacement, grantToPolicies, staticPolicies, unitRoleId } from './cedar/policies';
 
 export interface ResourceRef {
   type: CedarEntityType;
@@ -84,13 +84,32 @@ export class AccessService {
       registeredActions: ALL_ACTION_STRINGS,
       discordGatedActions: requireDiscordLink ? TASK_FAMILY_ACTIONS : [],
     });
-    const policiesText = [...statics, ...grants.map((g) => grantToPolicy(g as ProjectableGrant))].join('\n\n');
+    const placements = await this.unitPlacements(db);
+    const policiesText = [
+      ...statics,
+      ...grants.flatMap((g) => grantToPolicies(g as ProjectableGrant, placements.get(g.roleId))),
+    ].join('\n\n');
     const errors = this.cedar.parseErrors(policiesText);
     if (errors.length > 0) {
       // A projection bug must not silently produce a deny-all (or worse) engine.
       throw new Error(`Projected Cedar policy set failed to parse: ${errors.join('; ')}`);
     }
     return policiesText;
+  }
+
+  /** Every unit where each unit role is assigned to someone. */
+  private async unitPlacements(db: Db): Promise<Map<string, UnitPlacement[]>> {
+    const rows = await db.unitRoleAssignment.findMany({
+      distinct: ['roleId', 'divisionId', 'teamId'],
+      select: { roleId: true, divisionId: true, teamId: true },
+    });
+    const byRole = new Map<string, UnitPlacement[]>();
+    for (const r of rows) {
+      const list = byRole.get(r.roleId) ?? [];
+      list.push(placementOf(r));
+      byRole.set(r.roleId, list);
+    }
+    return byRole;
   }
 
   /** Force the next decision to re-project (after any grant/role/settings change). */
@@ -112,7 +131,7 @@ export class AccessService {
    * belongs to and whether the `requireDiscordLink` gate applies to it.
    */
   async buildPrincipal(userId: string, db: Db = this.prisma, policiesText?: string): Promise<Principal> {
-    const [userRoles, memberships] = await Promise.all([
+    const [userRoles, memberships, unitRoles] = await Promise.all([
       db.userRole.findMany({
         where: { userId, role: { lifecycleState: 'active' } },
         select: { roleId: true },
@@ -121,8 +140,16 @@ export class AccessService {
         where: { userId },
         select: { divisionId: true, teamId: true },
       }),
+      db.unitRoleAssignment.findMany({
+        where: { userId, role: { lifecycleState: 'active' } },
+        select: { roleId: true, divisionId: true, teamId: true },
+      }),
     ]);
-    const roleUids: CedarUid[] = userRoles.map((ur) => ({ type: CedarEngine.qualify('Role'), id: ur.roleId }));
+    // Org roles make the user `in Role`; a unit role only `in UnitRole` at its unit.
+    const roleUids: CedarUid[] = [
+      ...userRoles.map((ur) => ({ type: CedarEngine.qualify('Role'), id: ur.roleId })),
+      ...unitRoles.map((a) => ({ type: CedarEngine.qualify('UnitRole'), id: unitRoleId(a.roleId, placementOf(a)) })),
+    ];
     const uid: CedarUid = { type: CedarEngine.qualify('User'), id: userId };
     const attrs: Record<string, unknown> = {
       memberDivisions: memberships
@@ -247,4 +274,9 @@ function dedupeEntities(list: CedarEntity[]): CedarEntity[] {
     for (const p of e.parents) if (!seen.has(`${p.type}::${p.id}`)) prior.parents.push(p);
   }
   return [...byKey.values()];
+}
+
+/** A unit-role assignment row's unit. */
+function placementOf(a: { divisionId: string | null; teamId: string | null }): UnitPlacement {
+  return a.divisionId ? { unitType: 'division', unitId: a.divisionId } : { unitType: 'team', unitId: a.teamId! };
 }

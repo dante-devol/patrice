@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LifecycleState } from '@prisma/client';
+import { LifecycleState, RoleKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
@@ -11,19 +11,25 @@ import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateRoleDto, UpdateRoleDto } from './roles.dto';
 
-export interface RoleView {
+export type RoleView = {
   id: string;
   name: string;
+  /** `org`: held org-wide. `unit`: only ever assigned at a division or team. */
+  kind: RoleKind;
+  /** Unit roles: whether someone appointing through a unit role may assign it. */
+  assignableByLeads: boolean;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
-}
+};
 
 /**
- * Role CRUD + the retire ↔ revive state machine. Roles carry no unit: belonging
- * to a division or team is a membership.
+ * Role CRUD + the retire ↔ revive state machine. A role's kind is fixed at creation:
+ * `org` roles are held org-wide, `unit` roles are assigned at a division or team
+ * (UnitRolesService) and their grants apply only there. Belonging to a unit is a
+ * membership, not a role.
  *
  * Retire/revive flip a role's `lifecycle_state`, which the access projector reads
  * (`role.lifecycleState='active'`), so each bumps `config_version` and drops the
@@ -61,7 +67,11 @@ export class RolesService {
     dto: CreateRoleDto,
   ): Promise<RoleView> {
     const role = await this.prisma.role.create({
-      data: { name: dto.name },
+      data: {
+        name: dto.name,
+        kind: dto.kind ?? RoleKind.org,
+        assignableByLeads: dto.kind === RoleKind.unit ? (dto.assignableByLeads ?? false) : false,
+      },
     });
     await this.activity.logActivity({
       actorUserId,
@@ -91,16 +101,25 @@ export class RolesService {
     if (role.lifecycleState === LifecycleState.retired) {
       throw new UnprocessableError('ROLE_RETIRED', 'Role is retired');
     }
+    if (dto.assignableByLeads !== undefined && role.kind !== RoleKind.unit) {
+      throw new UnprocessableError('NOT_A_UNIT_ROLE', 'Only a unit role can be assignable by leads');
+    }
     const updated = await this.prisma.role.update({
       where: { id: role.id },
-      data: { name: dto.name, version: { increment: 1 } },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.assignableByLeads !== undefined ? { assignableByLeads: dto.assignableByLeads } : {}),
+        version: { increment: 1 },
+      },
     });
+    // Who leads may appoint is read by the projected policies' resources, not the
+    // policy text, so no config_version bump is needed.
     await this.activity.logActivity({
       actorUserId,
       subjectType: 'role',
       subjectId: role.id,
       verb: 'role.updated',
-      payload: { roleId: role.id, changes: diffFields(role, updated, ['name']) },
+      payload: { roleId: role.id, changes: diffFields(role, updated, ['name', 'assignableByLeads']) },
     });
     return this.toView(updated);
   }

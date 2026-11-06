@@ -7,11 +7,12 @@ import { AccessService } from '../access/access.service';
 import { AdministrabilityService } from '../access/administrability.service';
 import { CedarEngine } from '../access/cedar/engine';
 import { ActivityService } from '../activity/activity.service';
-import { ACTIONS, ALL_ACTION_STRINGS, EFFECTIVE_ADMIN_ACTIONS, RESOURCE_TYPE_BY_ACTION, TASK_FAMILY_ACTIONS } from '../access/actions';
+import { ACTIONS, ALL_ACTION_STRINGS, EFFECTIVE_ADMIN_ACTIONS, UNIT_ROLE_ACTIONS, RESOURCE_TYPE_BY_ACTION, TASK_FAMILY_ACTIONS } from '../access/actions';
 import { ORGANIZATION_RESOURCE } from '../access/access.service';
 import {
   ProjectableGrant,
   grantToPolicy,
+  grantToPolicies,
   ownRelation,
   staticPolicies,
 } from '../access/cedar/policies';
@@ -85,6 +86,8 @@ export class GrantsService {
       }
       if (ROLE_SCOPABLE.has(resourceType)) scopes.push('role');
       if (own) scopes.push('own');
+      // Unit roles' only scope; the editor offers it for unit roles alone.
+      if (UNIT_ROLE_ACTIONS.includes(action)) scopes.push('assigned');
       return { action, resourceType, scopes, own };
     });
   }
@@ -163,6 +166,7 @@ export class GrantsService {
         break;
       case 'global':
       case 'own':
+      case 'assigned':
         need(
           !scopeDivisionId && !scopeTeamId && !scopeRoleId,
           'scope',
@@ -200,8 +204,8 @@ export class GrantsService {
 
     let policiesText: string;
     try {
-      const grantPolicies = [...active.map((g) => g as ProjectableGrant), ...candidate].map(
-        (g) => grantToPolicy(g),
+      const grantPolicies = [...active.map((g) => g as ProjectableGrant), ...candidate].flatMap(
+        (g) => (g.scopeKind === 'assigned' ? grantToPolicies(g, [VALIDATION_PLACEMENT]) : [grantToPolicy(g)]),
       );
       const statics = staticPolicies({
         selfReviewAllowed,
@@ -225,7 +229,6 @@ export class GrantsService {
     }
   }
 
-  /** Confirm the granted role exists and is active (422 otherwise). */
   /**
    * Native-Authority Carve-Out, grant side (problems D4): a governance permit can't
    * go to a role that an integration grants (mapped inbound or bidirectional), or
@@ -246,6 +249,24 @@ export class GrantsService {
     }
   }
 
+  /**
+   * Unit roles take only unit actions (on tasks, messages, attachments, divisions,
+   * teams) at the `assigned` scope, which is theirs alone; so a unit role can never
+   * reach org-wide authority or affect the admin floor.
+   */
+  private async assertKindRules(roleId: string, action: string, scopeKind: string): Promise<void> {
+    const role = await this.prisma.role.findUnique({ where: { id: roleId }, select: { kind: true } });
+    if (!role) return; // assertRole reports it
+    const unit = role.kind === 'unit';
+    if (unit && (scopeKind !== 'assigned' || !UNIT_ROLE_ACTIONS.includes(action))) {
+      throw new UnprocessableError('UNIT_ROLE_SCOPE', 'A unit role takes only unit actions, at the assigned scope');
+    }
+    if (!unit && scopeKind === 'assigned') {
+      throw new UnprocessableError('UNIT_ROLE_SCOPE', 'Only a unit role can use the assigned scope');
+    }
+  }
+
+  /** Confirm the granted role exists and is active (422 otherwise). */
   private async assertRole(roleId: string): Promise<void> {
     const role = await this.prisma.role.findFirst({
       where: { id: roleId },
@@ -269,6 +290,7 @@ export class GrantsService {
     this.assertShape(dto.action, dto);
     await this.assertRole(dto.roleId);
     await this.assertNotGovernanceToMappedRole(dto.roleId, dto.action, dto.effect);
+    await this.assertKindRules(dto.roleId, dto.action, dto.scopeKind);
 
     const candidate: ProjectableGrant = {
       id: randomUUID(),
@@ -355,6 +377,7 @@ export class GrantsService {
     };
     this.assertShape(merged.action, merged);
     await this.assertNotGovernanceToMappedRole(existing.roleId, merged.action, merged.effect);
+    await this.assertKindRules(existing.roleId, merged.action, merged.scopeKind);
 
     const candidate: ProjectableGrant = {
       id: existing.id,
@@ -478,6 +501,7 @@ export class GrantsService {
       };
       this.assertShape(candidate.action, candidate);
       await this.assertNotGovernanceToMappedRole(candidate.roleId, candidate.action, candidate.effect);
+      await this.assertKindRules(candidate.roleId, candidate.action, candidate.scopeKind);
       candidates.push(candidate);
     }
     await this.validateActivation(candidates, touchedIds);
@@ -587,3 +611,6 @@ const BATCH_ACTION = {
   update: ACTIONS.grantUpdate.action,
   delete: ACTIONS.grantDelete.action,
 } as const;
+
+/** A stand-in unit, so an `assigned` grant can be validated before anyone holds it. */
+const VALIDATION_PLACEMENT = { unitType: 'division', unitId: '00000000-0000-0000-0000-000000000000' } as const;

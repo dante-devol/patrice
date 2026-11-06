@@ -102,6 +102,7 @@ const SCOPE_LABELS: Record<ScopeKind, string> = {
   specific_team: 'Specific team',
   role: 'One role',
   own: 'Own',
+  assigned: 'Where assigned',
 };
 
 export function scopeLabel(scope: ScopeKind, info: ActionInfo): string {
@@ -144,6 +145,8 @@ export function scopeHint(scope: ScopeKind, info: ActionInfo, target?: string): 
       return `Only when the role being given or taken away is ${target ?? 'the role you pick'}.`;
     case 'own':
       return OWN_HINTS[info.own ?? ''] ?? `Only ${noun} the person owns.`;
+    case 'assigned':
+      return `Only ${noun} in the divisions and teams where the person holds this role. A division covers its teams.`;
   }
 }
 

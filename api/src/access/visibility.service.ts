@@ -62,6 +62,20 @@ export class VisibilityService {
           break;
       }
     }
+    // Unit roles: where the user holds a unit role with an `assigned` grant for the
+    // action, its unit's tasks (a division assignment covers its teams' tasks too).
+    const assigned = await this.prisma.unitRoleAssignment.findMany({
+      where: {
+        userId,
+        role: { lifecycleState: 'active', grants: { some: { action, effect: 'permit', scopeKind: 'assigned' } } },
+      },
+      select: { divisionId: true, teamId: true },
+    });
+    const ledDivisions = assigned.flatMap((a) => (a.divisionId ? [a.divisionId] : []));
+    const ledTeams = assigned.flatMap((a) => (a.teamId ? [a.teamId] : []));
+    if (ledDivisions.length > 0) or.push({ divisionId: { in: ledDivisions } });
+    if (ledTeams.length > 0) or.push({ teamId: { in: ledTeams } });
+
     // No grant at all: nothing is visible.
     return or.length > 0 ? { OR: or } : { id: { in: [] } };
   }

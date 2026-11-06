@@ -3,7 +3,7 @@
   "info": {
     "title": "Patrice API",
     "version": "0.1.0",
-    "description": "Error codes and their HTTP statuses:\n\n- `UNAUTHENTICATED` (401): No valid session\n- `INVALID_CREDENTIALS` (401): Email or password is wrong\n- `DISCORD_NO_ACCOUNT` (401): No Patrice account is linked to this Discord account\n- `FORBIDDEN` (403): The access engine denied the action\n- `CSRF_FAILED` (403): Missing or invalid CSRF token\n- `EMAIL_NOT_VERIFIED` (403): Login requires a verified email address\n- `INVALID_PASSCODE` (403): The invitation passcode is wrong\n- `EMAIL_MISMATCH` (403): The email does not match the invitation\n- `ROLE_NOT_GRANTABLE` (403): The inviter may not grant this role\n- `NOT_FOUND` (404): Not found\n- `RECORD_NOT_FOUND` (404): The record was removed while the request ran\n- `ATTACHMENT_NOT_FOUND` (404): Attachment not found\n- `CLAIMANT_NOT_FOUND` (404): That user does not hold a seat on this task\n- `CONNECTION_NOT_FOUND` (404): Integration connection not found\n- `DIVISION_NOT_FOUND` (404): Division not found\n- `GRANT_NOT_FOUND` (404): Grant not found\n- `INVITE_NOT_FOUND` (404): Invitation not found\n- `MAPPING_NOT_FOUND` (404): Group mapping not found\n- `MESSAGE_NOT_FOUND` (404): Message not found\n- `PARENT_NOT_FOUND` (404): The parent message was not found\n- `REQUEST_TEMPLATE_NOT_FOUND` (404): Request template not found\n- `ROLE_NOT_FOUND` (404): Role not found\n- `SESSION_NOT_FOUND` (404): Session not found\n- `SUBMISSION_NOT_FOUND` (404): Submission not found\n- `TASK_NOT_FOUND` (404): Task not found\n- `TEAM_NOT_FOUND` (404): Team not found\n- `USER_NOT_FOUND` (404): User not found\n- `CONFLICT` (409): Conflict\n- `ALREADY_EXISTS` (409): That value is already in use\n- `REFERENCE_CONFLICT` (409): Another record still references this one, or a referenced record is gone\n- `STALE_GRANT` (409): Someone else changed these permissions; reload\n- `STALE_VERSION` (409): The record changed since it was read; reload and retry\n- `ALREADY_CLAIMED` (409): You already hold a seat on this task\n- `ALREADY_RETIRED` (409): Already retired\n- `ALREADY_SUBMITTED` (409): A submission is already awaiting review\n- `CLAIMS_CLOSED` (409): The task is not accepting claims\n- `DISCORD_ALREADY_LINKED` (409): This Discord account belongs to another user\n- `IDENTITY_TAKEN` (409): That sign-in account already belongs to another user\n- `PROVIDER_ALREADY_CONNECTED` (409): A different account from this provider is already connected\n- `DIVISION_RETIRED` (409): Division is retired\n- `DUPLICATE_CONNECTION` (409): That workspace is already connected\n- `DUPLICATE_MAPPING` (409): That mapping already exists\n- `EMAIL_TAKEN` (409): That email address is already in use\n- `INVALID_OPENINGS` (409): Openings cannot go below the active claimant count\n- `INVALID_TRANSITION` (409): The submission is not in a state that allows this\n- `INVITE_RACE_LOST` (409): The invitation was used concurrently\n- `LAST_ADMIN` (409): Refused: this would remove the last administrator\n- `LAST_AUTH_METHOD` (409): Refused: this would remove your only sign-in method\n- `MESSAGE_RETIRED` (409): Message is retired\n- `NOT_A_MEMBER` (409): The user does not hold that role\n- `NOT_CLAIMED` (409): You do not hold a seat on this task\n- `NOT_REVIVABLE` (409): Not retired, or past the grace period\n- `NO_OPENINGS` (409): Every seat on the task is taken\n- `OPENINGS_LOCKED` (409): Openings are locked for this division\n- `REQUEST_TEMPLATE_LOCKED` (409): The request template is locked by a submission\n- `TEMPLATE_NAME_TAKEN` (409): The division already has a template with that name\n- `QUESTION_HAS_ANSWERS` (409): A question with answers cannot be deleted\n- `SUBMITTED_CANNOT_LEAVE` (409): You cannot leave after submitting; the requester can retire your submission\n- `TASK_COMPLETED` (409): The task is complete\n- `ALREADY_COMPLETED` (409): The task is already complete\n- `STALE_SUBMISSION` (409): The submission changed since it was read\n- `SUBMISSION_RETIRED` (409): Submission is retired\n- `TASK_RETIRED` (409): Task is retired\n- `TEAM_RETIRED` (409): Team is retired\n- `USER_RETIRED` (409): User is retired\n- `GONE` (410): No longer available\n- `INVITE_UNAVAILABLE` (410): The invitation is expired, revoked or used up\n- `TOKEN_INVALID` (410): The link is invalid, expired or already used\n- `VALIDATION_FAILED` (422): The request body or parameters failed validation\n- `UNPROCESSABLE` (422): Unprocessable entity\n- `DISCORD_NOT_CONFIGURED` (422): Discord sign-in is not configured\n- `FILE_TOO_LARGE` (422): The upload exceeds the size limit\n- `INVALID_SUBMISSION` (422): The answers do not satisfy the request template\n- `TEMPLATE_REQUIRED` (422): The division has no default template; pick one\n- `TEMPLATE_NOT_IN_DIVISION` (422): The template belongs to a different division\n- `UNKNOWN_QUESTION_ID` (422): A question id does not belong to this template\n- `GOVERNANCE_ROLE_NOT_MAPPABLE` (422): A role holding governance grants cannot be mapped to an external group\n- `GOVERNANCE_ROLE_MAPPED` (422): A role an integration grants cannot hold governance actions\n- `NO_FILE` (422): No file was uploaded\n- `TEAM_NOT_IN_DIVISION` (422): The team belongs to a different division than the task\n- `NOT_LINKED` (422): The account is not linked\n- `REPLY_TO_REPLY` (422): Threads are one level deep\n- `ROLE_RETIRED` (422): Role is retired\n- `WRONG_PASSWORD` (422): The current password is wrong\n- `TOO_MANY_REQUESTS` (429): Rate limit exceeded\n- `INTERNAL` (500): Internal server error\n- `ERROR` (500): Unclassified error\n- `QUEUE_UNAVAILABLE` (503): Background jobs are unavailable; try again later"
+    "description": "Error codes and their HTTP statuses:\n\n- `UNAUTHENTICATED` (401): No valid session\n- `INVALID_CREDENTIALS` (401): Email or password is wrong\n- `DISCORD_NO_ACCOUNT` (401): No Patrice account is linked to this Discord account\n- `FORBIDDEN` (403): The access engine denied the action\n- `CSRF_FAILED` (403): Missing or invalid CSRF token\n- `EMAIL_NOT_VERIFIED` (403): Login requires a verified email address\n- `INVALID_PASSCODE` (403): The invitation passcode is wrong\n- `EMAIL_MISMATCH` (403): The email does not match the invitation\n- `ROLE_NOT_GRANTABLE` (403): The inviter may not grant this role\n- `NOT_FOUND` (404): Not found\n- `RECORD_NOT_FOUND` (404): The record was removed while the request ran\n- `ASSIGNMENT_NOT_FOUND` (404): Unit role assignment not found\n- `ATTACHMENT_NOT_FOUND` (404): Attachment not found\n- `CLAIMANT_NOT_FOUND` (404): That user does not hold a seat on this task\n- `CONNECTION_NOT_FOUND` (404): Integration connection not found\n- `DIVISION_NOT_FOUND` (404): Division not found\n- `GRANT_NOT_FOUND` (404): Grant not found\n- `INVITE_NOT_FOUND` (404): Invitation not found\n- `MAPPING_NOT_FOUND` (404): Group mapping not found\n- `MESSAGE_NOT_FOUND` (404): Message not found\n- `PARENT_NOT_FOUND` (404): The parent message was not found\n- `REQUEST_TEMPLATE_NOT_FOUND` (404): Request template not found\n- `ROLE_NOT_FOUND` (404): Role not found\n- `SESSION_NOT_FOUND` (404): Session not found\n- `SUBMISSION_NOT_FOUND` (404): Submission not found\n- `TASK_NOT_FOUND` (404): Task not found\n- `TEAM_NOT_FOUND` (404): Team not found\n- `USER_NOT_FOUND` (404): User not found\n- `CONFLICT` (409): Conflict\n- `ALREADY_EXISTS` (409): That value is already in use\n- `REFERENCE_CONFLICT` (409): Another record still references this one, or a referenced record is gone\n- `STALE_GRANT` (409): Someone else changed these permissions; reload\n- `STALE_VERSION` (409): The record changed since it was read; reload and retry\n- `ALREADY_CLAIMED` (409): You already hold a seat on this task\n- `ALREADY_RETIRED` (409): Already retired\n- `ALREADY_SUBMITTED` (409): A submission is already awaiting review\n- `CLAIMS_CLOSED` (409): The task is not accepting claims\n- `DISCORD_ALREADY_LINKED` (409): This Discord account belongs to another user\n- `IDENTITY_TAKEN` (409): That sign-in account already belongs to another user\n- `PROVIDER_ALREADY_CONNECTED` (409): A different account from this provider is already connected\n- `DIVISION_RETIRED` (409): Division is retired\n- `DUPLICATE_CONNECTION` (409): That workspace is already connected\n- `DUPLICATE_MAPPING` (409): That mapping already exists\n- `EMAIL_TAKEN` (409): That email address is already in use\n- `INVALID_OPENINGS` (409): Openings cannot go below the active claimant count\n- `INVALID_TRANSITION` (409): The submission is not in a state that allows this\n- `INVITE_RACE_LOST` (409): The invitation was used concurrently\n- `LAST_ADMIN` (409): Refused: this would remove the last administrator\n- `LAST_AUTH_METHOD` (409): Refused: this would remove your only sign-in method\n- `MESSAGE_RETIRED` (409): Message is retired\n- `NOT_A_MEMBER` (409): The user does not hold that role\n- `NOT_CLAIMED` (409): You do not hold a seat on this task\n- `NOT_REVIVABLE` (409): Not retired, or past the grace period\n- `NO_OPENINGS` (409): Every seat on the task is taken\n- `OPENINGS_LOCKED` (409): Openings are locked for this division\n- `REQUEST_TEMPLATE_LOCKED` (409): The request template is locked by a submission\n- `TEMPLATE_NAME_TAKEN` (409): The division already has a template with that name\n- `QUESTION_HAS_ANSWERS` (409): A question with answers cannot be deleted\n- `SUBMITTED_CANNOT_LEAVE` (409): You cannot leave after submitting; the requester can retire your submission\n- `TASK_COMPLETED` (409): The task is complete\n- `ALREADY_COMPLETED` (409): The task is already complete\n- `STALE_SUBMISSION` (409): The submission changed since it was read\n- `SUBMISSION_RETIRED` (409): Submission is retired\n- `TASK_RETIRED` (409): Task is retired\n- `TEAM_RETIRED` (409): Team is retired\n- `USER_RETIRED` (409): User is retired\n- `GONE` (410): No longer available\n- `INVITE_UNAVAILABLE` (410): The invitation is expired, revoked or used up\n- `TOKEN_INVALID` (410): The link is invalid, expired or already used\n- `VALIDATION_FAILED` (422): The request body or parameters failed validation\n- `UNPROCESSABLE` (422): Unprocessable entity\n- `DISCORD_NOT_CONFIGURED` (422): Discord sign-in is not configured\n- `FILE_TOO_LARGE` (422): The upload exceeds the size limit\n- `INVALID_SUBMISSION` (422): The answers do not satisfy the request template\n- `TEMPLATE_REQUIRED` (422): The division has no default template; pick one\n- `TEMPLATE_NOT_IN_DIVISION` (422): The template belongs to a different division\n- `UNKNOWN_QUESTION_ID` (422): A question id does not belong to this template\n- `GOVERNANCE_ROLE_NOT_MAPPABLE` (422): A role holding governance grants cannot be mapped to an external group\n- `GOVERNANCE_ROLE_MAPPED` (422): A role an integration grants cannot hold governance actions\n- `NO_FILE` (422): No file was uploaded\n- `TEAM_NOT_IN_DIVISION` (422): The team belongs to a different division than the task\n- `NOT_LINKED` (422): The account is not linked\n- `REPLY_TO_REPLY` (422): Threads are one level deep\n- `ROLE_RETIRED` (422): Role is retired\n- `NOT_A_UNIT_ROLE` (422): That role is not a unit role\n- `UNIT_ROLE_NOT_GRANTABLE` (422): A unit role is assigned at a division or team, not held org-wide\n- `UNIT_ROLE_SCOPE` (422): A unit role takes only unit actions at the assigned scope; org roles cannot use that scope\n- `WRONG_PASSWORD` (422): The current password is wrong\n- `TOO_MANY_REQUESTS` (429): Rate limit exceeded\n- `INTERNAL` (500): Internal server error\n- `ERROR` (500): Unclassified error\n- `QUEUE_UNAVAILABLE` (503): Background jobs are unavailable; try again later"
   },
   "servers": [
     {
@@ -34,6 +34,7 @@
           "ROLE_NOT_GRANTABLE",
           "NOT_FOUND",
           "RECORD_NOT_FOUND",
+          "ASSIGNMENT_NOT_FOUND",
           "ATTACHMENT_NOT_FOUND",
           "CLAIMANT_NOT_FOUND",
           "CONNECTION_NOT_FOUND",
@@ -106,6 +107,9 @@
           "NOT_LINKED",
           "REPLY_TO_REPLY",
           "ROLE_RETIRED",
+          "NOT_A_UNIT_ROLE",
+          "UNIT_ROLE_NOT_GRANTABLE",
+          "UNIT_ROLE_SCOPE",
           "WRONG_PASSWORD",
           "TOO_MANY_REQUESTS",
           "INTERNAL",
@@ -274,6 +278,51 @@
         },
         "required": [
           "ok"
+        ],
+        "additionalProperties": false
+      },
+      "MyUnit": {
+        "type": "object",
+        "properties": {
+          "unitType": {
+            "type": "string",
+            "enum": [
+              "division",
+              "team"
+            ]
+          },
+          "unitId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "divisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "member": {
+            "type": "boolean"
+          },
+          "roleIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "unitType",
+          "unitId",
+          "name",
+          "divisionId",
+          "member",
+          "roleIds"
         ],
         "additionalProperties": false
       },
@@ -553,6 +602,16 @@
           "name": {
             "type": "string"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "org",
+              "unit"
+            ]
+          },
+          "assignableByLeads": {
+            "type": "boolean"
+          },
           "lifecycleState": {
             "$ref": "#/components/schemas/Lifecycle"
           },
@@ -578,6 +637,8 @@
         "required": [
           "id",
           "name",
+          "kind",
+          "assignableByLeads",
           "lifecycleState",
           "retiredAt",
           "version",
@@ -595,7 +656,8 @@
           "own_team",
           "specific_division",
           "specific_team",
-          "role"
+          "role",
+          "assigned"
         ]
       },
       "ActionInfo": {
@@ -998,6 +1060,59 @@
           "userId",
           "source",
           "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "UnitRoleAssignment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "grantedBy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "roleId",
+          "grantedBy",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "AssignableRole": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
         ],
         "additionalProperties": false
       },
@@ -3334,6 +3449,45 @@
         }
       }
     },
+    "/me/units": {
+      "get": {
+        "operationId": "myUnits",
+        "tags": [
+          "auth"
+        ],
+        "summary": "The divisions and teams you belong to or lead",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The divisions and teams you belong to or lead",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyUnit"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/sessions": {
       "get": {
         "operationId": "listMySessions",
@@ -4568,6 +4722,16 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "org",
+                      "unit"
+                    ]
+                  },
+                  "assignableByLeads": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -4635,11 +4799,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
+                  },
+                  "assignableByLeads": {
+                    "type": "boolean"
                   }
                 },
-                "required": [
-                  "name"
-                ],
                 "additionalProperties": false
               }
             }
@@ -4882,7 +5046,8 @@
                       "own_division",
                       "own_team",
                       "own",
-                      "role"
+                      "role",
+                      "assigned"
                     ]
                   },
                   "scopeDivisionId": {
@@ -4992,7 +5157,8 @@
                                 "own_division",
                                 "own_team",
                                 "own",
-                                "role"
+                                "role",
+                                "assigned"
                               ]
                             },
                             "scopeDivisionId": {
@@ -5063,7 +5229,8 @@
                                 "own_division",
                                 "own_team",
                                 "own",
-                                "role"
+                                "role",
+                                "assigned"
                               ]
                             },
                             "scopeDivisionId": {
@@ -5210,7 +5377,8 @@
                       "own_division",
                       "own_team",
                       "own",
-                      "role"
+                      "role",
+                      "assigned"
                     ]
                   },
                   "scopeDivisionId": {
@@ -6974,6 +7142,436 @@
             },
             "required": true,
             "name": "userId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/divisions/{id}/role-assignments": {
+      "get": {
+        "operationId": "listDivisionRoleAssignments",
+        "tags": [
+          "org"
+        ],
+        "summary": "Who holds unit roles at a division",
+        "description": "Gated by the `division:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Who holds unit roles at a division",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnitRoleAssignment"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "assignDivisionRole",
+        "tags": [
+          "org"
+        ],
+        "summary": "Assign a unit role at a division (adds membership if missing)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "roleId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "roleId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Assign a unit role at a division (adds membership if missing)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitRoleAssignment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/divisions/{id}/assignable-roles": {
+      "get": {
+        "operationId": "divisionAssignableRoles",
+        "tags": [
+          "org"
+        ],
+        "summary": "The unit roles you may assign at a division",
+        "description": "Gated by the `division:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The unit roles you may assign at a division",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AssignableRole"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/divisions/{id}/role-assignments/{assignmentId}": {
+      "delete": {
+        "operationId": "unassignDivisionRole",
+        "tags": [
+          "org"
+        ],
+        "summary": "Remove a unit role assignment at a division (membership stays)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "assignmentId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams/{id}/role-assignments": {
+      "get": {
+        "operationId": "listTeamRoleAssignments",
+        "tags": [
+          "org"
+        ],
+        "summary": "Who holds unit roles at a team",
+        "description": "Gated by the `team:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Who holds unit roles at a team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnitRoleAssignment"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "assignTeamRole",
+        "tags": [
+          "org"
+        ],
+        "summary": "Assign a unit role at a team (adds membership if missing)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "roleId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "roleId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Assign a unit role at a team (adds membership if missing)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitRoleAssignment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams/{id}/assignable-roles": {
+      "get": {
+        "operationId": "teamAssignableRoles",
+        "tags": [
+          "org"
+        ],
+        "summary": "The unit roles you may assign at a team",
+        "description": "Gated by the `team:read` action.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The unit roles you may assign at a team",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AssignableRole"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error; `error.code` is one of `ErrorCode`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/teams/{id}/role-assignments/{assignmentId}": {
+      "delete": {
+        "operationId": "unassignTeamRole",
+        "tags": [
+          "org"
+        ],
+        "summary": "Remove a unit role assignment at a team (membership stays)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "assignmentId",
             "in": "path"
           }
         ],

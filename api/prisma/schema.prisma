@@ -48,6 +48,15 @@ enum ScopeKind {
   specific_division
   specific_team
   role
+  /// Wherever the (unit) role is assigned. The only scope a unit role's grants take.
+  assigned
+}
+
+/// `org` roles are held org-wide; `unit` roles are only ever assigned at a division
+/// or team, and their grants apply only there.
+enum RoleKind {
+  org
+  unit
 }
 
 enum UserRoleSource {
@@ -173,6 +182,7 @@ model SystemSettings {
   /// The seeded Member role, pre-assigned on new invitations (null if deleted).
   memberRoleId                String?  @map("member_role_id") @db.Uuid
   memberRoleSeeded            Boolean  @default(false) @map("member_role_seeded")
+  projectLeadSeeded           Boolean  @default(false) @map("project_lead_seeded")
   createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -213,6 +223,7 @@ model Division {
   memberships      Membership[]
   scopedGrants     Grant[]
   groupMappings    ExternalGroupMapping[]
+  unitRoles        UnitRoleAssignment[]
 
   @@map("division")
 }
@@ -235,6 +246,7 @@ model Team {
   memberships   Membership[]
   scopedGrants  Grant[]
   groupMappings ExternalGroupMapping[]
+  unitRoles     UnitRoleAssignment[]
 
   @@index([divisionId])
   @@map("team")
@@ -258,7 +270,8 @@ model AppUser {
   authTokens         AuthToken[]
   invitationUses     InvitationUse[]
   requestedTasks     Task[]
-  completedTasks     Task[]             @relation("TaskCompleter")
+  completedTasks     Task[]               @relation("TaskCompleter")
+  unitRoles          UnitRoleAssignment[]
   taskClaimants      TaskClaimant[]
   submissions        Submission[]
   messages           Message[]
@@ -377,22 +390,50 @@ model OAuthFlow {
 }
 
 model Role {
-  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name           String
-  lifecycleState LifecycleState @default(active) @map("lifecycle_state")
-  retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
-  version        Int            @default(0)
-  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name              String
+  kind              RoleKind       @default(org)
+  /// Unit roles only: whether someone appointing through a unit role may assign it.
+  assignableByLeads Boolean        @default(false) @map("assignable_by_leads")
+  lifecycleState    LifecycleState @default(active) @map("lifecycle_state")
+  retiredAt         DateTime?      @map("retired_at") @db.Timestamptz(6)
+  version           Int            @default(0)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  userRoles     UserRole[]
-  grants        Grant[]
-  groupMappings ExternalGroupMapping[]
-  memberRoleOf  SystemSettings[]
-  scopedGrants  Grant[]                @relation("GrantScopeRole")
-  invitations   InvitationRole[]
+  userRoles       UserRole[]
+  grants          Grant[]
+  groupMappings   ExternalGroupMapping[]
+  memberRoleOf    SystemSettings[]
+  scopedGrants    Grant[]                @relation("GrantScopeRole")
+  invitations     InvitationRole[]
+  unitAssignments UnitRoleAssignment[]
 
   @@map("role")
+}
+
+/// A unit role held by a user **at** a division or team (exactly one; CHECK). Its
+/// grants (scope `assigned`) apply there; a division assignment also covers the
+/// division's teams.
+model UnitRoleAssignment {
+  id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  roleId     String   @map("role_id") @db.Uuid
+  divisionId String?  @map("division_id") @db.Uuid
+  teamId     String?  @map("team_id") @db.Uuid
+  grantedBy  String?  @map("granted_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user     AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  division Division? @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  team     Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([roleId])
+  @@index([divisionId])
+  @@index([teamId])
+  @@map("unit_role_assignment")
 }
 
 /// A user belongs to exactly one of a division or a team (CHECK-enforced). Membership

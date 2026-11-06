@@ -14,6 +14,7 @@ import { RolesModule } from './roles/roles.module';
 import { DivisionsModule } from './divisions/divisions.module';
 import { TeamsModule } from './teams/teams.module';
 import { MembershipModule } from './membership/membership.module';
+import { UnitRolesModule } from './unit-roles/unit-roles.module';
 import { GrantsModule } from './grants/grants.module';
 import { UsersModule } from './users/users.module';
 import { RequestTemplatesModule } from './request-templates/request-templates.module';
@@ -42,6 +43,7 @@ const SHARED = [
     DivisionsModule,
     TeamsModule,
     MembershipModule,
+    UnitRolesModule,
     GrantsModule,
     UsersModule,
     RequestTemplatesModule,

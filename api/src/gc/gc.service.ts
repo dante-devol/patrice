@@ -396,6 +396,11 @@ export class GcService {
     await tx.notification.deleteMany({ where: { recipientUserId: userId } });
     await tx.userRole.deleteMany({ where: { userId } });
     await tx.membership.deleteMany({ where: { userId } });
+    // Unit role assignments shape the projected policies, so dropping one bumps the version.
+    const { count: unitRoles } = await tx.unitRoleAssignment.deleteMany({ where: { userId } });
+    if (unitRoles > 0) {
+      await tx.systemSettings.update({ where: { id: 1 }, data: { configVersion: { increment: 1 } } });
+    }
     // purge integration account links (external_identity rows name user as PII).
     const identities = await tx.externalIdentity.findMany({
       where: { userId },

@@ -14,6 +14,7 @@ import {
   setPasswordSchema,
 } from '../auth/auth.dto';
 import { createDivisionSchema, updateDivisionSchema } from '../divisions/divisions.dto';
+import { assignUnitRoleSchema } from '../unit-roles/unit-roles.dto';
 import { batchGrantsSchema, createGrantSchema, updateGrantSchema } from '../grants/grants.dto';
 import {
   connectIntegrationSchema,
@@ -107,6 +108,7 @@ export const ROUTES = {
   setPassword: r({ method: 'post', path: '/me/password', tag: 'auth', summary: 'Change your password, or add one to a provider-only account', body: setPasswordSchema, status: 204, kind: 'empty' }),
   requestEmailChange: r({ method: 'post', path: '/me/email', tag: 'auth', summary: 'Start changing your email (confirmed from the new address)', body: requestEmailChangeSchema, status: 200, kind: 'json', response: S.Ok }),
   confirmEmailChange: r({ method: 'post', path: '/auth/email-change/confirm', tag: 'auth', summary: 'Confirm an email change', public: true, body: confirmEmailChangeSchema, status: 200, kind: 'json', response: S.Ok }),
+  myUnits: r({ method: 'get', path: '/me/units', tag: 'auth', summary: 'The divisions and teams you belong to or lead', status: 200, kind: 'json', response: z.array(S.MyUnit) }),
   listMySessions: r({ method: 'get', path: '/me/sessions', tag: 'auth', summary: 'Your signed-in sessions', status: 200, kind: 'json', response: z.array(S.Session) }),
   listUserSessions: r({ method: 'get', path: '/users/:id/sessions', tag: 'auth', summary: "A user's signed-in sessions", action: 'session:revoke', status: 200, kind: 'json', response: z.array(S.Session) }),
   revokeSession: r({ method: 'delete', path: '/sessions/:id', tag: 'auth', summary: 'Sign a session out (your own, or any with a grant)', action: 'session:revoke', status: 204, kind: 'empty' }),
@@ -168,6 +170,14 @@ export const ROUTES = {
   listTeamMembers: r({ method: 'get', path: '/teams/:id/members', tag: 'org', summary: "A team's members", action: 'team:read', status: 200, kind: 'json', response: z.array(S.Member) }),
   addTeamMember: r({ method: 'post', path: '/teams/:id/members', tag: 'org', summary: 'Add a member to a team', action: 'team:manage_members', body: addMemberSchema, status: 200, kind: 'json', response: z.array(S.Member) }),
   removeTeamMember: r({ method: 'delete', path: '/teams/:id/members/:userId', tag: 'org', summary: 'Remove a member from a team', action: 'team:manage_members', status: 204, kind: 'empty' }),
+  listDivisionRoleAssignments: r({ method: 'get', path: '/divisions/:id/role-assignments', tag: 'org', summary: "Who holds unit roles at a division", action: 'division:read', status: 200, kind: 'json', response: z.array(S.UnitRoleAssignment) }),
+  divisionAssignableRoles: r({ method: 'get', path: '/divisions/:id/assignable-roles', tag: 'org', summary: 'The unit roles you may assign at a division', action: 'division:read', status: 200, kind: 'json', response: z.array(S.AssignableRole) }),
+  assignDivisionRole: r({ method: 'post', path: '/divisions/:id/role-assignments', tag: 'org', summary: 'Assign a unit role at a division (adds membership if missing)', body: assignUnitRoleSchema, authorizedInService: 'division:assign_roles', status: 201, kind: 'json', response: S.UnitRoleAssignment }),
+  unassignDivisionRole: r({ method: 'delete', path: '/divisions/:id/role-assignments/:assignmentId', tag: 'org', summary: 'Remove a unit role assignment at a division (membership stays)', authorizedInService: 'division:assign_roles', status: 204, kind: 'empty' }),
+  listTeamRoleAssignments: r({ method: 'get', path: '/teams/:id/role-assignments', tag: 'org', summary: "Who holds unit roles at a team", action: 'team:read', status: 200, kind: 'json', response: z.array(S.UnitRoleAssignment) }),
+  teamAssignableRoles: r({ method: 'get', path: '/teams/:id/assignable-roles', tag: 'org', summary: 'The unit roles you may assign at a team', action: 'team:read', status: 200, kind: 'json', response: z.array(S.AssignableRole) }),
+  assignTeamRole: r({ method: 'post', path: '/teams/:id/role-assignments', tag: 'org', summary: 'Assign a unit role at a team (adds membership if missing)', body: assignUnitRoleSchema, authorizedInService: 'team:assign_roles', status: 201, kind: 'json', response: S.UnitRoleAssignment }),
+  unassignTeamRole: r({ method: 'delete', path: '/teams/:id/role-assignments/:assignmentId', tag: 'org', summary: 'Remove a unit role assignment at a team (membership stays)', authorizedInService: 'team:assign_roles', status: 204, kind: 'empty' }),
   listTeams: r({ method: 'get', path: '/teams', tag: 'org', summary: 'List teams', query: includeRetired, authorizedInService: 'team:read', status: 200, kind: 'json', response: z.array(S.Team) }),
   createTeam: r({ method: 'post', path: '/teams', tag: 'org', summary: 'Create a team', body: createTeamSchema, authorizedInService: 'team:create', status: 201, kind: 'json', response: S.Team }),
   updateTeam: r({ method: 'patch', path: '/teams/:id', tag: 'org', summary: 'Edit a team', action: 'team:update', body: updateTeamSchema, status: 200, kind: 'json', response: S.Team }),

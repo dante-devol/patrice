@@ -398,6 +398,9 @@ export class IntegrationsService {
       if (role.lifecycleState === LifecycleState.retired) {
         throw new UnprocessableError('ROLE_RETIRED', 'Cannot map a retired role');
       }
+      if (role.kind === 'unit') {
+        throw new UnprocessableError('UNIT_ROLE_NOT_GRANTABLE', 'Unit roles cannot be mapped to an external group');
+      }
       await this.assertNotGovernanceRole(dto.roleId);
       return { kind: 'role', id: dto.roleId };
     }
