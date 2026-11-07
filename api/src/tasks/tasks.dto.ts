@@ -52,7 +52,7 @@ export type UpdateTaskDto = z.infer<typeof updateTaskSchema>;
  * comma list (`?division=in:<id1>,<id2>`) → string[]. `after` is the keyset cursor
  * (the last seen task id; UUIDv7 PK, newest-first). `limit` defaults to 20, max 100.
  */
-function multiFacet(item: z.ZodTypeAny) {
+export function multiFacet(item: z.ZodTypeAny) {
   return z
     .string()
     .optional()

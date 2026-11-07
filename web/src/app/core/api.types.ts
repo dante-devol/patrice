@@ -50,6 +50,8 @@ export type UnitRoleAssignment = Schemas['UnitRoleAssignment'];
 export type AssignableRole = Schemas['AssignableRole'];
 export type MyUnit = Schemas['MyUnit'];
 export type UnitStats = Schemas['UnitStats'];
+/** A task's state in the status-over-time series: its status, or done / retired. */
+export type TaskState = keyof UnitStats['series'][number]['counts'];
 export type Member = Schemas['Member'];
 
 export type ChoiceOption = Schemas['ChoiceOption'];

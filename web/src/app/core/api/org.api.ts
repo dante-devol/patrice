@@ -89,10 +89,13 @@ export class OrgApi {
       ? this.api.delete('/divisions/{id}/role-assignments/{assignmentId}', { path: { id, assignmentId } })
       : this.api.delete('/teams/{id}/role-assignments/{assignmentId}', { path: { id, assignmentId } });
   }
-  unitStats(kind: UnitKind, id: string) {
+  /** Unit stats; each facet is a list of ids (empty = any), sent as `in:` lists. */
+  unitStats(kind: UnitKind, id: string, facets: { team?: string[]; claimant?: string[]; requester?: string[] } = {}) {
+    const query: Record<string, string> = {};
+    for (const [k, v] of Object.entries(facets)) if (v?.length) query[k] = `in:${v.join(',')}`;
     return kind === 'division'
-      ? this.api.get('/divisions/{id}/stats', { path: { id } })
-      : this.api.get('/teams/{id}/stats', { path: { id } });
+      ? this.api.get('/divisions/{id}/stats', { path: { id }, query })
+      : this.api.get('/teams/{id}/stats', { path: { id }, query });
   }
   listUnitMembers(kind: UnitKind, id: string) {
     return kind === 'division' ? this.listDivisionMembers(id) : this.listTeamMembers(id);

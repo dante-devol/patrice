@@ -4,13 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { OrgApi, UnitKind } from '../../core/api/org.api';
-import { AssignableRole, Member, UnitRoleAssignment, UnitStats } from '../../core/api.types';
+import { AssignableRole, Member, TaskState, TaskStatus, UnitRoleAssignment, UnitStats } from '../../core/api.types';
 import { LookupStore } from '../../core/lookup.store';
 import { errorMessage } from '../../core/errors';
 import { ToastService } from '../../core/toast.service';
 import { TaskListComponent } from '../tasks/task-list.component';
 import { UserAvatarComponent } from '../tasks/user-avatar.component';
-import { WeeklyChartComponent } from './weekly-chart.component';
+import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StatusChartComponent, shortDate } from './status-chart.component';
+import { UnitFilter, UnitFilterComponent, activeFilterCount, defaultFilter } from './unit-filter.component';
+import { TaskListFacets } from '../tasks/task-list.component';
+
+type ChartView = 'stacked' | 'proportional' | 'table';
 
 interface LeadershipGroup {
   roleId: string;
@@ -26,7 +30,7 @@ interface LeadershipGroup {
  */
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, TaskListComponent, UserAvatarComponent, WeeklyChartComponent],
+  imports: [FormsModule, RouterLink, TaskListComponent, UserAvatarComponent, StatusChartComponent, UnitFilterComponent],
   template: `
     <div class="tasks-board font-sans pb-12">
       @if (error()) { <p class="text-[13px] text-rust mb-3">{{ error() }}</p> }
@@ -54,10 +58,32 @@ interface LeadershipGroup {
 
       <!-- Stats -->
       @if (stats(); as s) {
-        <div class="flex items-baseline gap-3 mb-2">
-          <h2 class="font-display font-bold text-[18px]">Last 12 weeks</h2>
-          <span class="text-[13px] text-ink-soft">Counts include only tasks you can see@if (s.truncated) {, and only the newest 5,000}</span>
+        <div class="flex items-end justify-between gap-3 mb-2 flex-wrap">
+          <div class="flex items-baseline gap-3 flex-wrap">
+            <h2 class="font-display font-bold text-[18px]">Last 12 weeks</h2>
+            <span class="text-[13px] text-ink-soft">Counts include only tasks you can see@if (s.truncated) {, and only the newest 5,000}</span>
+          </div>
+          <!-- Views as tabs, and the filter, which applies to every view and the task list. -->
+          <div class="flex items-end gap-5 text-[13px]">
+            <div class="flex gap-x-4" role="tablist" aria-label="Chart view">
+              @for (v of views; track v.id) {
+                <button role="tab" class="pb-1 border-b-2" [attr.aria-selected]="view() === v.id"
+                        [class]="view() === v.id ? 'border-ink text-ink font-bold' : 'border-transparent text-ink-soft hover:text-ink'"
+                        (click)="view.set(v.id)">{{ v.name }}</button>
+              }
+            </div>
+            <button class="rounded border bg-paper font-bold px-3 py-1.5 hover:bg-paper-hover"
+                    [class.border-ink]="filterOpen() || filterCount()" [class.border-line]="!filterOpen() && !filterCount()"
+                    [attr.aria-expanded]="filterOpen()" (click)="filterOpen.set(!filterOpen())">
+              Filter@if (filterCount()) { <span class="ml-1 font-normal">({{ filterCount() }})</span> }
+            </button>
+          </div>
         </div>
+        @if (filterOpen()) {
+          <div class="paper p-4 mb-3">
+            <unit-filter [value]="filter()" [teams]="kind() === 'division' ? childTeams() : []" (changed)="setFilter($event)" />
+          </div>
+        }
         <div class="paper p-5 mb-6">
           <dl class="flex flex-wrap gap-x-8 gap-y-3 text-[13px] mb-5">
             @for (c of counts(); track c.label) {
@@ -66,7 +92,7 @@ interface LeadershipGroup {
                 <dd class="font-display font-bold text-[20px] leading-tight mt-0.5">{{ c.value }}</dd>
               </div>
             }
-            <div class="border-l-[3px] border-double border-margin pl-8 flex flex-wrap gap-x-8 gap-y-3">
+            <div class="pl-8 flex flex-wrap gap-x-8 gap-y-3" style="border-left: 3px double var(--margin)">
               @for (m of medians(); track m.label) {
                 <div>
                   <dt class="text-ink-soft">{{ m.label }}</dt>
@@ -75,7 +101,32 @@ interface LeadershipGroup {
               }
             </div>
           </dl>
-          <weekly-chart [weeks]="s.weekly" />
+          @if (view() === 'table') {
+            <div class="overflow-x-auto">
+              <table class="data w-full text-[13px]">
+                <thead>
+                  <tr>
+                    <th class="text-left">Week of</th>
+                    @for (st of tableStates(); track st) {
+                      <th class="text-right"><span class="swatch" [style.background]="stateColor(st)"></span> {{ stateLabel(st) }}</th>
+                    }
+                    <th class="text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (p of s.series; track p.at; let last = $last) {
+                    <tr>
+                      <td>{{ last ? 'Now' : weekLabel(p.at) }}</td>
+                      @for (st of tableStates(); track st) { <td class="text-right tabular-nums">{{ p.counts[st] }}</td> }
+                      <td class="text-right tabular-nums font-bold">{{ rowTotal(p.counts) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <status-chart [series]="s.series" [states]="filter().states" [proportional]="view() === 'proportional'" />
+          }
         </div>
 
         @if (s.teams?.length) {
@@ -162,15 +213,19 @@ interface LeadershipGroup {
       <!-- Tasks: recreated per unit so the presets apply. -->
       @for (key of [unitKey()]; track key) {
         @if (kind() === 'division') {
-          <task-list [embedded]="true" [division]="id()" />
+          <task-list [embedded]="true" [division]="id()" [facets]="listFacets()" />
         } @else if (parentDivisionId()) {
-          <task-list [embedded]="true" [division]="parentDivisionId()!" [team]="id()" />
+          <task-list [embedded]="true" [division]="parentDivisionId()!" [team]="id()" [facets]="listFacets()" />
         }
       }
     </div>
   `,
   styles: [
-    `.field { padding: 7px 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 2px; color: var(--ink); font: inherit; min-width: 200px; }
+    `.swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+     table.data th { font-weight: 400; color: var(--ink-soft); padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+     table.data td { padding: 5px 10px; border-bottom: 1px solid var(--line); }
+     table.data tbody tr:nth-child(even) td { background: var(--paper-alt); }
+     .field { padding: 7px 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 2px; color: var(--ink); font: inherit; min-width: 200px; }
      .field:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }`,
   ],
 })
@@ -190,6 +245,31 @@ export class UnitPageComponent {
   readonly error = signal<string | null>(null);
   readonly busy = signal(false);
 
+  readonly views: { id: ChartView; name: string }[] = [
+    { id: 'stacked', name: 'Stacked' },
+    { id: 'proportional', name: 'Proportional' },
+    { id: 'table', name: 'Table' },
+  ];
+  readonly view = signal<ChartView>('stacked');
+  readonly filter = signal<UnitFilter>(defaultFilter());
+  readonly filterOpen = signal(false);
+  readonly filterCount = computed(() => activeFilterCount(this.filter()));
+  /** The table's columns: the filtered states, top of the stack first. */
+  readonly tableStates = computed(() => [...STATE_ORDER].reverse().filter((s) => this.filter().states.includes(s)));
+  /** The filter as the task list's facets; done tasks are approved ones. */
+  readonly listFacets = computed<TaskListFacets>(() => {
+    const f = this.filter();
+    const statuses = new Set<TaskStatus>(f.states.filter((s): s is TaskStatus => s !== 'done' && s !== 'retired'));
+    if (f.states.includes('done')) statuses.add('approved');
+    return {
+      teams: f.teams,
+      claimants: f.claimants,
+      requesters: f.requesters,
+      statuses: [...statuses],
+      includeRetired: f.states.includes('retired'),
+    };
+  });
+
   pickUser = '';
   pickRole = '';
 
@@ -208,14 +288,12 @@ export class UnitPageComponent {
   readonly counts = computed(() => {
     const s = this.stats();
     if (!s) return [];
-    return [
-      { label: 'Open', value: s.byStatus.open },
-      { label: 'Claimed', value: s.byStatus.claimed },
-      { label: 'In review', value: s.byStatus.review },
-      { label: 'Revising', value: s.byStatus.revising },
-      { label: 'Approved', value: s.byStatus.approved },
-      { label: 'Done', value: s.completed },
-    ];
+    const value: Record<TaskState, number> = { ...s.byStatus, done: s.completed, retired: s.retired };
+    // The status filter applies here too: only the ticked states are counted.
+    return [...STATE_ORDER]
+      .reverse()
+      .filter((st) => this.filter().states.includes(st))
+      .map((st) => ({ label: STATE_LABEL[st], value: value[st] }));
   });
   readonly medians = computed(() => {
     const s = this.stats();
@@ -244,8 +322,42 @@ export class UnitPageComponent {
     this.route.paramMap.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe((params) => {
       this.kind.set(this.route.snapshot.data['kind'] as UnitKind);
       this.id.set(params.get('id') ?? '');
+      this.filter.set(defaultFilter());
       void this.load();
     });
+  }
+
+  setFilter(f: UnitFilter): void {
+    const before = this.filter();
+    this.filter.set(f);
+    const serverSide = (x: UnitFilter) => JSON.stringify([x.teams, x.claimants, x.requesters]);
+    if (serverSide(before) !== serverSide(f)) void this.loadStats();
+  }
+
+  private async loadStats(): Promise<void> {
+    const f = this.filter();
+    try {
+      this.stats.set(
+        await firstValueFrom(
+          this.orgApi.unitStats(this.kind(), this.id(), { team: f.teams, claimant: f.claimants, requester: f.requesters }),
+        ),
+      );
+    } catch (e) {
+      this.error.set(errorMessage(e));
+    }
+  }
+
+  stateColor(s: TaskState): string {
+    return STATE_COLOR[s];
+  }
+  stateLabel(s: TaskState): string {
+    return STATE_LABEL[s];
+  }
+  weekLabel(at: string): string {
+    return shortDate(at);
+  }
+  rowTotal(counts: Record<TaskState, number>): number {
+    return this.filter().states.reduce((n, s) => n + counts[s], 0);
   }
 
   canAssign(roleId: string): boolean {

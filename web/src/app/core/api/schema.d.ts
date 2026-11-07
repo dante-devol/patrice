@@ -2413,11 +2413,18 @@ export interface components {
             };
             completed: number;
             retired: number;
-            weekly: {
+            series: {
                 /** Format: date-time */
-                weekStart: string;
-                created: number;
-                completed: number;
+                at: string;
+                counts: {
+                    open: number;
+                    claimed: number;
+                    review: number;
+                    revising: number;
+                    approved: number;
+                    done: number;
+                    retired: number;
+                };
             }[];
             medianDaysToComplete: number | null;
             openAge: {
@@ -5622,6 +5629,9 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
+                team?: string;
+                claimant?: string;
+                requester?: string;
             };
             header?: never;
             path: {
@@ -5656,6 +5666,9 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
+                team?: string;
+                claimant?: string;
+                requester?: string;
             };
             header?: never;
             path: {

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LifecycleState, Prisma, StatusCache } from '@prisma/client';
+import { LifecycleState, Prisma, StatusCache, TaskState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../access/access.service';
 import { VisibilityService } from '../access/visibility.service';
@@ -15,9 +15,14 @@ const DEFAULT_WEEKS = 12;
 /** Upper bound on the rows a stats call reads; past it the stats say they're partial. */
 const MAX_TASKS = 5000;
 
+export const TASK_STATES: readonly TaskState[] = ['open', 'claimed', 'review', 'revising', 'approved', 'done', 'retired'];
+
 export interface UnitStatsQuery {
   from?: Date;
   to?: Date;
+  team?: string[];
+  claimant?: string[];
+  requester?: string[];
 }
 
 export interface UnitStats {
@@ -29,8 +34,11 @@ export interface UnitStats {
   byStatus: Record<StatusCache, number>;
   completed: number;
   retired: number;
-  /** One entry per week from `from`, by week start. */
-  weekly: { weekStart: Date; created: number; completed: number }[];
+  /**
+   * How many tasks were in each state at each point: weekly from `from`, ending at
+   * `to`. Tasks created after a point aren't counted at it.
+   */
+  series: { at: Date; counts: Record<TaskState, number> }[];
   /** Over tasks completed in the range. */
   medianDaysToComplete: number | null;
   /** Over open and claimed tasks now. */
@@ -58,7 +66,8 @@ const STATS_SELECT = {
 /**
  * Stats for a division or team page, computed over the tasks the caller can see
  * there (the task list's pre-filter plus a Cedar `task:read` check on each row), so
- * the numbers never reveal hidden work. A division's stats include its teams.
+ * the numbers never reveal hidden work. A division's stats include its teams. The
+ * team, claimant and requester filters narrow every number in the response.
  */
 @Injectable()
 export class UnitStatsService {
@@ -78,6 +87,10 @@ export class UnitStatsService {
       ...(unitType === 'division' ? { divisionId: unitId } : { teamId: unitId }),
       ...(visible ? { AND: [visible] } : {}),
     };
+    if (query.team && unitType === 'division') where.teamId = { in: query.team };
+    if (query.requester) where.requesterUserId = { in: query.requester };
+    if (query.claimant) where.claimants = { some: { userId: { in: query.claimant }, leftAt: null } };
+
     const rows = await this.prisma.task.findMany({ where, select: STATS_SELECT, orderBy: { id: 'desc' }, take: MAX_TASKS + 1 });
     const truncated = rows.length > MAX_TASKS;
     const tasks = await this.access.filterAllowed(userId, ACTIONS.taskRead.action, rows.slice(0, MAX_TASKS), taskRef);
@@ -85,30 +98,14 @@ export class UnitStatsService {
     const byStatus: Record<StatusCache, number> = { open: 0, claimed: 0, review: 0, revising: 0, approved: 0 };
     let completed = 0;
     let retired = 0;
-    const weeks = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / WEEK_MS));
-    const weekly = Array.from({ length: weeks }, (_, i) => ({
-      weekStart: new Date(from.getTime() + i * WEEK_MS),
-      created: 0,
-      completed: 0,
-    }));
-    const weekOf = (d: Date) => {
-      const t = d.getTime();
-      if (t < from.getTime() || t >= to.getTime()) return null;
-      return weekly[Math.floor((t - from.getTime()) / WEEK_MS)] ?? null;
-    };
+    const inRange = (d: Date) => d.getTime() >= from.getTime() && d.getTime() < to.getTime();
     const toComplete: number[] = [];
     const openAges: number[] = [];
     const now = Date.now();
 
     for (const t of tasks) {
-      const createdWeek = weekOf(t.createdAt);
-      if (createdWeek) createdWeek.created++;
-      if (t.completedAt) {
-        const doneWeek = weekOf(t.completedAt);
-        if (doneWeek) {
-          doneWeek.completed++;
-          toComplete.push((t.completedAt.getTime() - t.createdAt.getTime()) / DAY_MS);
-        }
+      if (t.completedAt && inRange(t.completedAt)) {
+        toComplete.push((t.completedAt.getTime() - t.createdAt.getTime()) / DAY_MS);
       }
       if (t.lifecycleState === LifecycleState.retired) {
         retired++;
@@ -122,10 +119,18 @@ export class UnitStatsService {
       }
     }
 
-    const reviews = await this.prisma.submission.findMany({
-      where: { taskId: { in: tasks.map((t) => t.id) }, reviewedAt: { gte: from, lt: to } },
-      select: { submittedAt: true, reviewedAt: true },
-    });
+    const taskIds = tasks.map((t) => t.id);
+    const [reviews, history] = await Promise.all([
+      this.prisma.submission.findMany({
+        where: { taskId: { in: taskIds }, reviewedAt: { gte: from, lt: to } },
+        select: { submittedAt: true, reviewedAt: true },
+      }),
+      this.prisma.taskStatusHistory.findMany({
+        where: { taskId: { in: taskIds }, changedAt: { lte: to } },
+        orderBy: [{ taskId: 'asc' }, { changedAt: 'asc' }],
+        select: { taskId: true, state: true, changedAt: true },
+      }),
+    ]);
     const reviewDays = reviews.map((r) => (r.reviewedAt!.getTime() - r.submittedAt.getTime()) / DAY_MS);
 
     const result: UnitStats = {
@@ -135,7 +140,7 @@ export class UnitStatsService {
       byStatus,
       completed,
       retired,
-      weekly,
+      series: statusSeries(from, to, history),
       medianDaysToComplete: median(toComplete),
       openAge: { medianDays: median(openAges), oldestDays: openAges.length ? round(Math.max(...openAges)) : null },
       medianReviewDays: median(reviewDays),
@@ -143,7 +148,11 @@ export class UnitStatsService {
 
     if (unitType === 'division') {
       const teams = await this.prisma.team.findMany({
-        where: { divisionId: unitId, lifecycleState: LifecycleState.active },
+        where: {
+          divisionId: unitId,
+          lifecycleState: LifecycleState.active,
+          ...(query.team ? { id: { in: query.team } } : {}),
+        },
         orderBy: { name: 'asc' },
         select: { id: true, name: true },
       });
@@ -171,6 +180,41 @@ export class UnitStatsService {
         : new NotFoundError('TEAM_NOT_FOUND', 'Team not found');
     }
   }
+}
+
+/**
+ * The state each task was in at each point (weekly from `from`, plus `to`), from its
+ * history rows sorted by task then time. A task with no row by a point didn't exist yet.
+ */
+export function statusSeries(
+  from: Date,
+  to: Date,
+  history: readonly { taskId: string; state: TaskState; changedAt: Date }[],
+): UnitStats['series'] {
+  const points: Date[] = [];
+  for (let t = from.getTime(); t < to.getTime(); t += WEEK_MS) points.push(new Date(t));
+  points.push(to);
+  const series = points.map((at) => ({ at, counts: emptyCounts() }));
+
+  let i = 0;
+  while (i < history.length) {
+    const taskId = history[i].taskId;
+    let j = i;
+    while (j < history.length && history[j].taskId === taskId) j++;
+    // Walk the points forward through this task's rows.
+    let k = i;
+    let state: TaskState | null = null;
+    for (const p of series) {
+      while (k < j && history[k].changedAt.getTime() <= p.at.getTime()) state = history[k++].state;
+      if (state) p.counts[state]++;
+    }
+    i = j;
+  }
+  return series;
+}
+
+function emptyCounts(): Record<TaskState, number> {
+  return { open: 0, claimed: 0, review: 0, revising: 0, approved: 0, done: 0, retired: 0 };
 }
 
 function round(n: number): number {

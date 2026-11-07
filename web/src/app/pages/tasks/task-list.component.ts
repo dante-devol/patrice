@@ -12,6 +12,16 @@ import { stampLabel, stampStatus } from './task-presentation';
 
 const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approved'];
 
+/** Facets a host page (a division or team page) applies to the list. */
+export interface TaskListFacets {
+  teams: string[];
+  claimants: string[];
+  requesters: string[];
+  /** Statuses to show; undefined or all five = any. */
+  statuses?: TaskStatus[];
+  includeRetired?: boolean;
+}
+
 /**
  * Tasks "work board". The faceted list — division and status switchers, a team
  * filter — over keyset "load more" paging. Tasks sit as rows on one ruled sheet
@@ -140,7 +150,8 @@ const STATUSES: TaskStatus[] = ['open', 'claimed', 'review', 'revising', 'approv
                       (click)="setStatus(s)">{{ statusLabel(s) }}</button>
             }
           </div>
-          @if (!team) {
+          <!-- Hidden when the host page already narrows the teams. -->
+          @if (!team && !hostTeams) {
             <label class="flex items-center gap-2 pb-1.5 text-ink-soft">
               <span>Team</span>
               <select [(ngModel)]="filters.team" (ngModelChange)="reload()" class="text-ink border border-line rounded bg-paper px-2 py-0.5">
@@ -189,6 +200,19 @@ export class TaskListComponent implements OnInit {
   @Input() team?: string;
   /** Shown inside another page: a section heading instead of the page title. */
   @Input() embedded = false;
+  /**
+   * Extra facets from the host page's filter (lists of ids or statuses; empty = any).
+   * The list's own status and team switchers narrow further.
+   */
+  @Input() set facets(v: TaskListFacets | null) {
+    this.extra = v;
+    if (this.started) void this.reload();
+  }
+  private extra: TaskListFacets | null = null;
+  get hostTeams(): boolean {
+    return (this.extra?.teams.length ?? 0) > 0;
+  }
+  private started = false;
 
   private readonly tasksApi = inject(TasksApi);
   private readonly templatesApi = inject(TemplatesApi);
@@ -220,6 +244,7 @@ export class TaskListComponent implements OnInit {
   readonly discordGated = this.auth.taskAccessBlockedByDiscord;
 
   ngOnInit(): void {
+    this.started = true;
     if (this.division) this.filters.division = this.division;
     if (this.team) this.filters.team = this.team;
     // Refresh (not ensureLoaded) so a division/team added elsewhere this session shows up
@@ -261,6 +286,12 @@ export class TaskListComponent implements OnInit {
   }
 
   async reload(): Promise<void> {
+    // The host filtered every status out: nothing to fetch.
+    if (this.extra?.statuses?.length === 0 && !this.extra.includeRetired) {
+      this.tasks.set([]);
+      this.nextCursor.set(null);
+      return;
+    }
     this.busy.set(true);
     this.error.set(null);
     try {
@@ -340,11 +371,18 @@ export class TaskListComponent implements OnInit {
   }
 
   /** Drop empty facets so the query string only carries set filters. */
-  private cleanFilters(): TaskFilters {
-    const f: TaskFilters = {};
-    if (this.filters.division) f.division = this.filters.division;
-    if (this.filters.team) f.team = this.filters.team;
-    if (this.filters.status) f.status = this.filters.status;
+  private cleanFilters(): Record<string, string> {
+    const f: Record<string, string> = {};
+    const list = (v: readonly string[]) => (v.length === 1 ? v[0] : `in:${v.join(',')}`);
+    const x = this.extra;
+    if (this.filters.division) f['division'] = this.filters.division;
+    if (this.filters.team) f['team'] = this.filters.team;
+    else if (x?.teams.length) f['team'] = list(x.teams);
+    if (this.filters.status) f['status'] = this.filters.status;
+    else if (x?.statuses && x.statuses.length < STATUSES.length) f['status'] = list(x.statuses);
+    if (x?.claimants.length) f['claimant'] = list(x.claimants);
+    if (x?.requesters.length) f['requester'] = list(x.requesters);
+    if (x?.includeRetired) f['include'] = 'retired';
     return f;
   }
 }

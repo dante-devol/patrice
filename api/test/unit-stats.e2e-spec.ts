@@ -88,9 +88,9 @@ describe('Unit stats', () => {
     expect(res.body.byStatus.open).toBe(5);
     expect(res.body.completed).toBe(1);
     expect(res.body.retired).toBe(0);
-    expect(res.body.weekly).toHaveLength(12);
-    const weeklyCreated = res.body.weekly.reduce((s: number, w: { created: number }) => s + w.created, 0);
-    expect(weeklyCreated).toBe(6);
+    // Weekly points plus one at `to`; the last point is the state now.
+    expect(res.body.series).toHaveLength(13);
+    expect(res.body.series[12].counts).toEqual({ open: 5, claimed: 0, review: 0, revising: 0, approved: 0, done: 1, retired: 0 });
     expect(res.body.teams).toEqual([
       { teamId: draftsTeamId, name: 'Drafts', open: 2, completed: 1 },
       { teamId: editsTeamId, name: 'Edits', open: 2, completed: 0 },
@@ -119,11 +119,45 @@ describe('Unit stats', () => {
     const to = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
     const res = await auth(http().get(`/api/teams/${draftsTeamId}/stats`).query({ from, to }));
     expect(res.status).toBe(200);
-    expect(res.body.weekly).toHaveLength(2);
+    expect(res.body.series).toHaveLength(3);
     expect(res.body.medianDaysToComplete).toBe(2);
 
     const bad = await auth(http().get(`/api/teams/${draftsTeamId}/stats`).query({ from: to, to: from }));
     expect(bad.status).toBe(422);
+  });
+
+  it('records each change of a task’s state in its history', async () => {
+    const done = await prisma.task.findFirstOrThrow({ where: { completedAt: { not: null } } });
+    const history = await prisma.taskStatusHistory.findMany({ where: { taskId: done.id }, orderBy: { changedAt: 'asc' } });
+    expect(history.map((h) => h.state)).toEqual(['open', 'done']);
+
+    // Retiring and reviving record too; edits that keep the state don't.
+    const other = await prisma.task.findFirstOrThrow({ where: { completedAt: null, teamId: editsTeamId } });
+    await auth(http().patch(`/api/tasks/${other.id}`)).send({ name: 'Renamed' });
+    await prisma.task.update({ where: { id: other.id }, data: { lifecycleState: 'retired', retiredAt: new Date() } });
+    await prisma.task.update({ where: { id: other.id }, data: { lifecycleState: 'active', retiredAt: null } });
+    const states = await prisma.taskStatusHistory.findMany({ where: { taskId: other.id }, orderBy: { changedAt: 'asc' } });
+    expect(states.map((h) => h.state)).toEqual(['open', 'retired', 'open']);
+  });
+
+  it('filters by team, requester and claimant', async () => {
+    const edits = await auth(http().get(`/api/divisions/${writingId}/stats`).query({ team: editsTeamId }));
+    expect(edits.status).toBe(200);
+    expect(edits.body.byStatus.open).toBe(2);
+    expect(edits.body.completed).toBe(0);
+    expect(edits.body.teams).toEqual([{ teamId: editsTeamId, name: 'Edits', open: 2, completed: 0 }]);
+
+    const both = await auth(http().get(`/api/divisions/${writingId}/stats`).query({ team: `in:${editsTeamId},${draftsTeamId}` }));
+    expect(both.body.byStatus.open + both.body.completed).toBe(5);
+
+    const adminId = (await auth(http().get('/api/me'))).body.id;
+    const mine = await auth(http().get(`/api/divisions/${writingId}/stats`).query({ requester: adminId }));
+    expect(mine.body.byStatus.open).toBe(5);
+    const theirs = await auth(http().get(`/api/divisions/${writingId}/stats`).query({ requester: viewer.userId }));
+    expect(theirs.body.byStatus.open).toBe(0);
+    expect(theirs.body.series[12].counts.open).toBe(0);
+    const claimed = await auth(http().get(`/api/divisions/${writingId}/stats`).query({ claimant: adminId }));
+    expect(claimed.body.byStatus.open).toBe(0);
   });
 
   it('needs read access to the unit', async () => {

@@ -1347,26 +1347,55 @@
           "retired": {
             "type": "integer"
           },
-          "weekly": {
+          "series": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "weekStart": {
+                "at": {
                   "type": "string",
                   "format": "date-time"
                 },
-                "created": {
-                  "type": "integer"
-                },
-                "completed": {
-                  "type": "integer"
+                "counts": {
+                  "type": "object",
+                  "properties": {
+                    "open": {
+                      "type": "integer"
+                    },
+                    "claimed": {
+                      "type": "integer"
+                    },
+                    "review": {
+                      "type": "integer"
+                    },
+                    "revising": {
+                      "type": "integer"
+                    },
+                    "approved": {
+                      "type": "integer"
+                    },
+                    "done": {
+                      "type": "integer"
+                    },
+                    "retired": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "open",
+                    "claimed",
+                    "review",
+                    "revising",
+                    "approved",
+                    "done",
+                    "retired"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [
-                "weekStart",
-                "created",
-                "completed"
+                "at",
+                "counts"
               ],
               "additionalProperties": false
             }
@@ -1441,7 +1470,7 @@
           "byStatus",
           "completed",
           "retired",
-          "weekly",
+          "series",
           "medianDaysToComplete",
           "openAge",
           "medianReviewDays"
@@ -8137,6 +8166,30 @@
             "required": false,
             "name": "to",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "team",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "claimant",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "requester",
+            "in": "query"
           }
         ],
         "responses": {
@@ -8205,6 +8258,30 @@
             },
             "required": false,
             "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "team",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "claimant",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "requester",
             "in": "query"
           }
         ],

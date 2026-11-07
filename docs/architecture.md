@@ -71,7 +71,9 @@ queue's due jobs in-process before returning.
   to a person at a division or team, and its grants (scope `assigned`) apply only there;
   a division assignment covers its teams. Leads can assign only unit roles marked
   assignable by leads. The division and team pages (`/divisions/:id`, `/teams/:id`) show
-  the unit's leadership, members, tasks and stats, counted over the tasks you can see.
+  the unit's leadership, members, tasks and stats, counted over the tasks you can see. The
+  status-over-time chart reads `task_status_history`, which a database trigger on `task`
+  fills on every change of a task's state (its status, or done / retired).
 - **Cedar decides** every access question. Grants are projected to Cedar policies (cached
   per `config_version`); one `EntityLoader` builds every resource. Lists are filtered per
   row, and responses carry `allowedActions` so the web never guesses. Static policies add

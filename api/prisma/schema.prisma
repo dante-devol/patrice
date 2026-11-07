@@ -17,6 +17,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// A task's displayed state over time (`task_status_history`): its status, except a
+/// completed task is `done` and a retired one is `retired`.
+enum TaskState {
+  open
+  claimed
+  review
+  revising
+  approved
+  done
+  retired
+}
+
 enum LifecycleState {
   active
   deactivated
@@ -602,14 +614,15 @@ model Task {
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  division       Division         @relation(fields: [divisionId], references: [id], onDelete: Restrict)
-  team           Team?            @relation(fields: [teamId], references: [id], onDelete: Restrict)
-  requester      AppUser          @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
-  completer      AppUser?         @relation("TaskCompleter", fields: [completedBy], references: [id], onDelete: Restrict)
-  sourceTemplate RequestTemplate? @relation(fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  division       Division            @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  team           Team?               @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  requester      AppUser             @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
+  completer      AppUser?            @relation("TaskCompleter", fields: [completedBy], references: [id], onDelete: Restrict)
+  sourceTemplate RequestTemplate?    @relation(fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   questions      TaskQuestion[]
   attachments    Attachment[]
   claimants      TaskClaimant[]
+  statusHistory  TaskStatusHistory[]
   submissions    Submission[]
   messages       Message[]
   events         DomainEvent[]
@@ -933,4 +946,18 @@ model InvitationRole {
 
   @@id([invitationId, roleId])
   @@map("invitation_role")
+}
+
+/// One change of a task's displayed state, written by a database trigger on `task`
+/// (migration 20261107000000) so every write path records it. Never written by the app.
+model TaskStatusHistory {
+  id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  taskId    String    @map("task_id") @db.Uuid
+  state     TaskState
+  changedAt DateTime  @default(now()) @map("changed_at") @db.Timestamptz(6)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, changedAt])
+  @@map("task_status_history")
 }

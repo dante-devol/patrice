@@ -247,6 +247,7 @@ export const MyUnit = z
   .strict()
   .openapi('MyUnit');
 
+const count = z.number().int();
 const days = z.number().nullable();
 export const UnitStats = z
   .object({
@@ -256,7 +257,24 @@ export const UnitStats = z
     byStatus: z.object({ open: z.number().int(), claimed: z.number().int(), review: z.number().int(), revising: z.number().int(), approved: z.number().int() }).strict(),
     completed: z.number().int(),
     retired: z.number().int(),
-    weekly: z.array(z.object({ weekStart: timestamp, created: z.number().int(), completed: z.number().int() }).strict()),
+    series: z.array(
+      z
+        .object({
+          at: timestamp,
+          counts: z
+            .object({
+              open: count,
+              claimed: count,
+              review: count,
+              revising: count,
+              approved: count,
+              done: count,
+              retired: count,
+            })
+            .strict(),
+        })
+        .strict(),
+    ),
     medianDaysToComplete: days,
     openAge: z.object({ medianDays: days, oldestDays: days }).strict(),
     medianReviewDays: days,
