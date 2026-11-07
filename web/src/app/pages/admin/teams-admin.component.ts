@@ -68,6 +68,7 @@ interface Fields {
                 @else { <span [class]="lcStamp(t.lifecycleState)">{{ t.lifecycleState }}</span> }
               </td>
               <td>
+                <a class="quiet" [routerLink]="['/teams', t.id]">Open page</a>
                 @if (lc) {
                   <button class="quiet" (click)="rows.toggleLifecycle(t, lc)">Undo</button>
                 } @else if (t.lifecycleState === 'active') {
