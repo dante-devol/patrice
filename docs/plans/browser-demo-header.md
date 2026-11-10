@@ -1,7 +1,7 @@
 # Plan: browser demo — own project, demo header, user switcher, inbox
 
-Status: agreed with the owner 2026-11-10. **Phase 1 done** (the demo is now `demo/`;
-see `demo/README.md`); phases 2–5 not started. Seed data is being designed separately
+Status: agreed with the owner 2026-11-10. **Phases 1–2 done** (the demo is now
+`demo/`, with its header; see `demo/README.md`); phases 3–5 not started. Seed data is being designed separately
 (see "Inputs").
 
 ## Goals
@@ -87,9 +87,9 @@ with `index.html`. The header treats any non-JSON answer as "not started".
   injects them into `index.html` and `demo.html`; the Angular source is untouched.
 - **Styling:** rendered in a **Shadow DOM**, so the app's global CSS and the header's
   styles can't affect each other. It uses the app's graphite tokens.
-- **Layout:** a fixed bar about 40 px tall. It pushes the page down by the same amount.
-  Check that app overlays (dialogs, toasts, the admin presence bar) still sit correctly
-  below it.
+- **Layout:** a 40 px bar in normal flow, inserted before `<app-root>`; not fixed. It
+  scrolls away with the page, so the app's own sticky top bar, its full-screen dialogs
+  and the admin save bar behave exactly as without the demo.
 - **Contents:**
   - left: "← dante-devol.dev", then "Patrice demo";
   - right: "Start page", the user switcher, and the inbox button with an unread badge.

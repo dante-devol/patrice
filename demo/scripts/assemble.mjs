@@ -13,6 +13,13 @@ const web = resolve(demo, '../web/dist/patrice-web/browser');
 cpSync(web, site, { recursive: true });
 for (const f of readdirSync(worker)) cpSync(join(worker, f), join(site, f));
 cpSync(join(demo, 'web/boot.js'), join(site, 'demo-boot.js'));
+cpSync(join(demo, 'web/header.js'), join(site, 'demo-header.js'));
+// The demo header, first thing in <body> on every page (it inserts itself above the app).
+const headerScript = '<script src="/demo-header.js"></script>';
+const withHeader = (html) => {
+  if (!/<body[^>]*>/.test(html)) throw new Error('no <body> to put the demo header in');
+  return html.replace(/<body[^>]*>/, (tag) => `${tag}${headerScript}`);
+};
 
 // The demo login: the seed script's defaults (the snapshot is seeded with them), read
 // from the script so the two can't disagree. The start page shows them.
@@ -24,11 +31,13 @@ const login = {
 if (!login.email || !login.password) throw new Error('could not read the demo login from api/scripts/seed.mjs');
 const loginScript = `<script>window.patriceDemo=${JSON.stringify(login)}</script>`;
 
-const startPage = readFileSync(join(demo, 'web/demo.html'), 'utf8').replace('<script>', `${loginScript}\n    <script>`);
+const startPage = withHeader(
+  readFileSync(join(demo, 'web/demo.html'), 'utf8').replace('<script>', `${loginScript}\n    <script>`),
+);
 writeFileSync(join(site, 'demo.html'), startPage);
 
 const indexPath = join(site, 'index.html');
-let html = readFileSync(indexPath, 'utf8');
+let html = withHeader(readFileSync(indexPath, 'utf8'));
 const scripts = [];
 html = html.replace(/<script src="([^"]+)" type="module"><\/script>/g, (_m, src) => {
   scripts.push(src);

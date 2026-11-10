@@ -26,9 +26,9 @@ Log in as `admin@example.com` / `correct horse battery` (the dev seed's users).
 | Path | What |
 |---|---|
 | `src/` | Composition root (`demo-app.ts`), request dispatcher, service worker, Node shims, the Node snapshot server |
-| `web/` | Files served as-is: the start page (`demo.html`), the boot script, the worker wrapper (`sw.js`) |
+| `web/` | Files served as-is: the start page (`demo.html`), the demo header (`header.js`), the boot script, the worker wrapper (`sw.js`) |
 | `scripts/` | `make.mjs` (the whole build), `build.mjs` (worker bundle), `assemble.mjs` (site), `serve.mjs`, `check-isolation.mjs`, `diagnostics/` |
-| `tests/` | Playwright checks: start flow, front door, sweep, stress, upgrade, Firefox |
+| `tests/` | Playwright checks: start flow, front door, header, sweep, stress, upgrade, Firefox |
 | `.build/` | Everything generated (ignored): compiled code, the demo Prisma client, the snapshot, the worker, the site |
 
 **How it uses the API without touching it:**
@@ -43,6 +43,14 @@ Log in as `admin@example.com` / `correct horse battery` (the dev seed's users).
   the schema's folder.
 - **Peers:** `demo/.npmrc` turns off automatic peer installs, so npm never adds a second
   Prisma.
+
+**Demo header (`web/header.js`).** A dark bar above the app on every demo page,
+inserted before `<app-root>` in normal flow and rendered in a Shadow DOM, so the app's
+styles, sticky bar and dialogs are unaffected. It has a back link to dante-devol.dev,
+and once the demo is started, a link to the start page and who you're signed in as.
+It reads that from `GET /__demo/state`, which the worker answers itself
+(`src/demo-endpoints.ts`) by asking the real `/api/me`. The worker tells it when a login
+or logout changes the session. Before the demo is started, only the back link shows.
 
 **Start page (`web/demo.html`, served at `/demo`).** A visitor without the demo set up
 (no service worker registered) is sent there from any app URL, with `?next=` holding

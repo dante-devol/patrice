@@ -4,7 +4,8 @@
 import './sw-env';
 import { PGlite } from '@electric-sql/pglite';
 import { createDemoApp } from './demo-app';
-import { CookieJar, createDispatcher } from './dispatch';
+import { CookieJar, SetCookie, createDispatcher } from './dispatch';
+import { handleDemoRequest } from './demo-endpoints';
 // The bundler swaps this for shims/cedar.mjs (Cedar's web build).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { demoInitCedar } = require('@cedar-policy/cedar-wasm/nodejs') as { demoInitCedar: () => Promise<void> };
@@ -75,25 +76,60 @@ async function boot(): Promise<Server> {
   return { dispatch: createDispatcher(app), jar, close };
 }
 
-async function handle(event: FetchEvent): Promise<Response> {
+function getServer(): Promise<Server> {
   // A failed boot is retried on the next request rather than cached forever.
   server ??= boot().catch((e) => {
     server = null;
     throw e;
   });
-  const { dispatch, jar } = await server;
-  const { response, cookies } = await dispatch(event.request, jar);
-  if (cookies.length) {
-    const cache = await caches.open('patrice-demo');
-    await cache.put(JAR_KEY, new Response(JSON.stringify([...jar])));
-    // The page reads the CSRF cookie itself (double-submit), so mirror readable cookies.
-    const readable = cookies.filter((c) => !c.httpOnly);
-    if (readable.length) {
-      const clients = await self.clients.matchAll({ type: 'window' });
-      for (const c of clients) c.postMessage({ type: 'demo-cookies', cookies: readable });
-    }
-  }
+  return server;
+}
+
+/** Run a request through the API with the demo's cookie jar, and keep what it sets. */
+async function viaApi(request: Request): Promise<Response> {
+  const { dispatch, jar } = await getServer();
+  const { response, cookies } = await dispatch(request, jar);
+  if (cookies.length) await cookiesChanged(jar, cookies);
   return response;
+}
+
+async function cookiesChanged(jar: CookieJar, cookies: SetCookie[]): Promise<void> {
+  const cache = await caches.open('patrice-demo');
+  await cache.put(JAR_KEY, new Response(JSON.stringify([...jar])));
+  const clients = await self.clients.matchAll({ type: 'window' });
+  // The page reads the CSRF cookie itself (double-submit), so mirror readable cookies.
+  const readable = cookies.filter((c) => !c.httpOnly);
+  for (const c of clients) {
+    if (readable.length) c.postMessage({ type: 'demo-cookies', cookies: readable });
+    // A new or ended session (login, logout): the demo header shows who you are.
+    if (cookies.some((k) => k.name === 'patrice_session')) c.postMessage({ type: 'demo-session' });
+  }
+}
+
+async function handle(event: FetchEvent): Promise<Response> {
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/__demo/')) {
+    return handleDemoRequest(event.request, {
+      build: __DEMO_BUILD__,
+      running: () => server !== null,
+      api: async (method, path, body) => {
+        // As the page would send it: JSON, and the CSRF token on writes (double-submit).
+        const { jar } = await getServer();
+        const headers: Record<string, string> = {};
+        if (body !== undefined) headers['content-type'] = 'application/json';
+        const csrf = jar.get('patrice_csrf');
+        if (csrf && method !== 'GET') headers['x-csrf-token'] = csrf;
+        return viaApi(
+          new Request(new URL(path, self.location.origin), {
+            method,
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+          }),
+        );
+      },
+    });
+  }
+  return viaApi(event.request);
 }
 
 // The worker's event listeners live in the small wrapper (demo/sw.js), which loads

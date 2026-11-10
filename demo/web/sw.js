@@ -40,7 +40,8 @@ self.addEventListener('message', (e) => {
 });
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin || !url.pathname.startsWith('/api/')) return;
+  // The API, and the demo's own endpoints (/__demo/, for the demo header).
+  if (url.origin !== self.location.origin || !(url.pathname.startsWith('/api/') || url.pathname.startsWith('/__demo/'))) return;
   if (!load()) {
     event.respondWith(
       new Response(JSON.stringify({ error: { code: 'DEMO_WORKER_FAILED', message: String(loadError) } }), {

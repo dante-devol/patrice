@@ -36,7 +36,7 @@
         color: var(--ink);
         font: 15px/1.55 var(--font-ui);
       }
-      main { max-width: 680px; margin: 0 auto; padding: 56px 16px 64px; }
+      main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
       .brand { font: 700 24px var(--font-display); margin: 0 0 28px; }
       .sheet {
         background: var(--paper);
@@ -97,7 +97,6 @@
   </head>
   <body>
     <main>
-      <p class="brand">Patrice</p>
       <section class="sheet" aria-labelledby="title">
         <p class="eyebrow">Demo</p>
         <h1 id="title">Try Patrice in your browser</h1>
@@ -265,6 +264,7 @@
               if (!ok && !navigator.serviceWorker.controller) throw new Error('the local server didn’t take control of this page.');
             }
             finishStep('install');
+            window.dispatchEvent(new Event('patrice-demo-changed'));
             $('progress-note').textContent = 'The first start takes a few seconds; later ones are quicker.';
 
             // Asking the API for its health starts it (and the steps above report in).
@@ -325,6 +325,7 @@
           $('progress').hidden = true;
           await refresh();
           $('status-text').innerHTML = '<strong>Demo data cleared.</strong> Starting sets up a fresh copy.';
+          window.dispatchEvent(new Event('patrice-demo-changed'));
         }
 
         $('start').addEventListener('click', start);
