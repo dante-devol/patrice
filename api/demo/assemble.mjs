@@ -40,7 +40,28 @@ html = html.replace(
 );
 writeFileSync(indexPath, html);
 // Cloudflare Pages: serve index.html for app routes (it does by default without a 404.html).
-writeFileSync(join(site, '_headers'), '/*.wasm\n  Content-Type: application/wasm\n');
+// Cloudflare response headers. Every page: no framing by other sites, no content-type
+// guessing, no referrer to other sites, not indexed by search engines, no access to
+// camera, microphone or location.
+writeFileSync(
+  join(site, '_headers'),
+  [
+    '/*',
+    '  X-Frame-Options: DENY',
+    "  Content-Security-Policy: frame-ancestors 'none'",
+    '  X-Content-Type-Options: nosniff',
+    '  Referrer-Policy: no-referrer',
+    '  X-Robots-Tag: noindex',
+    '  Permissions-Policy: camera=(), microphone=(), geolocation=()',
+    '',
+    '/*.wasm',
+    '  Content-Type: application/wasm',
+    '',
+    '/*.data',
+    '  Content-Type: application/octet-stream',
+    '',
+  ].join('\n'),
+);
 // The site's front door is the start page, whether or not the demo is set up yet.
 writeFileSync(join(site, '_redirects'), '/  /demo  302\n');
 console.log(`site -> ${site} (${scripts.length} app scripts deferred)`);

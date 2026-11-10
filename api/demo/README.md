@@ -40,6 +40,14 @@ such as a subdomain. The app, the worker and the API all use root paths (`/sw.js
   long as there's no `404.html`.
 - **Start page address:** Cloudflare drops `.html` from page addresses, so the start
   page lives at `/demo`. `serve.mjs` maps it the same way locally.
+- **Response headers** (`_headers`, written by `assemble.mjs`): every response
+  forbids framing (`X-Frame-Options: DENY`, `frame-ancestors 'none'`), content-type
+  guessing (`nosniff`), referrers, search indexing, and camera, microphone and
+  location access. The `.wasm` and `.data` files get explicit content types.
+- **Cost:** the deploy is static assets only, with no Worker script, and every `/api`
+  request is answered in the visitor's browser, so traffic is plain file serving. Keep
+  it that way: Worker code, or `run_worker_first`, would make requests count against
+  the Workers quota.
 - **Front door:** `/` always redirects to `/demo`, through the site's `_redirects`
   (written by `assemble.mjs`), `serve.mjs` locally, and `boot.js` as a fallback. That
   holds even when the demo is already set up. From the start page, Continue opens
