@@ -1,7 +1,7 @@
 // Spike diagnostics for the browser demo: browse quickly (parallel requests), reload,
 // hard-reload, open a second visit on an existing database, and report every API
 // failure plus the service worker's own errors (via CDP).
-//   node tools/shots/demo-stress.mjs [baseUrl]
+//   node tests/demo-stress.mjs [baseUrl]
 import { chromium } from 'playwright';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -53,7 +53,9 @@ async function waitForApp(page, label) {
 
 // Visit 1: fresh profile, log in, click around fast.
 let { ctx, page } = await open();
-await page.goto(`${BASE}/login`);
+// A new visitor starts the demo from its start page, which then opens the app.
+await page.goto(`${BASE}/demo`);
+await page.click('#start:not([disabled])');
 await waitForApp(page, 'first visit');
 await page.fill('input[type=email]', 'admin@example.com');
 await page.fill('input[type=password]', 'correct horse battery');

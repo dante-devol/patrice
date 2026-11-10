@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { DeadLetter, LocalJobRunner } from '../../src/queue/queue.service';
+import type { DeadLetter, LocalJobRunner } from '../../api/src/queue/queue.service';
 
 /**
  * Demo stand-in for QueueService: there is no worker in the browser, so published

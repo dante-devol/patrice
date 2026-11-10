@@ -1,0 +1,22 @@
+// Compiles the demo together with the API's source (api/src), with tsc so Nest keeps
+// its decorator metadata. Packages come from api/node_modules (one copy of Nest and
+// Prisma for both), the generated client from .build/node_modules, and the demo's own
+// tools from demo/node_modules.
+{
+  "extends": "../api/tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./.build/dist",
+    "rootDir": "..",
+    "baseUrl": ".",
+    "paths": {
+      "demo-prisma-client": ["./.build/node_modules/demo-prisma-client"],
+      "*": ["../api/node_modules/*", "./node_modules/*"]
+    },
+    "typeRoots": ["../api/node_modules/@types"],
+    "incremental": false,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["./src/**/*", "../api/src/**/*"],
+  "exclude": ["../api/src/**/*.spec.ts"]
+}

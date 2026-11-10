@@ -1,12 +1,12 @@
 // Spike check: the static demo site in a real Chromium. The service worker runs the
 // API; this logs in through the normal UI and captures a few pages.
-//   node tools/shots/demo-spike.mjs http://localhost:4400 <outDir>
+//   node tests/demo-spike.mjs http://localhost:4400 <outDir>
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BASE = process.argv[2] ?? 'http://localhost:4400';
-const OUT = process.argv[3] ?? 'screenshots/demo-spike';
+const OUT = process.argv[3] ?? '.build/screenshots/demo-spike';
 mkdirSync(OUT, { recursive: true });
 
 // A persistent profile: service workers need real (non-incognito) storage.
@@ -28,7 +28,9 @@ page.on('response', (r) => {
   if (r.url().includes('/api/') && r.status() >= 400) failed.push(`${r.status()} ${r.request().method()} ${r.url()}`);
 });
 
-await page.goto(`${BASE}/login`);
+// A new visitor starts the demo from its start page, which then opens the app.
+await page.goto(`${BASE}/demo`);
+await page.click('#start:not([disabled])');
 await page.waitForSelector('input[type=email]', { timeout: 60_000 });
 console.log(`login page at ${t()}`);
 await page.screenshot({ path: join(OUT, '1-login.png') });

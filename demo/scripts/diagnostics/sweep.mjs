@@ -1,6 +1,6 @@
 // Diagnostics: log in to a running demo API and call every GET route in the contract,
 // filling `:id` params with real ids, to find routes that fail on PGlite.
-//   node demo/sweep.mjs [base]   (default http://localhost:3200/api)
+//   node scripts/diagnostics/sweep.mjs [base]   (default http://localhost:3200/api)
 import { readFileSync } from 'node:fs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3200/api';
@@ -37,7 +37,7 @@ ids.submission = subs[0]?.id;
 const tpl = await json(`/divisions/${ids.division}/request-templates`);
 ids.template = tpl[0]?.id;
 
-const routes = [...readFileSync(new URL('../src/contract/routes.ts', import.meta.url), 'utf8').matchAll(/method: 'get', path: '([^']+)'/g)].map((m) => m[1]);
+const routes = [...readFileSync(new URL('../../../api/src/contract/routes.ts', import.meta.url), 'utf8').matchAll(/method: 'get', path: '([^']+)'/g)].map((m) => m[1]);
 const pick = (path) => {
   if (path.startsWith('/tasks/')) return ids.task;
   if (path.startsWith('/divisions/')) return ids.division;

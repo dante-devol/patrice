@@ -1,6 +1,6 @@
 // Spike diagnostics: load the demo in Firefox, optionally with DevTools open from the
 // start (`-devtools`), and report whether the app comes up.
-//   node tools/shots/demo-firefox.mjs [devtools] [extra firefox prefs as k=v ...]
+//   node tests/demo-firefox.mjs [devtools] [extra firefox prefs as k=v ...]
 import { firefox } from 'playwright';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';

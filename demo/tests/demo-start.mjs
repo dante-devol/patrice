@@ -1,13 +1,13 @@
 // The demo's start page, end to end in a fresh browser: a deep link sends a new visitor
 // to the start page, Start shows each step and lands on the login page (which shows the
-// demo login), then Clear removes the data.   node tools/shots/demo-start.mjs [outDir]
+// demo login), then Clear removes the data.   node tests/demo-start.mjs [outDir]
 import { chromium } from 'playwright';
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4400';
-const OUT = process.argv[2] ?? 'tools/screenshots/demo-start';
+const OUT = process.argv[2] ?? '.build/screenshots/demo-start';
 mkdirSync(OUT, { recursive: true });
 const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'patrice-start-')), {
   viewport: { width: 1100, height: 900 },

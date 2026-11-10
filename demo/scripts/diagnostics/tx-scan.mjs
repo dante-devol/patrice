@@ -2,11 +2,11 @@
 // talks to the database outside the transaction — `this.prisma.*`, or a call to another
 // service's method that isn't handed `tx`. On Postgres that's a second connection; on
 // PGlite (one connection) it waits for the open transaction: a deadlock.
-//   node demo/tx-scan.mjs
+//   node scripts/diagnostics/tx-scan.mjs
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const root = new URL('../src/', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+const root = new URL('../../../api/src/', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
 const files = [];
 (function walk(d) {
   for (const f of readdirSync(d)) {

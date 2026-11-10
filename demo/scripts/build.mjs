@@ -1,32 +1,37 @@
 // Bundle the demo service worker (the real API, compiled by tsc so Nest keeps its
 // decorator metadata) for the browser, and copy the WebAssembly and data files it
-// loads next to it. Run after `tsc -p demo/tsconfig.json` and the snapshot build.
+// loads next to it. Run by make.mjs, after the tsc compile and the snapshot build.
 import { build } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const api = resolve(here, '..');
-const compiled = join(here, 'dist/demo/src');
-const out = resolve(process.argv[2] ?? join(here, 'out'));
+const demo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const api = resolve(demo, '../api');
+const buildDir = join(demo, '.build');
+const compiled = join(buildDir, 'dist/demo/src');
+const client = join(buildDir, 'node_modules/demo-prisma-client');
+const snapshot = join(buildDir, 'snapshot/demo-db.tar.gz');
+const out = resolve(process.argv[2] ?? join(buildDir, 'worker'));
 mkdirSync(out, { recursive: true });
 // Identifies this build's database (see sw.ts): changes whenever the snapshot does.
-const buildId = process.env.DEMO_BUILD_ID ?? createHash('sha256').update(readFileSync(join(here, 'public/demo-db.tar.gz'))).digest('hex').slice(0, 12);
+const buildId = process.env.DEMO_BUILD_ID ?? createHash('sha256').update(readFileSync(snapshot)).digest('hex').slice(0, 12);
 
-const unavailable = join(here, 'src/shims/unavailable.cjs');
+const unavailable = join(demo, 'src/shims/unavailable.cjs');
 const swaps = [
   [/^(node:)?https?$/, join(compiled, 'shims/http.js')],
   [/^(node:)?crypto$/, join(compiled, 'shims/crypto.js')],
   [/^(node:)?net$/, join(compiled, 'shims/net.js')],
-  [/^(node:)?perf_hooks$/, join(here, 'src/shims/perf_hooks.cjs')],
-  [/^(node:)?async_hooks$/, join(here, 'src/shims/async_hooks.cjs')],
+  [/^(node:)?perf_hooks$/, join(demo, 'src/shims/perf_hooks.cjs')],
+  [/^(node:)?async_hooks$/, join(demo, 'src/shims/async_hooks.cjs')],
   [/^#wasm-engine-loader$/, join(compiled, 'shims/prisma-wasm-loader.js')],
-  [/^@prisma\/client$/, join(here, 'generated/client/wasm.js')],
+  // The API's `@prisma/client` imports (enums, Prisma helpers) and the demo's client
+  // are the same generated client, in its browser (wasm) build.
+  [/^(@prisma\/client|demo-prisma-client)$/, join(client, 'wasm.js')],
   // PGlite's ES-module build finds its .wasm/.data next to the worker (import.meta.url).
-  [/^@electric-sql\/pglite$/, join(api, 'node_modules/@electric-sql/pglite/dist/index.js')],
-  [/^@cedar-policy\/cedar-wasm\/nodejs$/, join(here, 'src/shims/cedar.mjs')],
+  [/^@electric-sql\/pglite$/, join(demo, 'node_modules/@electric-sql/pglite/dist/index.js')],
+  [/^@cedar-policy\/cedar-wasm\/nodejs$/, join(demo, 'src/shims/cedar.mjs')],
   // Server-only packages the demo composition never calls.
   [/^(argon2|nodemailer|pg-boss|ws|pg)$/, unavailable],
   [/^@aws-sdk\//, unavailable],
@@ -60,7 +65,7 @@ const demoSwaps = {
         ? args.path.split('/')[0]
         : args.path;
       return {
-        resolveDir: api,
+        resolveDir: demo,
         loader: 'js',
         contents: `const m = require('@jspm/core/nodelibs/${target}');
 const d = m && m.default;
@@ -91,6 +96,8 @@ const result = await build({
   sourcemap: !!process.env.DEMO_DEBUG,
   metafile: true,
   logLevel: 'warning',
+  // Packages for the API's source come from api/node_modules (one copy, as in Node).
+  nodePaths: [join(api, 'node_modules')],
   // Optional Nest integrations: probed with a guarded require, absent here.
   external: [
     '@nestjs/microservices',
@@ -104,20 +111,20 @@ const result = await build({
   ],
   // A classic script has no import.meta; PGlite finds its files relative to the worker.
   define: { 'import.meta.url': 'self.location.href', __DEMO_BUILD__: JSON.stringify(buildId), 'process.env.NODE_DEBUG': 'undefined', __filename: '"/sw.js"', __dirname: '"/"' },
-  inject: [join(here, 'src/shims/globals.mjs')],
+  inject: [join(demo, 'src/shims/globals.mjs')],
   plugins: [demoSwaps],
 });
 
-const pglite = join(api, 'node_modules/@electric-sql/pglite/dist');
+const pglite = join(demo, 'node_modules/@electric-sql/pglite/dist');
 for (const [from, name] of [
   [join(pglite, 'pglite.wasm')],
   [join(pglite, 'pglite.data')],
   [join(pglite, 'initdb.wasm')],
   [join(pglite, 'citext.tar.gz')],
-  [join(here, 'generated/client/query_engine_bg.wasm')],
-  [join(here, 'public/demo-db.tar.gz')],
+  [join(client, 'query_engine_bg.wasm')],
+  [snapshot],
   [join(api, 'node_modules/@cedar-policy/cedar-wasm/web/cedar_wasm_bg.wasm')],
-  [join(here, 'sw.js')],
+  [join(demo, 'web/sw.js')],
 ]) {
   copyFileSync(from, join(out, name ?? from.split(/[\\/]/).pop()));
 }
@@ -128,7 +135,7 @@ const inputs = Object.entries(result.metafile.outputs[Object.keys(result.metafil
 const byPkg = new Map();
 for (const [file, { bytesInOutput }] of inputs) {
   const m = /node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)/.exec(file);
-  const key = m ? m[1] : file.includes('generated') ? '(prisma client)' : '(patrice)';
+  const key = m ? (m[1] === 'demo-prisma-client' ? '(prisma client)' : m[1]) : '(patrice)';
   byPkg.set(key, (byPkg.get(key) ?? 0) + bytesInOutput);
 }
 console.log(

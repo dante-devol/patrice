@@ -10,10 +10,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createDemoApp, setDemoEnv } from './demo-app';
 import { migrate } from './migrate';
-import { BootstrapService } from '../../src/invitations/bootstrap.service';
+import { BootstrapService } from '../../api/src/invitations/bootstrap.service';
 
 const PORT = 3200;
-const API_ROOT = path.resolve(__dirname, '../../../..');
+// Compiled to demo/.build/dist/demo/src; the API (migrations, seed script) is ../api.
+const API_ROOT = path.resolve(__dirname, '../../../../../api');
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);

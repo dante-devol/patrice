@@ -29,14 +29,13 @@ const DISCORD_ERRORS: Record<string, string> = {
     }
     .discord-btn:hover { background:var(--paper-hover); border-color:var(--faint); }
     .discord-btn svg { width:18px; height:18px; fill:#5865F2; }
-    .demo-hint { font-weight:400; color:var(--muted); }
   `],
   template: `
     <div class="panel auth">
       <h2>Log in</h2>
-      <label>Email @if (demo) { <span class="demo-hint">({{ demo.email }})</span> }</label>
+      <label>Email</label>
       <input type="email" [(ngModel)]="email" autocomplete="username" />
-      <label>Password @if (demo) { <span class="demo-hint">({{ demo.password }})</span> }</label>
+      <label>Password</label>
       <input type="password" [(ngModel)]="password" autocomplete="current-password" />
       @if (error()) { <p class="error">{{ error() }}</p> }
       <button [disabled]="busy()" (click)="submit()">Log in</button>
@@ -60,9 +59,6 @@ export class LoginComponent {
   private readonly auth = inject(AuthStore);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
-
-  /** The browser demo's login, set by its build (api/demo/assemble.mjs); absent otherwise. */
-  readonly demo = (window as { patriceDemo?: { email: string; password: string } }).patriceDemo ?? null;
 
   email = '';
   password = '';

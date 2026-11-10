@@ -1,13 +1,13 @@
 // Spike diagnostics: in Chromium, through the demo's service worker, call every GET
 // route in the API contract plus a set of writes, and report anything that fails or
-// mentions Prisma.   node tools/shots/demo-sweep.mjs [baseUrl]
+// mentions Prisma.   node tests/demo-sweep.mjs [baseUrl]
 import { chromium } from 'playwright';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const BASE = process.argv[2] ?? 'http://localhost:4400';
-const routes = [...readFileSync(new URL('../../../api/src/contract/routes.ts', import.meta.url), 'utf8').matchAll(/(\w+): r\(\{ method: '(get|post|patch|put|delete)', path: '([^']+)'/g)].map((m) => ({ name: m[1], method: m[2], path: m[3] }));
+const routes = [...readFileSync(new URL('../../api/src/contract/routes.ts', import.meta.url), 'utf8').matchAll(/(\w+): r\(\{ method: '(get|post|patch|put|delete)', path: '([^']+)'/g)].map((m) => ({ name: m[1], method: m[2], path: m[3] }));
 
 const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'patrice-sweep-')), {});
 const page = ctx.pages()[0] ?? (await ctx.newPage());
@@ -17,7 +17,9 @@ const grab = (src) => (m) => {
 };
 page.on('console', grab('page'));
 ctx.on('serviceworker', (w) => w.on('console', grab('sw')));
-await page.goto(`${BASE}/login`);
+// A new visitor starts the demo from its start page, which then opens the app.
+await page.goto(`${BASE}/demo`);
+await page.click('#start:not([disabled])');
 await page.waitForSelector('input[type=email]', { timeout: 60_000 });
 await page.fill('input[type=email]', 'admin@example.com');
 await page.fill('input[type=password]', 'correct horse battery');

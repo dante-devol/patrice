@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 
-const root = resolve(process.argv[2] ?? 'demo/site');
+const root = resolve(process.argv[2] ?? '.build/site');
 const port = Number(process.argv[3] ?? 4400);
 const types = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',

@@ -12,14 +12,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Spike (browser demo): the same models as a Rust-free client that runs on a driver
-// adapter (PGlite in the browser). Production keeps the client above.
-generator demo {
-  provider        = "prisma-client-js"
-  previewFeatures = ["queryCompiler", "driverAdapters"]
-  output          = "../demo/generated/client"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")

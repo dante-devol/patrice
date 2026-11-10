@@ -5,25 +5,26 @@ import { cpSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const site = resolve(process.argv[2] ?? join(here, 'site'));
-const web = resolve(here, '../../web/dist/patrice-web/browser');
+const demo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const site = resolve(process.argv[2] ?? join(demo, '.build/site'));
+const worker = join(demo, '.build/worker');
+const web = resolve(demo, '../web/dist/patrice-web/browser');
 
 cpSync(web, site, { recursive: true });
-for (const f of readdirSync(join(here, 'out'))) cpSync(join(here, 'out', f), join(site, f));
-cpSync(join(here, 'boot.js'), join(site, 'demo-boot.js'));
+for (const f of readdirSync(worker)) cpSync(join(worker, f), join(site, f));
+cpSync(join(demo, 'web/boot.js'), join(site, 'demo-boot.js'));
 
 // The demo login: the seed script's defaults (the snapshot is seeded with them), read
-// from the script so the two can't disagree. The app and the start page show them.
-const seed = readFileSync(join(here, '../scripts/seed.mjs'), 'utf8');
+// from the script so the two can't disagree. The start page shows them.
+const seed = readFileSync(join(demo, '../api/scripts/seed.mjs'), 'utf8');
 const login = {
   email: /ADMIN_EMAIL = arg\('--email', '([^']+)'\)/.exec(seed)?.[1],
   password: /PASSWORD = arg\('--password', '([^']+)'\)/.exec(seed)?.[1],
 };
-if (!login.email || !login.password) throw new Error('could not read the demo login from scripts/seed.mjs');
+if (!login.email || !login.password) throw new Error('could not read the demo login from api/scripts/seed.mjs');
 const loginScript = `<script>window.patriceDemo=${JSON.stringify(login)}</script>`;
 
-const startPage = readFileSync(join(here, 'demo.html'), 'utf8').replace('<script>', `${loginScript}\n    <script>`);
+const startPage = readFileSync(join(demo, 'web/demo.html'), 'utf8').replace('<script>', `${loginScript}\n    <script>`);
 writeFileSync(join(site, 'demo.html'), startPage);
 
 const indexPath = join(site, 'index.html');
@@ -39,7 +40,6 @@ html = html.replace(
   `${loginScript}<script>window.DEMO_SCRIPTS=${JSON.stringify(scripts)}</script><script src="demo-boot.js"></script></body>`,
 );
 writeFileSync(indexPath, html);
-// Cloudflare Pages: serve index.html for app routes (it does by default without a 404.html).
 // Cloudflare response headers. Every page: no framing by other sites, no content-type
 // guessing, no referrer to other sites, not indexed by search engines, no access to
 // camera, microphone or location.

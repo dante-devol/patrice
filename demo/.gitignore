@@ -1,0 +1,6 @@
+node_modules/
+# Everything the build produces: compiled TypeScript, the generated Prisma client,
+# the database snapshot, the worker bundle, the assembled site, screenshots.
+.build/
+# Wrangler's local state (wrangler dev)
+.wrangler/

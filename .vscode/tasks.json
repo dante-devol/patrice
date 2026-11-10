@@ -107,15 +107,16 @@
     },
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Browser demo (api/demo): the real API on PGlite in a service worker, as a
-    // static site on Cloudflare at patrice.dante-devol.dev (api/demo/README.md).
+    // Browser demo (demo/): the real API on PGlite in a service worker, as a static
+    // site on Cloudflare at patrice.dante-devol.dev (demo/README.md). Needs `npm ci`
+    // in api/, web/ and demo/.
     // ─────────────────────────────────────────────────────────────────────────
     {
       "label": "Demo: Build",
-      "detail": "Build the static demo site into api/demo/site (~30 s): seeded database snapshot, service worker bundle, web app.",
+      "detail": "Build the static demo site into demo/.build/site (~30 s): seeded database snapshot, service worker bundle, web app.",
       "type": "shell",
-      "command": "npm run demo:build",
-      "options": { "cwd": "${workspaceFolder}/api" },
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/demo" },
       "group": "build",
       "presentation": { "panel": "dedicated", "clear": true },
       "problemMatcher": []
@@ -124,8 +125,8 @@
       "label": "Demo: Deploy",
       "detail": "Build, then deploy the patrice-demo Worker to patrice.dante-devol.dev. Needs `npx wrangler@4 login` once.",
       "type": "shell",
-      "command": "npm run demo:deploy",
-      "options": { "cwd": "${workspaceFolder}/api" },
+      "command": "npm run deploy",
+      "options": { "cwd": "${workspaceFolder}/demo" },
       "dependsOn": ["Demo: Build"],
       "presentation": { "panel": "dedicated", "clear": false },
       "problemMatcher": []
@@ -134,8 +135,8 @@
       "label": "Demo: Preview locally",
       "detail": "Serve the last build on http://localhost:4400 (open it in Chrome or Firefox; the VS Code browser can't run service workers).",
       "type": "shell",
-      "command": "npm run demo:serve",
-      "options": { "cwd": "${workspaceFolder}/api" },
+      "command": "npm run serve",
+      "options": { "cwd": "${workspaceFolder}/demo" },
       "isBackground": true,
       "presentation": { "panel": "dedicated", "clear": true },
       "problemMatcher": []

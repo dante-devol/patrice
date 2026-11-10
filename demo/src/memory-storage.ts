@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import type { StoragePort } from '../../src/storage/storage.port';
+import type { StoragePort } from '../../api/src/storage/storage.port';
 
 /** Demo object storage: blobs held in memory (the demo has no file host). */
 export class MemoryStorageAdapter implements StoragePort {

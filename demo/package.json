@@ -1,0 +1,23 @@
+{
+  "name": "patrice-demo",
+  "version": "0.1.0",
+  "description": "Patrice in the browser: the real API on PGlite in a service worker, as a static site. Consumes api/src and the web build; neither knows it exists.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "node scripts/make.mjs",
+    "serve": "node scripts/serve.mjs .build/site 4400",
+    "deploy": "npx wrangler@4 deploy --config wrangler.jsonc",
+    "check:isolation": "node scripts/check-isolation.mjs",
+    "test": "node tests/demo-start.mjs && node tests/demo-root.mjs && node tests/demo-sweep.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
+    "@jspm/core": "^2.1.0",
+    "esbuild": "^0.28.2",
+    "hash-wasm": "^4.13.0",
+    "pglite-prisma-adapter": "0.6.1",
+    "playwright": "1.61.0"
+  }
+}

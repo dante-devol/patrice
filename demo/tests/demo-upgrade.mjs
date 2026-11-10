@@ -1,7 +1,7 @@
 // Spike diagnostics: a returning visitor after a redeploy. Visit and log in, swap in a
 // worker from a different build (the caller does that between the two phases), then
 // visit again and check the old database was replaced.
-//   node tools/shots/demo-upgrade.mjs <profileDir> first|second
+//   node tests/demo-upgrade.mjs <profileDir> first|second
 import { chromium } from 'playwright';
 
 const [profile, phase] = process.argv.slice(2);

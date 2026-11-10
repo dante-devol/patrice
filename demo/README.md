@@ -1,19 +1,52 @@
-# Browser demo (spike)
+# Patrice browser demo
 
 A static build of Patrice that runs **the real API inside the visitor's browser**, so it
-can be hosted on Cloudflare Pages (or any static host) with no server, no database and
+can be hosted on Cloudflare (or any static host) with no server, no database and
 nothing to secure. Each visitor gets their own copy of the data, kept in their browser.
 
+This is its own project, **outside the product**. It consumes `api/src` and the web
+app's production build, and neither of them knows it exists: `scripts/check-isolation.mjs`
+fails the build if `api/` or `web/` reference the demo.
+
 ```bash
-npm run demo:build     # ~30 s → demo/site
-npm run demo:serve     # http://localhost:4400 (a plain static server)
+npm ci                 # in demo/ (and npm ci in api/ and web/, whose packages it uses)
+npm run build          # ~20 s → .build/site
+npm run serve          # http://localhost:4400 (a plain static server)
+npm run deploy         # patrice-demo Worker → patrice.dante-devol.dev
+npm test               # browser checks against the local server (Playwright)
 ```
+
+VS Code has the same as tasks: **Demo: Build**, **Demo: Deploy** (builds first) and
+**Demo: Preview locally**.
 
 Log in as `admin@example.com` / `correct horse battery` (the dev seed's users).
 
-**Start page (`demo.html`).** A visitor without the demo set up (no service worker
-registered) is sent there from any app URL, with `?next=` holding where they were going.
-The page:
+## Layout
+
+| Path | What |
+|---|---|
+| `src/` | Composition root (`demo-app.ts`), request dispatcher, service worker, Node shims, the Node snapshot server |
+| `web/` | Files served as-is: the start page (`demo.html`), the boot script, the worker wrapper (`sw.js`) |
+| `scripts/` | `make.mjs` (the whole build), `build.mjs` (worker bundle), `assemble.mjs` (site), `serve.mjs`, `check-isolation.mjs`, `diagnostics/` |
+| `tests/` | Playwright checks: start flow, front door, sweep, stress, upgrade, Firefox |
+| `.build/` | Everything generated (ignored): compiled code, the demo Prisma client, the snapshot, the worker, the site |
+
+**How it uses the API without touching it:**
+- **Compiling:** `tsconfig.json` compiles `src/` together with `../api/src`, with tsc, so
+  Nest keeps its decorator metadata.
+- **Packages:** they come from `api/node_modules` (one copy of Nest and Prisma), through
+  `NODE_PATH` in Node and esbuild's `nodePaths` when bundling.
+- **Prisma client:** `make.mjs` copies the API's schema with its generator swapped for a
+  Rust-free, driver-adapter client, and generates it into
+  `.build/node_modules/demo-prisma-client`. The copy sits in
+  `api/node_modules/.cache/patrice-demo`, because Prisma must find `@prisma/client` from
+  the schema's folder.
+- **Peers:** `demo/.npmrc` turns off automatic peer installs, so npm never adds a second
+  Prisma.
+
+**Start page (`web/demo.html`, served at `/demo`).** A visitor without the demo set up
+(no service worker registered) is sent there from any app URL, with `?next=` holding
+where they were going. The page:
 
 - explains the demo;
 - shows whether this browser holds demo data, and how much;
@@ -22,19 +55,17 @@ The page:
 - **Clear demo data:** asks the worker to close its database, unregisters it, and
   deletes the database, cache and cookies.
 
-The demo login is read from `scripts/seed.mjs` at assembly and set as
-`window.patriceDemo`. The start page and the login form show it, the form next to its
-labels; outside the demo the global is absent and the form is unchanged.
-`/?reset-demo` now leads to this page.
+The demo login is read from `api/scripts/seed.mjs` at assembly and shown on the start
+page. `/?reset-demo` leads to this page.
 
 ## Hosting
 
-Deploy the **whole** `demo/site/` folder (42 files) to the **root** of an address,
+Deploy the **whole** `.build/site/` folder (43 files) to the **root** of an address,
 such as a subdomain. The app, the worker and the API all use root paths (`/sw.js`,
 `/api/…`, `/login`).
 
-- **Cloudflare Workers (static assets):** run `npm run demo:deploy`, which uses
-  `demo/wrangler.jsonc`. That config turns on `not_found_handling:
+- **Cloudflare Workers (static assets):** run `npm run deploy`, which uses
+  `wrangler.jsonc`. That config turns on `not_found_handling:
   "single-page-application"`; without it, app routes like `/login` return 404.
 - **Cloudflare Pages:** upload the folder; app routes fall back to `index.html` as
   long as there's no `404.html`.
@@ -77,7 +108,7 @@ such as a subdomain. The app, the worker and the API all use root paths (`/sw.js
   `base64url`, and the Cedar web build. Server-only packages the demo never calls
   (S3, SMTP, the Discord socket) resolve to `shims/unavailable.cjs`.
 - **The data is made by the real API.** `node-server.ts` applies the real migrations to
-  a PGlite database, serves the demo composition over HTTP, runs `scripts/seed.mjs`
+  a PGlite database, serves the demo composition over HTTP, runs `api/scripts/seed.mjs`
   against it, and saves the database as `demo-db.tar.gz`. On a first visit, the worker
   loads that snapshot.
 
@@ -90,14 +121,14 @@ Node, not Patrice. Two things keep it honest:
 - **Build failures:** if the API starts importing a server-only module outside a seam, the
   bundle fails to resolve it or the demo fails at runtime, and CI catches either one.
 - **Seed coverage:** the seed runs through the API's validation, so a stale seed fails
-  the build. That's how this spike found `scripts/seed.mjs` was broken: teams now need a
+  the build. That's how this spike found `api/scripts/seed.mjs` was broken: teams now need a
   division, and tasks need a template. It's fixed here.
 
 ## Spike results (2026-11-10)
 
 - **Works in Chromium:** login, home, the task list, the division page (stats and status
   chart), admin, and a write (claim, with CSRF). The status-history trigger fired, the
-  session survives a reload, and no API call failed (`web/tools/shots/demo-spike.mjs`).
+  session survives a reload, and no API call failed (`tests/demo-spike.mjs`).
 - **Startup:** the API is ready about 0.55 s after the first request on a fresh visit,
   and answers in about 10 ms after that.
 - **Download, first visit:** about 12 MB (brotli), then cached. That is the worker
@@ -120,7 +151,7 @@ Node, not Patrice. Two things keep it honest:
   retried. After 30 s without an answer, the bar says so.
 - **Reset:** `/?reset-demo` unregisters the worker and deletes the demo's database,
   session and cache.
-- **Checks** (`web/tools/shots/`):
+- **Checks** (`tests/`):
   - `demo-stress.mjs`: parallel writes, forced worker restarts (including mid-write),
     45 s idle, reloads, hard reloads, return visit.
   - `demo-sweep.mjs`: every GET route plus common writes through the worker.
@@ -161,18 +192,19 @@ Reported: in Firefox, opening DevTools while the demo is starting can leave the
 ## Known gaps / next steps
 
 - **Adapter patch:** `pglite-prisma-adapter@0.6` lacks `uuid[]`, and `make.mjs` patches
-  it in `node_modules`. Upstream the fix, or move to Prisma 7 and adapter 0.7, which
+  it in `demo/node_modules`. Upstream the fix, or move to Prisma 7 and adapter 0.7, which
   needs the Prisma upgrade.
 - **Snapshot size:** the snapshot is the largest file. Shipping migrations plus a data
   dump instead would cut about 4 MB, at the cost of about 1.5 s at first boot.
 - **Uploads:** attachment uploads spool to a temp file (`hashing-temp-storage.ts`, using
   `fs`), so they fail in the demo. Either add a memory spool behind a seam, or hide
   uploads in demo mode.
-- **Login:** a demo banner should show the login, or the demo should log in automatically.
-  It also needs a "Reset demo" control that deletes the IndexedDB database and the jar.
+- **Login and switching users:** the demo header (docs/plans/browser-demo-header.md)
+  will show who you are and switch between demo users.
 - **Browser support:** module service workers work in Chromium. Firefox and Safari still
   need testing. The built-in browser pane in the Claude app can't register service
   workers, so test in a real browser.
-- **CI:** run `npm run demo:build` and the Playwright check on every PR to `main`.
+- **CI:** run `npm run build`, `npm run check:isolation` and the Playwright checks on
+  every PR to `main`.
 - **Not in the demo:** email, Discord, and background jobs (garbage collection,
   integration sync).

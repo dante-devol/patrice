@@ -1,5 +1,5 @@
 // The site's root goes to the start page, both before and after the demo is set up.
-//   BASE_URL=http://localhost:4400 node tools/shots/demo-root.mjs [screenshot.png]
+//   BASE_URL=http://localhost:4400 node tests/demo-root.mjs [screenshot.png]
 import { chromium } from 'playwright';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';

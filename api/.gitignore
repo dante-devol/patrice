@@ -6,14 +6,3 @@ coverage/
 .DS_Store
 # Local-fs object storage (STORAGE_DRIVER=local).
 var/
-
-# Browser-demo spike build output
-demo/dist/
-demo/generated/
-
-demo/out/
-demo/site/
-demo/public/
-
-# Wrangler's local state (wrangler dev)
-.wrangler/
