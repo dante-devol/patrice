@@ -3,6 +3,10 @@
 {
   "name": "patrice-demo",
   "compatibility_date": "2026-11-01",
+  // Served at the root of its own subdomain (the app, the worker and the API all use
+  // root paths). Cloudflare creates the DNS record and certificate on deploy; the
+  // dante-devol.dev zone must be on the same Cloudflare account.
+  "routes": [{ "pattern": "patrice.dante-devol.dev", "custom_domain": true }],
   "assets": {
     "directory": "./site",
     // App routes (/login, /tasks, /divisions/…) aren't files: answer them with
