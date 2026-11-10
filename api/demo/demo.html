@@ -110,6 +110,7 @@
           <li><span>The first start downloads about 12 MB and loads a sample organisation with tasks, divisions and people.</span></li>
           <li><span>Everything you do stays in this browser. Nothing is sent anywhere, and other visitors don't see your changes.</span></li>
           <li><span>Email, Discord and file uploads are switched off in the demo.</span></li>
+          <li><span>Expect it to feel slower than a real deployment. The server and its database share your browser with the page, and every change is saved to browser storage, so requests take longer here than on a hosted Patrice.</span></li>
           <li><span>You'll log in as <code id="cred-email">admin@example.com</code> with the password <code id="cred-password">correct horse battery</code>.</span></li>
         </ul>
 
@@ -141,7 +142,9 @@
           $('cred-password').textContent = demo.password;
         }
         const next = new URLSearchParams(location.search).get('next');
-        const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/login';
+        // Into the app: its guard sends a visitor who isn't logged in to the login page,
+        // and one who is (a returning visitor) straight to their home page.
+        const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/home';
         const supported = 'serviceWorker' in navigator && 'indexedDB' in window;
 
         // ── What this browser holds ──────────────────────────────────────────────
@@ -176,7 +179,7 @@
           ['database', 'Setting up the database (PostgreSQL in WebAssembly)'],
           ['policy', 'Loading the permissions engine'],
           ['api', 'Starting the Patrice API'],
-          ['open', 'Opening the login page'],
+          ['open', 'Opening Patrice'],
         ];
         let t0 = 0;
         let clock = null;
@@ -281,7 +284,7 @@
             }
             setStep('open');
             $('progress-title').textContent = 'The demo is ready';
-            $('progress-note').textContent = `Ready in ${((performance.now() - t0) / 1000).toFixed(1)} s. Taking you to the login page…`;
+            $('progress-note').textContent = `Ready in ${((performance.now() - t0) / 1000).toFixed(1)} s. Opening Patrice…`;
             clearInterval(clock);
             setTimeout(() => location.assign(target), 600);
           } catch (e) {

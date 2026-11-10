@@ -2,8 +2,14 @@
 // before Angular starts, and mirror the cookies it sets that the page must read (the
 // CSRF token). The assembly step moves Angular's module scripts into DEMO_SCRIPTS.
 (async () => {
-  // Not started in this browser yet (no local server), or asked to reset: the start
-  // page explains the demo, sets it up, and comes back here.
+  // The site's front door is always the start page, even once the demo is set up
+  // (the host redirects `/` too; this covers hosts that don't). Otherwise, if the
+  // demo isn't started in this browser yet (no local server), or a reset was asked
+  // for, the start page explains it, sets it up, and comes back here.
+  if (location.pathname === '/' && !location.search) {
+    location.replace('/demo');
+    return;
+  }
   const registered = 'serviceWorker' in navigator && (await navigator.serviceWorker.getRegistrations()).length > 0;
   if (!registered || new URLSearchParams(location.search).has('reset-demo')) {
     const here = location.pathname + location.search;

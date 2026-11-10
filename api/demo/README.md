@@ -40,6 +40,10 @@ such as a subdomain. The app, the worker and the API all use root paths (`/sw.js
   long as there's no `404.html`.
 - **Start page address:** Cloudflare drops `.html` from page addresses, so the start
   page lives at `/demo`. `serve.mjs` maps it the same way locally.
+- **Front door:** `/` always redirects to `/demo`, through the site's `_redirects`
+  (written by `assemble.mjs`), `serve.mjs` locally, and `boot.js` as a fallback. That
+  holds even when the demo is already set up. From the start page, Continue opens
+  `/home`, where the app's guard sends a logged-out visitor to `/login`.
 
 ## How it works
 

@@ -15,7 +15,14 @@ const types = {
 };
 
 createServer(async (req, res) => {
-  const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  const url = new URL(req.url, 'http://x');
+  const path = decodeURIComponent(url.pathname);
+  // Like the site's _redirects: the front door is the start page.
+  if (path === '/' && !url.search) {
+    res.writeHead(302, { location: '/demo' });
+    res.end();
+    return;
+  }
   // Like Cloudflare: a file, else the same path with .html (/demo → demo.html), else
   // index.html for app routes.
   let file = join(root, 'index.html');

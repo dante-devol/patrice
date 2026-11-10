@@ -41,4 +41,6 @@ html = html.replace(
 writeFileSync(indexPath, html);
 // Cloudflare Pages: serve index.html for app routes (it does by default without a 404.html).
 writeFileSync(join(site, '_headers'), '/*.wasm\n  Content-Type: application/wasm\n');
+// The site's front door is the start page, whether or not the demo is set up yet.
+writeFileSync(join(site, '_redirects'), '/  /demo  302\n');
 console.log(`site -> ${site} (${scripts.length} app scripts deferred)`);
