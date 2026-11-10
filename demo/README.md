@@ -28,7 +28,7 @@ Log in as `admin@example.com` / `correct horse battery` (the dev seed's users).
 | `src/` | Composition root (`demo-app.ts`), request dispatcher, service worker, Node shims, the Node snapshot server |
 | `web/` | Files served as-is: the start page (`demo.html`), the demo header (`header.js`), the boot script, the worker wrapper (`sw.js`) |
 | `scripts/` | `make.mjs` (the whole build), `build.mjs` (worker bundle), `assemble.mjs` (site), `serve.mjs`, `check-isolation.mjs`, `diagnostics/` |
-| `tests/` | Playwright checks: start flow, front door, header, switcher, sweep, stress, upgrade, Firefox |
+| `tests/` | Playwright checks: start flow, front door, header, switcher, inbox, sweep, stress, upgrade, Firefox |
 | `.build/` | Everything generated (ignored): compiled code, the demo Prisma client, the snapshot, the worker, the site |
 
 **How it uses the API without touching it:**
@@ -71,6 +71,22 @@ shows its message and you stay who you were. When someone accepts an invitation,
 worker remembers the password from that request, so the switcher can sign in as them
 later. That, and which invitee you're being, is kept per build alongside the cookie jar,
 and cleared with the demo's data.
+
+**Inbox.** Patrice's mail isn't sent: it's filed for the header's inbox, which works
+like a single-user mail client for whoever you are now.
+- **The mail is real:** the demo includes the worker's real `AuthMailWorker`. The demo
+  queue runs a published job right away, in the request that published it, and
+  `DemoEmailService` (`src/demo-mail.ts`) keeps the real `EmailService`'s templates but
+  swaps its SMTP transport for the mailbox. Tokens, links and wording are exactly
+  Patrice's.
+- **Which mail:** email verification, password reset, and email-change confirmation.
+- **Whose mailbox:** a signed-in user receives at their email, plus the new address of
+  an unconfirmed email change. An invitee receives at their invited address (empty,
+  since Patrice doesn't email invitations). Anonymous has no mailbox.
+- **Reading:** messages show in a sandboxed frame with no scripts, and clicking a link,
+  such as reset password, opens the real page in the demo.
+- **Storage:** mail is kept per build alongside the cookie jar, and cleared with the
+  demo's data. The unread count updates as mail arrives.
 
 **Start page (`web/demo.html`, served at `/demo`).** A visitor without the demo set up
 (no service worker registered) is sent there from any app URL, with `?next=` holding
@@ -122,7 +138,8 @@ such as a subdomain. The app, the worker and the API all use root paths (`/sw.js
   |---|---|
   | Postgres | PGlite (Postgres 18 in WebAssembly), persisted in IndexedDB |
   | `PrismaService` | the same schema, generated as a Rust-free client on a PGlite driver adapter |
-  | `QueueService` (pg-boss) | `DemoQueueService`: jobs are dropped (no worker, so no email or sync) |
+  | `QueueService` (pg-boss) | `DemoQueueService`: runs a job in the request that publishes it, through the real worker registered for it (mail); others are dropped |
+  | `EmailService` (SMTP) | `DemoEmailService`: the real templates, filed in the demo's inbox |
   | `PasswordService` (native argon2) | `DemoPasswordService`: argon2id in WebAssembly, same hash format |
   | `STORAGE_PORT` | `MemoryStorageAdapter` |
 
@@ -234,5 +251,5 @@ Reported: in Firefox, opening DevTools while the demo is starting can leave the
   workers, so test in a real browser.
 - **CI:** run `npm run build`, `npm run check:isolation` and the Playwright checks on
   every PR to `main`.
-- **Not in the demo:** email, Discord, and background jobs (garbage collection,
-  integration sync).
+- **Not in the demo:** sending real email (it goes to the inbox), Discord, and the other
+  background jobs (garbage collection, integration sync).

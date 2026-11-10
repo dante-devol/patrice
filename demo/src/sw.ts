@@ -3,7 +3,7 @@
 // real Nest app against PGlite (Postgres in WebAssembly), persisted in IndexedDB.
 import './sw-env';
 import { PGlite } from '@electric-sql/pglite';
-import { createDemoApp } from './demo-app';
+import { DemoMail, Mailbox, createDemoApp } from './demo-app';
 import { CookieJar, SetCookie, createDispatcher } from './dispatch';
 import { ACCEPT_INVITE, DemoDb, DemoStore, Persona, handleDemoRequest } from './demo-endpoints';
 import { PrismaService } from '../../api/src/prisma/prisma.service';
@@ -24,6 +24,8 @@ const DB = `idb://${DB_NAME}`;
 const JAR_KEY = `/__demo/cookie-jar-${__DEMO_BUILD__}`;
 // The demo's own bookkeeping for the switcher (see DemoStore).
 const STORE_KEY = `/__demo/store-${__DEMO_BUILD__}`;
+// Mail Patrice would have sent, filed for the inbox.
+const MAIL_KEY = `/__demo/mail-${__DEMO_BUILD__}`;
 
 // citext's extension bundle, served next to this worker.
 const citext = {
@@ -57,7 +59,7 @@ async function boot(): Promise<Server> {
   }
   const cache = await caches.open('patrice-demo');
   for (const req of await cache.keys()) {
-    if (!req.url.endsWith(JAR_KEY) && !req.url.endsWith(STORE_KEY)) await cache.delete(req);
+    if (![JAR_KEY, STORE_KEY, MAIL_KEY].some((k) => req.url.endsWith(k))) await cache.delete(req);
   }
   // First visit: start from the seeded snapshot built with the real API.
   if (!existing) progress(t0, 'download', 'downloading demo data');
@@ -69,7 +71,7 @@ async function boot(): Promise<Server> {
   progress(t0, 'policy', 'loading the policy engine');
   await demoInitCedar();
   progress(t0, 'api', 'starting the API');
-  const app = await createDemoApp(db);
+  const app = await createDemoApp(db, mailbox);
   await app.init();
   const saved = await cache.match(JAR_KEY);
   const jar: CookieJar = new Map(saved ? ((await saved.json()) as [string, string][]) : []);
@@ -81,7 +83,13 @@ async function boot(): Promise<Server> {
   return { dispatch: createDispatcher(app), jar, db: app.get(PrismaService) as unknown as DemoDb, close };
 }
 
+// Set when the start page clears the demo: this worker instance (still alive, and still
+// controlling open pages until they reload) must not start the API again and recreate
+// the database just deleted. A cleared demo comes back through a fresh worker.
+let cleared = false;
+
 function getServer(): Promise<Server> {
+  if (cleared) return Promise.reject(new Error('The demo was cleared. Reload the page to start it again.'));
   // A failed boot is retried on the next request rather than cached forever.
   server ??= boot().catch((e) => {
     server = null;
@@ -89,6 +97,25 @@ function getServer(): Promise<Server> {
   });
   return server;
 }
+
+async function loadMail(): Promise<DemoMail[]> {
+  const saved = await (await caches.open('patrice-demo')).match(MAIL_KEY);
+  return saved ? ((await saved.json()) as DemoMail[]) : [];
+}
+
+async function saveMail(mail: DemoMail[]): Promise<void> {
+  await (await caches.open('patrice-demo')).put(MAIL_KEY, new Response(JSON.stringify(mail)));
+}
+
+/** Patrice's outgoing mail, filed for the inbox; open pages are told it arrived. */
+const mailbox: Mailbox = {
+  async deliver(mail) {
+    const all = await loadMail();
+    all.push({ ...mail, id: crypto.randomUUID(), date: new Date().toISOString(), read: false });
+    await saveMail(all);
+    await notify('demo-mail');
+  },
+};
 
 async function loadStore(): Promise<DemoStore> {
   const saved = await (await caches.open('patrice-demo')).match(STORE_KEY);
@@ -148,6 +175,8 @@ async function handle(event: FetchEvent): Promise<Response> {
       db: async () => (await getServer()).db,
       loadStore,
       saveStore,
+      loadMail,
+      saveMail,
       api: async (method, path, body) => {
         // As the page would send it: JSON, and the CSRF token on writes (double-submit).
         const { jar } = await getServer();
@@ -172,6 +201,7 @@ async function handle(event: FetchEvent): Promise<Response> {
 // this bundle and calls in here; see the wrapper for why.
 /** Close the API and its database, so the page can delete the demo's data. */
 async function shutdown(): Promise<void> {
+  cleared = true;
   const running = server;
   server = null;
   if (running) await (await running.catch(() => null))?.close();

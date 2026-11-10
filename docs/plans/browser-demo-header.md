@@ -1,10 +1,9 @@
 # Plan: browser demo — own project, demo header, user switcher, inbox
 
-Status: agreed with the owner 2026-11-10. **Phases 1–3 done** (the demo is now
-`demo/`, with its header and user switcher; see `demo/README.md`); phases 4–5 not
-started. Until `demo/personas.json` exists, the switcher's only demo user is the
-seed's admin. Seed data is being designed separately
-(see "Inputs").
+Status: agreed with the owner 2026-11-10. **Phases 1–4 done** (the demo is now
+`demo/`, with its header, user switcher and inbox; see `demo/README.md`); phase 5 (the
+Discord stretch goal) not started. Until `demo/personas.json` exists, the switcher's
+only demo user is the seed's admin.
 
 ## Goals
 

@@ -108,7 +108,7 @@
         <ul class="facts">
           <li><span>The first start downloads about 12 MB and loads a sample organisation with tasks, divisions and people.</span></li>
           <li><span>Everything you do stays in this browser. Nothing is sent anywhere, and other visitors don't see your changes.</span></li>
-          <li><span>Email, Discord and file uploads are switched off in the demo.</span></li>
+          <li><span>Patrice's emails aren't sent: they arrive in the demo's inbox, at the top of the page. Discord and file uploads are switched off.</span></li>
           <li><span>Expect it to feel slower than a real deployment. The server and its database share your browser with the page, and every change is saved to browser storage, so requests take longer here than on a hosted Patrice.</span></li>
           <li><span>You'll log in as <code id="cred-email">admin@example.com</code> with the password <code id="cred-password">correct horse battery</code>.</span></li>
         </ul>
@@ -190,10 +190,13 @@
         }
         const stepEl = (id) => $('steps').querySelector(`[data-id="${id}"]`);
         let current = null;
+        // Only while this page is starting the demo: the worker also reports its start-up
+        // when something else wakes it (the header, another tab).
+        let starting = false;
         function setStep(id, label) {
           const order = STEPS.map(([s]) => s);
           const at = order.indexOf(id);
-          if (at < 0) return;
+          if (!starting || at < 0 || !stepEl(id)) return;
           order.forEach((s, i) => {
             const el = stepEl(s);
             if (i < at && !el.classList.contains('done') && !el.classList.contains('skipped')) {
@@ -228,6 +231,7 @@
         });
 
         function fail(message) {
+          starting = false;
           clearInterval(clock);
           if (current) {
             stepEl(current).classList.remove('active');
@@ -243,6 +247,7 @@
 
         // ── Start ────────────────────────────────────────────────────────────────
         async function start() {
+          starting = true;
           $('start').disabled = true;
           $('clear').disabled = true;
           $('error').hidden = true;
@@ -286,6 +291,7 @@
             $('progress-title').textContent = 'The demo is ready';
             $('progress-note').textContent = `Ready in ${((performance.now() - t0) / 1000).toFixed(1)} s. Opening Patrice…`;
             clearInterval(clock);
+            starting = false;
             setTimeout(() => location.assign(target), 600);
           } catch (e) {
             fail(e instanceof Error ? e.message : String(e));

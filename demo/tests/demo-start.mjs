@@ -14,7 +14,7 @@ const ctx = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'p
   deviceScaleFactor: 1.25,
 });
 const page = ctx.pages()[0] ?? (await ctx.newPage());
-page.on('pageerror', (e) => console.log('pageerror', e.message));
+page.on('pageerror', (e) => console.log('pageerror', (e.stack ?? e.message).split(/\r?\n/).slice(0, 3).join(' / ')));
 page.on('dialog', (d) => d.accept());
 const shot = (name) => page.screenshot({ path: join(OUT, `${name}.png`), fullPage: true });
 
@@ -56,6 +56,10 @@ const left = await page.evaluate(async () => ({
   databases: ((await indexedDB.databases()) ?? []).filter((d) => d.name.includes('patrice')).map((d) => d.name),
 }));
 console.log('6. after clear:', await page.textContent('#status-text'), JSON.stringify(left));
+if (left.workers || left.databases.length) {
+  console.log('FAIL Clear left the worker or database behind');
+  process.exit(1);
+}
 await shot('6-cleared');
 
 // A visit after clearing goes back to the start page.
