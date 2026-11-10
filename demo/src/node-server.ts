@@ -57,7 +57,12 @@ async function main(): Promise<void> {
     console.log(`bootstrap key: ${key}`);
     return;
   }
+  // The seed makes thousands of requests from one address; the API's throttler would
+  // pace it to 300/min. Its skipIf reads NODE_ENV per request, so lift it just for the
+  // seed (nothing else reads NODE_ENV after boot), and restore it before the snapshot.
+  process.env.NODE_ENV = 'test';
   await run(process.execPath, ['scripts/seed.mjs', '--base', `http://localhost:${PORT}/api`, '--key', key!]);
+  process.env.NODE_ENV = 'development';
   await app.close();
   const tar = await db.dumpDataDir('gzip');
   fs.mkdirSync(path.dirname(snapshot), { recursive: true });
