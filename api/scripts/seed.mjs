@@ -162,15 +162,24 @@ async function grant(roleId, action, scopeKind) {
 }
 
 async function setRequestTemplate(divisionId) {
-  // A single free-text question so claimants have something to submit against.
-  // Non-destructive: only set it when the division has no request template yet, so
-  // re-runs (or seeding an instance with real config) never clobber existing forms.
-  const existing = await req('GET', `/divisions/${divisionId}/request-template`, { session: admin });
-  if (existing.status === 200 && (existing.data?.questions?.length ?? 0) > 0) return;
-  await req('PUT', `/divisions/${divisionId}/request-template`, {
-    session: admin,
-    body: { questions: [{ type: 'text', prompt: 'Deliverable notes', required: false, constraints: {} }] },
-  });
+  // A default template with one free-text question, so claimants have something to
+  // submit against. Non-destructive: skipped when the division already has templates.
+  const existing = must(
+    await req('GET', `/divisions/${divisionId}/request-templates`, { session: admin }),
+    'list division templates',
+  );
+  if ((existing?.length ?? 0) > 0) return;
+  must(
+    await req('POST', `/divisions/${divisionId}/request-templates`, {
+      session: admin,
+      body: {
+        name: 'Deliverable',
+        isDefault: true,
+        questions: [{ type: 'text', prompt: 'Deliverable notes', required: false, constraints: {} }],
+      },
+    }),
+    'create default template',
+  );
 }
 
 async function ensureUser({ email, displayName, roleIds }) {
@@ -204,7 +213,7 @@ async function driveTask(spec, ctx) {
   const task = must(
     await req('POST', '/tasks', {
       session: admin,
-      body: { name: spec.name, description: spec.description, divisionId: division.id, teamId },
+      body: { name: spec.name, description: spec.description, divisionId: division.id, teamId, template: { kind: 'default' } },
     }),
     `create task ${spec.name}`,
   );
@@ -297,8 +306,9 @@ const run = async () => {
 
   step('Teams');
   const teams = {};
-  for (const name of ['USA', 'Artists']) {
-    teams[name] = await ensureTeam(name);
+  // Every team belongs to a division; a task's team must be in the task's division.
+  for (const [name, division] of [['USA', 'Writing'], ['Artists', 'Art']]) {
+    teams[name] = await ensureTeam(name, { divisionId: divisions[division].id });
     log(c.ok(`  ${name}`));
   }
 
@@ -324,7 +334,7 @@ const run = async () => {
       description: 'Pass over the 40 tavern barks; keep cadence loose and in-character. Two translators on it.' },
     { name: 'Port save-system to the v2 schema', division: 'Scripting', requester: 'Joon', state: 'revising',
       claimants: ['Maya'], description: 'Migrate legacy save blobs; needs the backwards-compat shim.' },
-    { name: 'Regression pass — Act I quest flags', division: 'Testing', team: 'USA', requester: 'Sela',
+    { name: 'Regression pass — Act I quest flags', division: 'Testing', requester: 'Sela',
       state: 'claimed', claimants: ['Aric'],
       description: 'Walk every Act I branch; confirm flags clear on completion.' },
     { name: 'Sign off Act I voice direction', division: 'Leadership', requester: 'Devin', state: 'approved',

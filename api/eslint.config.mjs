@@ -9,7 +9,7 @@ import tseslint from 'typescript-eslint';
  * `tsc` + the jest suites; lint guards the stylistic/footgun layer. See issue #34.
  */
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.config.mjs'] },
+  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.config.mjs', 'demo/{dist,generated,out,site,public}/**', '.wrangler/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

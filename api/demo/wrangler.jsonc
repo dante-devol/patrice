@@ -1,0 +1,12 @@
+// Cloudflare Workers (static assets) config for the browser demo: no Worker code, just
+// the built site. `npm run demo:deploy` (after `npm run demo:build`).
+{
+  "name": "patrice-demo",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site",
+    // App routes (/login, /tasks, /divisions/…) aren't files: answer them with
+    // index.html and let the Angular router take it from there.
+    "not_found_handling": "single-page-application"
+  }
+}

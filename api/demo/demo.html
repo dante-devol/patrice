@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Patrice demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Try Patrice in your browser: the real app and its database run locally in WebAssembly." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* The app's graphite-sheet tokens (web/src/styles.css). */
+      :root {
+        --board: #e2e4e7;
+        --paper: #ffffff;
+        --paper-alt: #f5f6f8;
+        --paper-hover: #eef0f3;
+        --ink: #2a2d32;
+        --ink-soft: #62666e;
+        --line: #d5d8dd;
+        --margin: #9aa6b6;
+        --faint: #a3a7ae;
+        --rust: #8e3b26;
+        --ok: #2d6b50;
+        --graphite-hover: #43474f;
+        --font-ui: 'Atkinson Hyperlegible', system-ui, sans-serif;
+        --font-display: 'Bricolage Grotesque', 'Atkinson Hyperlegible', system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--board);
+        color: var(--ink);
+        font: 15px/1.55 var(--font-ui);
+      }
+      main { max-width: 680px; margin: 0 auto; padding: 56px 16px 64px; }
+      .brand { font: 700 24px var(--font-display); margin: 0 0 28px; }
+      .sheet {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-left: 3px double var(--margin);
+        padding: 28px 30px;
+      }
+      .eyebrow { font-size: 13px; color: var(--ink-soft); margin: 0 0 4px; }
+      h1 { font: 700 30px/1.15 var(--font-display); margin: 0 0 14px; }
+      p { margin: 0 0 12px; }
+      .muted { color: var(--ink-soft); }
+      .facts { list-style: none; padding: 0; margin: 18px 0 0; display: grid; gap: 8px; font-size: 14px; }
+      .facts li { display: flex; gap: 10px; }
+      .facts li::before { content: ''; flex: none; width: 6px; height: 6px; margin-top: 8px; background: var(--margin); }
+      code { font: 13px ui-monospace, 'Cascadia Mono', Menlo, monospace; background: var(--paper-alt); padding: 1px 5px; border: 1px solid var(--line); }
+
+      .status {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+        margin: 24px 0 0; padding: 14px 16px; background: var(--paper-alt); border: 1px solid var(--line); font-size: 14px;
+      }
+      .status strong { font-weight: 700; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+      button {
+        font: 700 14px var(--font-ui); border-radius: 2px; padding: 10px 18px; cursor: pointer;
+        border: 1px solid var(--ink); background: var(--ink); color: #fff;
+      }
+      button:hover:not(:disabled) { background: var(--graphite-hover); }
+      button.secondary { background: var(--paper); color: var(--ink); border-color: var(--line); }
+      button.secondary:hover:not(:disabled) { background: var(--paper-hover); border-color: var(--faint); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      button:focus-visible { outline: 2px solid var(--margin); outline-offset: 2px; }
+
+      .progress { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 18px; }
+      .progress[hidden] { display: none; }
+      .progress h2 { font: 700 16px var(--font-display); margin: 0 0 10px; }
+      .steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+      .step { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; padding: 5px 0; font-size: 14px; color: var(--faint); }
+      .step .mark { width: 14px; height: 14px; border: 1.5px solid var(--line); border-radius: 50%; justify-self: center; }
+      .step .time { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+      .step.active { color: var(--ink); font-weight: 700; }
+      .step.active .mark { border-color: var(--ink); border-right-color: transparent; animation: spin 0.8s linear infinite; }
+      .step.done { color: var(--ink-soft); }
+      .step.done .mark { border: 0; border-radius: 0; width: 14px; height: 14px; background: none; position: relative; }
+      .step.done .mark::after {
+        content: ''; position: absolute; left: 4px; top: 0; width: 5px; height: 10px;
+        border: solid var(--ok); border-width: 0 2px 2px 0; transform: rotate(45deg);
+      }
+      .step.skipped { color: var(--faint); text-decoration: line-through; }
+      .step.failed { color: var(--rust); font-weight: 700; }
+      .step.failed .mark { border-color: var(--rust); background: var(--rust); }
+      .note { margin-top: 12px; font-size: 14px; }
+      .error { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--rust); color: var(--rust); background: #fbf3f1; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+      .error[hidden] { display: none; }
+      footer { margin-top: 18px; font-size: 13px; color: var(--ink-soft); }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .step.active .mark { animation: none; border-right-color: var(--ink); } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="brand">Patrice</p>
+      <section class="sheet" aria-labelledby="title">
+        <p class="eyebrow">Demo</p>
+        <h1 id="title">Try Patrice in your browser</h1>
+        <p>
+          This is a demo of Patrice, a task board for volunteer teams. There is no server
+          behind this page: the real Patrice API and its PostgreSQL database are compiled
+          to WebAssembly and run locally, inside your browser.
+        </p>
+        <ul class="facts">
+          <li><span>The first start downloads about 12 MB and loads a sample organisation with tasks, divisions and people.</span></li>
+          <li><span>Everything you do stays in this browser. Nothing is sent anywhere, and other visitors don't see your changes.</span></li>
+          <li><span>Email, Discord and file uploads are switched off in the demo.</span></li>
+          <li><span>You'll log in as <code id="cred-email">admin@example.com</code> with the password <code id="cred-password">correct horse battery</code>.</span></li>
+        </ul>
+
+        <div class="status" role="status" aria-live="polite">
+          <span id="status-text">Checking this browser for demo data…</span>
+        </div>
+
+        <div class="actions">
+          <button id="start" type="button" disabled>Start the demo</button>
+          <button id="clear" type="button" class="secondary" disabled>Clear demo data</button>
+        </div>
+
+        <section class="progress" id="progress" hidden aria-labelledby="progress-title">
+          <h2 id="progress-title">Starting the demo</h2>
+          <ol class="steps" id="steps" aria-live="polite"></ol>
+          <p class="note muted" id="progress-note"></p>
+          <div class="error" id="error" role="alert" hidden></div>
+        </section>
+      </section>
+      <footer>Demo data resets whenever a new version of the demo is published.</footer>
+    </main>
+
+    <script>
+      (() => {
+        const $ = (id) => document.getElementById(id);
+        const demo = window.patriceDemo;
+        if (demo) {
+          $('cred-email').textContent = demo.email;
+          $('cred-password').textContent = demo.password;
+        }
+        const next = new URLSearchParams(location.search).get('next');
+        const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/login';
+        const supported = 'serviceWorker' in navigator && 'indexedDB' in window;
+
+        // ── What this browser holds ──────────────────────────────────────────────
+        async function inspect() {
+          if (!supported) return { worker: false, databases: [], bytes: 0 };
+          const regs = await navigator.serviceWorker.getRegistrations();
+          const dbs = ((await indexedDB.databases?.()) ?? []).filter((d) => d.name?.startsWith('/pglite/patrice-demo'));
+          const est = await navigator.storage?.estimate?.().catch(() => null);
+          return { worker: regs.length > 0, databases: dbs, bytes: est?.usage ?? 0 };
+        }
+        const mb = (n) => `${(n / 1048576).toFixed(n > 10485760 ? 0 : 1)} MB`;
+
+        async function refresh() {
+          if (!supported) {
+            $('status-text').innerHTML = '<strong>This browser can’t run the demo</strong>: it needs service workers and IndexedDB (try a current Chrome, Edge or Firefox, outside private browsing).';
+            return;
+          }
+          const s = await inspect();
+          const has = s.worker || s.databases.length > 0;
+          $('status-text').innerHTML = has
+            ? `<strong>Demo data found in this browser</strong>${s.bytes ? ` (${mb(s.bytes)} stored)` : ''}. Starting picks up where you left off.`
+            : '<strong>No demo data in this browser yet.</strong> Starting sets it up.';
+          $('start').textContent = has ? 'Continue the demo' : 'Start the demo';
+          $('start').disabled = false;
+          $('clear').disabled = !has;
+        }
+
+        // ── Progress list ────────────────────────────────────────────────────────
+        const STEPS = [
+          ['install', 'Installing the local server (a service worker)'],
+          ['download', 'Downloading the demo data'],
+          ['database', 'Setting up the database (PostgreSQL in WebAssembly)'],
+          ['policy', 'Loading the permissions engine'],
+          ['api', 'Starting the Patrice API'],
+          ['open', 'Opening the login page'],
+        ];
+        let t0 = 0;
+        let clock = null;
+        function renderSteps() {
+          $('steps').innerHTML = STEPS.map(
+            ([id, label]) =>
+              `<li class="step" data-id="${id}"><span class="mark" aria-hidden="true"></span><span>${label}</span><span class="time"></span></li>`,
+          ).join('');
+        }
+        const stepEl = (id) => $('steps').querySelector(`[data-id="${id}"]`);
+        let current = null;
+        function setStep(id, label) {
+          const order = STEPS.map(([s]) => s);
+          const at = order.indexOf(id);
+          if (at < 0) return;
+          order.forEach((s, i) => {
+            const el = stepEl(s);
+            if (i < at && !el.classList.contains('done') && !el.classList.contains('skipped')) {
+              if (el.dataset.started) finishStep(s);
+              else el.classList.add('skipped');
+            }
+          });
+          const el = stepEl(id);
+          el.classList.add('active');
+          el.dataset.started = String(performance.now());
+          if (label) el.children[1].textContent = label;
+          current = id;
+        }
+        function finishStep(id) {
+          const el = stepEl(id);
+          el.classList.remove('active');
+          el.classList.add('done');
+          el.querySelector('.time').textContent = `${((performance.now() - Number(el.dataset.started)) / 1000).toFixed(1)} s`;
+        }
+        function tick() {
+          const el = current && stepEl(current);
+          if (el?.classList.contains('active')) el.querySelector('.time').textContent = `${((performance.now() - Number(el.dataset.started)) / 1000).toFixed(1)} s`;
+        }
+
+        // The worker reports where its start-up has got to.
+        const WORKER_STEP = { check: null, download: 'download', database: 'database', open: 'database', policy: 'policy', api: 'api', ready: null };
+        navigator.serviceWorker?.addEventListener('message', (e) => {
+          if (e.data?.type !== 'demo-progress') return;
+          const id = WORKER_STEP[e.data.id];
+          if (e.data.id === 'open') return setStep('database', 'Opening your saved demo database');
+          if (id) setStep(id);
+        });
+
+        function fail(message) {
+          clearInterval(clock);
+          if (current) {
+            stepEl(current).classList.remove('active');
+            stepEl(current).classList.add('failed');
+          }
+          $('error').hidden = false;
+          $('error').textContent = `The demo couldn't start: ${message}\n\nTry again, or clear the demo data and start fresh.`;
+          $('progress-title').textContent = 'The demo didn’t start';
+          $('start').disabled = false;
+          $('start').textContent = 'Try again';
+          $('clear').disabled = false;
+        }
+
+        // ── Start ────────────────────────────────────────────────────────────────
+        async function start() {
+          $('start').disabled = true;
+          $('clear').disabled = true;
+          $('error').hidden = true;
+          $('progress').hidden = false;
+          $('progress-title').textContent = 'Starting the demo';
+          $('progress-note').textContent = '';
+          renderSteps();
+          t0 = performance.now();
+          clearInterval(clock);
+          clock = setInterval(tick, 100);
+          try {
+            setStep('install');
+            await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+            if (!navigator.serviceWorker.controller) {
+              const controlled = new Promise((r) => navigator.serviceWorker.addEventListener('controllerchange', r, { once: true }));
+              const reg = await navigator.serviceWorker.ready;
+              if (!navigator.serviceWorker.controller) reg.active?.postMessage({ type: 'demo-claim' });
+              const ok = await Promise.race([controlled.then(() => true), new Promise((r) => setTimeout(() => r(false), 20000))]);
+              if (!ok && !navigator.serviceWorker.controller) throw new Error('the local server didn’t take control of this page.');
+            }
+            finishStep('install');
+            $('progress-note').textContent = 'The first start takes a few seconds; later ones are quicker.';
+
+            // Asking the API for its health starts it (and the steps above report in).
+            const res = await Promise.race([
+              fetch('/api/health'),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('the API didn’t answer within 60 seconds.')), 60000)),
+            ]);
+            if (!res.ok) {
+              const body = await res.json().catch(() => null);
+              throw new Error(body?.error?.message ?? `the API answered ${res.status}.`);
+            }
+            // Already running from an earlier visit: the worker reported nothing.
+            for (const [id] of STEPS.slice(1, -1)) {
+              const el = stepEl(id);
+              if (el.classList.contains('active')) finishStep(id);
+              else if (!el.classList.contains('done')) el.classList.add('skipped');
+            }
+            setStep('open');
+            $('progress-title').textContent = 'The demo is ready';
+            $('progress-note').textContent = `Ready in ${((performance.now() - t0) / 1000).toFixed(1)} s. Taking you to the login page…`;
+            clearInterval(clock);
+            setTimeout(() => location.assign(target), 600);
+          } catch (e) {
+            fail(e instanceof Error ? e.message : String(e));
+          }
+        }
+
+        // ── Clear ────────────────────────────────────────────────────────────────
+        async function clearData() {
+          if (!confirm('Delete this browser’s demo data? Any changes you made in the demo will be lost.')) return;
+          $('start').disabled = true;
+          $('clear').disabled = true;
+          $('status-text').textContent = 'Clearing demo data…';
+          // Ask a running local server to close its database, or deleting it would wait.
+          const worker = navigator.serviceWorker.controller ?? (await navigator.serviceWorker.getRegistration())?.active;
+          if (worker) {
+            await new Promise((resolve) => {
+              const ch = new MessageChannel();
+              ch.port1.onmessage = () => resolve();
+              worker.postMessage({ type: 'demo-shutdown' }, [ch.port2]);
+              setTimeout(resolve, 5000);
+            });
+          }
+          for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+          const dbs = ((await indexedDB.databases?.()) ?? []).filter((d) => d.name?.startsWith('/pglite/patrice-demo'));
+          await Promise.all(
+            dbs.map(
+              (d) =>
+                new Promise((resolve) => {
+                  const req = indexedDB.deleteDatabase(d.name);
+                  req.onsuccess = req.onerror = () => resolve();
+                  req.onblocked = () => ($('status-text').textContent = 'Clearing demo data… (waiting for other demo tabs to close)');
+                }),
+            ),
+          );
+          await caches.delete('patrice-demo');
+          for (const c of document.cookie.split('; ')) if (c) document.cookie = `${c.split('=')[0]}=; Max-Age=0; Path=/`;
+          $('progress').hidden = true;
+          await refresh();
+          $('status-text').innerHTML = '<strong>Demo data cleared.</strong> Starting sets up a fresh copy.';
+        }
+
+        $('start').addEventListener('click', start);
+        $('clear').addEventListener('click', () => void clearData());
+        void refresh();
+      })();
+    </script>
+  </body>
+</html>
