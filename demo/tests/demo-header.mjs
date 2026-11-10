@@ -31,14 +31,14 @@ const header = () =>
     return {
       home: root.querySelector('.home')?.getAttribute('href'),
       started: !!started && !started.hidden,
-      who: root.querySelector('.who')?.textContent,
+      who: root.querySelector('.who .label')?.textContent?.trim(),
       startCurrent: root.querySelector('.start')?.getAttribute('aria-current') === 'page',
       first: document.body.firstElementChild?.tagName.toLowerCase(),
     };
   });
 const waitWho = (text) =>
   page.waitForFunction(
-    (t) => document.querySelector('patrice-demo-header')?.shadowRoot?.querySelector('.who')?.textContent?.includes(t),
+    (t) => document.querySelector('patrice-demo-header')?.shadowRoot?.querySelector('.who .label')?.textContent?.includes(t),
     text,
     { timeout: 15_000 },
   );
@@ -56,9 +56,9 @@ await shot('1-start-page-not-started');
 // 2. Started: into the app, not signed in yet.
 await page.click('#start');
 await page.waitForSelector('input[type=email]', { timeout: 60_000 });
-await waitWho('Not signed in').catch(() => {});
+await waitWho('Anonymous').catch(() => {});
 h = await header();
-check(h?.started && h.who === 'Not signed in', `in the app, not signed in: "${h?.who}"`);
+check(h?.started && h.who?.startsWith('Anonymous'), `in the app, not signed in: "${h?.who}"`);
 check(h?.first === 'patrice-demo-header', 'header sits above the app');
 const layout = await page.evaluate(() => {
   const demo = document.querySelector('patrice-demo-header').getBoundingClientRect();
@@ -73,9 +73,9 @@ await page.fill('input[type=email]', 'admin@example.com');
 await page.fill('input[type=password]', 'correct horse battery');
 await page.click('button:has-text("Log in")');
 await page.waitForURL((u) => !u.pathname.includes('login'), { timeout: 20_000 });
-await waitWho('Signed in as').catch(() => {});
+await waitWho('Viewing as').catch(() => {});
 h = await header();
-check(h?.who?.startsWith('Signed in as'), `after logging in: "${h?.who}"`);
+check(h?.who === 'Viewing as Admin', `after logging in: "${h?.who}"`);
 await shot('3-home-signed-in');
 
 // 4. Scrolled down a long page: the header scrolls away, the app's bar still sticks to the top.
@@ -101,9 +101,9 @@ await page.setViewportSize({ width: 1200, height: 800 });
 // 5. Logging out through the app updates it too.
 await page.click('text=Log out');
 await page.waitForURL('**/login', { timeout: 15_000 }).catch(() => {});
-await waitWho('Not signed in').catch(() => {});
+await waitWho('Anonymous').catch(() => {});
 h = await header();
-check(h?.who === 'Not signed in', `after logging out: "${h?.who}"`);
+check(h?.who?.startsWith('Anonymous'), `after logging out: "${h?.who}"`);
 
 // 6. Back on the start page: the full header, with "Start page" marked as current; then Clear.
 await page.goto(`${BASE}/demo`);

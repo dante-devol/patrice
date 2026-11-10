@@ -10,7 +10,7 @@
     "serve": "node scripts/serve.mjs .build/site 4400",
     "deploy": "npx wrangler@4 deploy --config wrangler.jsonc",
     "check:isolation": "node scripts/check-isolation.mjs",
-    "test": "node tests/demo-start.mjs && node tests/demo-root.mjs && node tests/demo-header.mjs && node tests/demo-sweep.mjs"
+    "test": "node tests/demo-start.mjs && node tests/demo-root.mjs && node tests/demo-header.mjs && node tests/demo-switcher.mjs && node tests/demo-sweep.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.16",

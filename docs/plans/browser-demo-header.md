@@ -1,7 +1,9 @@
 # Plan: browser demo — own project, demo header, user switcher, inbox
 
-Status: agreed with the owner 2026-11-10. **Phases 1–2 done** (the demo is now
-`demo/`, with its header; see `demo/README.md`); phases 3–5 not started. Seed data is being designed separately
+Status: agreed with the owner 2026-11-10. **Phases 1–3 done** (the demo is now
+`demo/`, with its header and user switcher; see `demo/README.md`); phases 4–5 not
+started. Until `demo/personas.json` exists, the switcher's only demo user is the
+seed's admin. Seed data is being designed separately
 (see "Inputs").
 
 ## Goals

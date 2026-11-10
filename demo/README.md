@@ -28,7 +28,7 @@ Log in as `admin@example.com` / `correct horse battery` (the dev seed's users).
 | `src/` | Composition root (`demo-app.ts`), request dispatcher, service worker, Node shims, the Node snapshot server |
 | `web/` | Files served as-is: the start page (`demo.html`), the demo header (`header.js`), the boot script, the worker wrapper (`sw.js`) |
 | `scripts/` | `make.mjs` (the whole build), `build.mjs` (worker bundle), `assemble.mjs` (site), `serve.mjs`, `check-isolation.mjs`, `diagnostics/` |
-| `tests/` | Playwright checks: start flow, front door, header, sweep, stress, upgrade, Firefox |
+| `tests/` | Playwright checks: start flow, front door, header, switcher, sweep, stress, upgrade, Firefox |
 | `.build/` | Everything generated (ignored): compiled code, the demo Prisma client, the snapshot, the worker, the site |
 
 **How it uses the API without touching it:**
@@ -51,6 +51,26 @@ and once the demo is started, a link to the start page and who you're signed in 
 It reads that from `GET /__demo/state`, which the worker answers itself
 (`src/demo-endpoints.ts`) by asking the real `/api/me`. The worker tells it when a login
 or logout changes the session. Before the demo is started, only the back link shows.
+
+**User switcher.** The header's button shows who you are and opens a menu of everyone
+the demo knows:
+- **Demo users,** from `personas.json`. The format is `[{ email, password, label,
+  description }]`, and `scripts/personas.mjs` validates it. Until that file exists,
+  the only demo user is the seed's admin.
+- **Joined during the demo:** people who accepted an invitation here.
+- **Invited:** pending invitations for an email address, with no account yet.
+- **Anonymous.**
+
+Choosing someone calls `POST /__demo/switch`, and the worker goes through the app's
+real endpoints:
+- **A member** is signed in with `POST /api/auth/login`, using their password.
+- **Anonymous or an invitee** is signed out with `POST /api/auth/logout`.
+
+So the app's rules apply: if it refuses a login (a deactivated user, say), the menu
+shows its message and you stay who you were. When someone accepts an invitation, the
+worker remembers the password from that request, so the switcher can sign in as them
+later. That, and which invitee you're being, is kept per build alongside the cookie jar,
+and cleared with the demo's data.
 
 **Start page (`web/demo.html`, served at `/demo`).** A visitor without the demo set up
 (no service worker registered) is sent there from any app URL, with `?next=` holding

@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadPersonas } from './personas.mjs';
 
 const demo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const api = resolve(demo, '../api');
@@ -15,6 +16,8 @@ const client = join(buildDir, 'node_modules/demo-prisma-client');
 const snapshot = join(buildDir, 'snapshot/demo-db.tar.gz');
 const out = resolve(process.argv[2] ?? join(buildDir, 'worker'));
 mkdirSync(out, { recursive: true });
+// The switcher's users (scripts/personas.mjs), baked into the worker.
+const personas = loadPersonas();
 // Identifies this build's database (see sw.ts): changes whenever the snapshot does.
 const buildId = process.env.DEMO_BUILD_ID ?? createHash('sha256').update(readFileSync(snapshot)).digest('hex').slice(0, 12);
 
@@ -110,7 +113,7 @@ const result = await build({
     '@fastify/*',
   ],
   // A classic script has no import.meta; PGlite finds its files relative to the worker.
-  define: { 'import.meta.url': 'self.location.href', __DEMO_BUILD__: JSON.stringify(buildId), 'process.env.NODE_DEBUG': 'undefined', __filename: '"/sw.js"', __dirname: '"/"' },
+  define: { 'import.meta.url': 'self.location.href', __DEMO_BUILD__: JSON.stringify(buildId), __DEMO_PERSONAS__: JSON.stringify(personas), 'process.env.NODE_DEBUG': 'undefined', __filename: '"/sw.js"', __dirname: '"/"' },
   inject: [join(demo, 'src/shims/globals.mjs')],
   plugins: [demoSwaps],
 });
@@ -130,7 +133,7 @@ for (const [from, name] of [
 }
 
 const kb = (f) => Math.round(statSync(join(out, f)).size / 1024);
-console.log(`sw-main.js ${kb('sw-main.js')} KB in ${Date.now() - t0} ms -> ${out} (build ${buildId})`);
+console.log(`sw-main.js ${kb('sw-main.js')} KB in ${Date.now() - t0} ms -> ${out} (build ${buildId}, ${personas.length} persona(s))`);
 const inputs = Object.entries(result.metafile.outputs[Object.keys(result.metafile.outputs).find((k) => k.endsWith('sw-main.js'))].inputs);
 const byPkg = new Map();
 for (const [file, { bytesInOutput }] of inputs) {
