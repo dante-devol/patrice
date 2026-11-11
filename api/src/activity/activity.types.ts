@@ -74,11 +74,24 @@ export const activityPayloadSchemas = {
   'team.created': z.object({ teamId: uuid }).strict(),
   'membership.added': z.object({ userId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid }).strict(),
   'membership.removed': z.object({ userId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid }).strict(),
+  // `viaDefault`: given or removed because the person joined or left the unit (ADR 0022).
   'unit_role.assigned': z
-    .object({ userId: uuid, roleId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid })
+    .object({
+      userId: uuid,
+      roleId: uuid,
+      unitType: z.enum(['division', 'team']),
+      unitId: uuid,
+      viaDefault: z.boolean().optional(),
+    })
     .strict(),
   'unit_role.unassigned': z
-    .object({ userId: uuid, roleId: uuid, unitType: z.enum(['division', 'team']), unitId: uuid })
+    .object({
+      userId: uuid,
+      roleId: uuid,
+      unitType: z.enum(['division', 'team']),
+      unitId: uuid,
+      viaDefault: z.boolean().optional(),
+    })
     .strict(),
   'team.updated': z.object({ teamId: uuid, changes }).strict(),
   'team.retired': z.object({ teamId: uuid }).strict(),

@@ -322,6 +322,7 @@ export class UsersService {
       select: { id: true, lifecycleState: true, kind: true },
     });
     if (!role) throw new NotFoundError('ROLE_NOT_FOUND', 'Role not found');
+    if (role.kind === 'baseline') throw new ConflictError('BASELINE_ROLE', 'Everyone is held by every user; it is never given or taken away');
     if (role.kind === 'unit') {
       throw new UnprocessableError('UNIT_ROLE_NOT_GRANTABLE', 'A unit role is assigned at a division or team, not held org-wide');
     }
@@ -375,6 +376,8 @@ export class UsersService {
     actorUserId: string,
   ): Promise<void> {
     const user = await this.loadUser(targetUserId);
+    const kind = (await this.prisma.role.findUnique({ where: { id: roleId }, select: { kind: true } }))?.kind;
+    if (kind === 'baseline') throw new ConflictError('BASELINE_ROLE', 'Everyone is held by every user; it is never given or taken away');
     await this.reauthorizeRoleScope(
       actorUserId,
       'user:revoke_role',

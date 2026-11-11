@@ -4,18 +4,31 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
-import { GrantEffect, RoleKind, ScopeKind } from '@prisma/client';
+import { GrantEffect, LifecycleState, Prisma, RoleKind, ScopeKind } from '@prisma/client';
 import { ENV, Env } from '../config/env';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { AdministrabilityService } from '../access/administrability.service';
-import { ADMIN_SEED_ACTIONS, MEMBER_SEED_GRANTS, PROJECT_LEAD_SEED_ACTIONS } from '../access/actions';
+import {
+  ADMIN_SEED_ACTIONS,
+  EVERYONE_SEED_GRANTS,
+  MEMBER_UNIT_SEED_GRANTS,
+  PROJECT_LEAD_SEED_ACTIONS,
+  SeedGrant,
+  UNIT_ROLE_ACTIONS,
+} from '../access/actions';
+import { supportsOwnScope } from '../access/cedar/policies';
 import { createHmac } from 'node:crypto';
 import { uuidv7 } from 'uuidv7';
 import { generateOpaqueToken, hashToken } from '../common/tokens';
 
 const ADMIN_ROLE_NAME = 'Admin';
 const MEMBER_ROLE_NAME = 'Member';
+const EVERYONE_ROLE_NAME = 'Everyone';
+/** What the org-wide Member becomes when an upgrade retires it (ADR 0022). */
+const OLD_MEMBER_ROLE_NAME = 'Member (before unit roles)';
+/** Org-wide reads the old Member held, which Everyone now covers. */
+const EVERYONE_READS = new Set(EVERYONE_SEED_GRANTS.map((g) => `${g.action}|${g.scopeKind}`));
 const PROJECT_LEAD_ROLE_NAME = 'Project lead';
 const BOOTSTRAP_EXPIRY_MS = 365 * 24 * 60 * 60 * 1000; // long-lived; gated by passcode
 
@@ -57,8 +70,8 @@ export class BootstrapService implements OnApplicationBootstrap {
 
   /**
    * Ensure the settings row and the seeded roles exist. Admin holds every action at
-   * global scope, topped up whenever an upgrade adds actions. Member is seeded once
-   * with its starter grants and is then the admins' to edit (or delete).
+   * global scope, topped up whenever an upgrade adds actions. Everyone and the Member
+   * unit role are seeded once (ADR 0022) and are then the admins' to edit.
    */
   private async ensureSeed(): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
@@ -94,37 +107,7 @@ export class BootstrapService implements OnApplicationBootstrap {
       }
 
       const settings = await tx.systemSettings.findUniqueOrThrow({ where: { id: 1 } });
-      if (!settings.memberRoleSeeded) {
-        // An upgraded install may already have a role by that name: adopt it rather
-        // than create a second one, and top up its starter grants.
-        const member =
-          (await tx.role.findFirst({
-            where: { name: { equals: MEMBER_ROLE_NAME, mode: 'insensitive' }, lifecycleState: 'active' },
-            select: { id: true },
-          })) ?? (await tx.role.create({ data: { name: MEMBER_ROLE_NAME }, select: { id: true } }));
-        const held = await tx.grant.findMany({ where: { roleId: member.id }, select: { action: true, scopeKind: true } });
-        const have = new Set(held.map((g) => `${g.action}|${g.scopeKind}`));
-        await tx.grant.createMany({
-          data: MEMBER_SEED_GRANTS.filter((g) => !have.has(`${g.action}|${g.scopeKind}`)).map((g) => ({
-            roleId: member.id,
-            action: g.action,
-            effect: GrantEffect.permit,
-            scopeKind: g.scopeKind,
-          })),
-        });
-        // Before Member existed, reads needed no grant. Everyone already here gets it,
-        // so an upgrade doesn't take their tasks out of sight; new users get it from
-        // their invitation.
-        const users = await tx.appUser.findMany({ where: { lifecycleState: 'active' }, select: { id: true } });
-        await tx.userRole.createMany({
-          data: users.map((u) => ({ userId: u.id, roleId: member.id })),
-          skipDuplicates: true,
-        });
-        await tx.systemSettings.update({
-          where: { id: 1 },
-          data: { memberRoleId: member.id, memberRoleSeeded: true },
-        });
-      }
+      if (!settings.memberUnitSeeded) await this.seedEveryoneAndMember(tx, settings.memberRoleId);
       if (!settings.projectLeadSeeded) {
         // Seeded once, unassigned and kept for admins to appoint; then the admins' to edit.
         const exists = await tx.role.findFirst({
@@ -148,6 +131,98 @@ export class BootstrapService implements OnApplicationBootstrap {
         await tx.systemSettings.update({ where: { id: 1 }, data: { projectLeadSeeded: true } });
       }
       await tx.systemSettings.update({ where: { id: 1 }, data: { configVersion: { increment: 1 } } });
+    });
+  }
+
+  /**
+   * Seed Everyone and the Member unit role, once (ADR 0022). On an install that had the
+   * org-wide Member, its grants are translated rather than replaced: org-wide reads and
+   * "involved" task reads move to Everyone; unit actions scoped to divisions, teams or
+   * everywhere become `assigned`, and their `own` grants stay `own` (now within the
+   * unit). Anything else is logged and left behind. Every division and team then gets
+   * Member as its default, every current member is given it, and the old role retires.
+   */
+  private async seedEveryoneAndMember(tx: Prisma.TransactionClient, legacyId: string | null): Promise<void> {
+    const legacy =
+      (legacyId
+        ? await tx.role.findFirst({ where: { id: legacyId, kind: RoleKind.org }, select: { id: true } })
+        : null) ??
+      (await tx.role.findFirst({
+        where: { name: { equals: MEMBER_ROLE_NAME, mode: 'insensitive' }, kind: RoleKind.org, lifecycleState: 'active' },
+        select: { id: true },
+      }));
+
+    // Everyone: exactly one, created once.
+    const everyone =
+      (await tx.role.findFirst({ where: { kind: RoleKind.baseline }, select: { id: true } })) ??
+      (await tx.role.create({ data: { name: EVERYONE_ROLE_NAME, kind: RoleKind.baseline }, select: { id: true } }));
+
+    let memberGrants: SeedGrant[] = [...MEMBER_UNIT_SEED_GRANTS];
+    if (legacy) {
+      const held = await tx.grant.findMany({
+        where: { roleId: legacy.id },
+        select: { action: true, effect: true, scopeKind: true },
+      });
+      memberGrants = [];
+      for (const g of held) {
+        const key = `${g.action}|${g.scopeKind}`;
+        if (g.effect === GrantEffect.permit && EVERYONE_READS.has(key)) continue; // Everyone has it
+        const unitAction = UNIT_ROLE_ACTIONS.includes(g.action);
+        if (unitAction && g.effect === GrantEffect.permit && ['global', 'own_division', 'own_team'].includes(g.scopeKind)) {
+          memberGrants.push({ action: g.action, scopeKind: 'assigned' });
+        } else if (unitAction && g.effect === GrantEffect.permit && g.scopeKind === 'own' && supportsOwnScope(g.action)) {
+          memberGrants.push({ action: g.action, scopeKind: 'own' });
+        } else {
+          this.logger.warn(`Member upgrade: not carried over: ${g.effect} ${g.action} @ ${g.scopeKind}`);
+        }
+      }
+      // Leave the name free for the unit role, then retire the old one with no holders.
+      await tx.role.update({
+        where: { id: legacy.id },
+        data: { name: OLD_MEMBER_ROLE_NAME, lifecycleState: LifecycleState.retired, retiredAt: new Date(), version: { increment: 1 } },
+      });
+      await tx.userRole.deleteMany({ where: { roleId: legacy.id } });
+      await tx.invitationRole.deleteMany({ where: { roleId: legacy.id } });
+    }
+    const haveEveryone = new Set(
+      (await tx.grant.findMany({ where: { roleId: everyone.id }, select: { action: true, scopeKind: true } })).map(
+        (g) => `${g.action}|${g.scopeKind}`,
+      ),
+    );
+    await tx.grant.createMany({
+      data: EVERYONE_SEED_GRANTS.filter((g) => !haveEveryone.has(`${g.action}|${g.scopeKind}`)).map((g) => ({
+        roleId: everyone.id,
+        action: g.action,
+        effect: GrantEffect.permit,
+        scopeKind: g.scopeKind,
+      })),
+    });
+
+    const member = await tx.role.create({
+      data: { name: MEMBER_ROLE_NAME, kind: RoleKind.unit, assignableByLeads: true },
+      select: { id: true },
+    });
+    const unique = [...new Map(memberGrants.map((g) => [`${g.action}|${g.scopeKind}`, g])).values()];
+    await tx.grant.createMany({
+      data: unique.map((g) => ({ roleId: member.id, action: g.action, effect: GrantEffect.permit, scopeKind: g.scopeKind })),
+    });
+
+    // Every unit's default, and every current member holds it there.
+    await tx.division.updateMany({ where: { defaultRoleId: null }, data: { defaultRoleId: member.id } });
+    await tx.team.updateMany({ where: { defaultRoleId: null }, data: { defaultRoleId: member.id } });
+    const memberships = await tx.membership.findMany({ select: { userId: true, divisionId: true, teamId: true } });
+    await tx.unitRoleAssignment.createMany({
+      data: memberships.map((m) => ({
+        userId: m.userId,
+        roleId: member.id,
+        divisionId: m.divisionId,
+        teamId: m.teamId,
+        viaDefault: true,
+      })),
+    });
+    await tx.systemSettings.update({
+      where: { id: 1 },
+      data: { defaultUnitRoleId: member.id, memberRoleId: null, memberRoleSeeded: true, memberUnitSeeded: true },
     });
   }
 

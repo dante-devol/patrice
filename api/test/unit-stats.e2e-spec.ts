@@ -160,9 +160,11 @@ describe('Unit stats', () => {
     expect(claimed.body.byStatus.open).toBe(0);
   });
 
-  it('needs read access to the unit', async () => {
+  it('someone in no unit reads the stats (Everyone sees the structure) but counts no tasks', async () => {
     const bare = await inviteAndAccept(booted, admin, { email: 'bare@example.com' });
     const res = await as(bare.session)(http().get(`/api/divisions/${writingId}/stats`));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body.byStatus.open).toBe(0);
+    expect(res.body.completed).toBe(0);
   });
 });

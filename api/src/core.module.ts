@@ -5,6 +5,7 @@ import { SettingsModule } from './settings/settings.module';
 import { InfrastructureModule } from './infrastructure/infrastructure.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ActivityModule } from './activity/activity.module';
+import { UnitDefaultsModule } from './membership/unit-defaults.service';
 import { AccessModule } from './access/access.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
@@ -35,6 +36,7 @@ const SHARED = [
     InfrastructureModule,
     PrismaModule,
     ActivityModule,
+    UnitDefaultsModule,
     AccessModule,
     QueueModule,
     AuthModule,

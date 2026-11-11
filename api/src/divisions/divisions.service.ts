@@ -10,6 +10,7 @@ import { UnitOfWork, UnitOfWorkContext } from '../infrastructure/unit-of-work';
 import { AccessService } from '../access/access.service';
 import { ACTIONS } from '../access/actions';
 import { divisionRef } from '../access/entity-loader';
+import { UnitDefaultsService } from '../membership/unit-defaults.service';
 import { CreateDivisionDto, UpdateDivisionDto } from './divisions.dto';
 
 export interface DivisionView {
@@ -19,6 +20,7 @@ export interface DivisionView {
   openingsLocked: boolean;
   restrictClaims: boolean;
   allowCustomTemplates: boolean;
+  defaultRoleId: string | null;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
@@ -47,6 +49,7 @@ export class DivisionsService {
     private readonly uow: UnitOfWork,
     private readonly grace: GraceService,
     private readonly access: AccessService,
+    private readonly defaults: UnitDefaultsService,
   ) {}
 
   /** The divisions the user may see (`division:read`). */
@@ -63,6 +66,7 @@ export class DivisionsService {
       openingsLocked: r.openingsLocked,
       restrictClaims: r.restrictClaims,
       allowCustomTemplates: r.allowCustomTemplates,
+      defaultRoleId: r.defaultRoleId,
       lifecycleState: r.lifecycleState,
       retiredAt: r.retiredAt,
       version: r.version,
@@ -70,8 +74,10 @@ export class DivisionsService {
   }
 
   async create(actorUserId: string, dto: CreateDivisionDto): Promise<DivisionView> {
+    await this.defaults.assertDefaultRole(this.prisma, dto.defaultRoleId);
+    const defaultRoleId = dto.defaultRoleId !== undefined ? dto.defaultRoleId : await this.defaults.forNewUnit(this.prisma);
     return this.uow.run(actorUserId, async ({ divisions }) => {
-      const d = Division.create(dto.name, dto);
+      const d = Division.create(dto.name, { ...dto, defaultRoleId });
       await divisions.insert(d);
       return toView(d);
     });
@@ -79,6 +85,7 @@ export class DivisionsService {
 
   async update(id: string, actorUserId: string, dto: UpdateDivisionDto): Promise<DivisionView> {
     const { version, ...changes } = dto;
+    await this.defaults.assertDefaultRole(this.prisma, changes.defaultRoleId);
     return this.uow.run(actorUserId, async (ctx) => {
       const d = await this.load(ctx, id);
       if (version !== undefined && version !== d.version) {

@@ -91,6 +91,9 @@ export class InvitationsService {
     actorUserId: string,
     roleIds: string[],
   ): Promise<void> {
+    if ((await this.prisma.role.count({ where: { id: { in: roleIds }, kind: 'baseline' } })) > 0) {
+      throw new ConflictError('BASELINE_ROLE', 'Everyone is held by every user; it is never given or taken away');
+    }
     // A unit role is assigned at a division or team, never pre-assigned org-wide.
     const unitRoles = await this.prisma.role.count({ where: { id: { in: roleIds }, kind: 'unit' } });
     if (unitRoles > 0) {
@@ -121,18 +124,6 @@ export class InvitationsService {
     }
   }
 
-  /** The Member role, if it still exists and the creator may grant it. */
-  private async defaultRoles(creatorUserId: string): Promise<string[]> {
-    const { memberRoleId } = await this.settings.get();
-    if (!memberRoleId) return [];
-    try {
-      await this.assertRolesGrantable(creatorUserId, [memberRoleId]);
-      return [memberRoleId];
-    } catch {
-      return [];
-    }
-  }
-
   /** Create a normal (non-bootstrap) invitation. Returns the plaintext token. */
   async create(args: {
     creatorUserId: string;
@@ -141,7 +132,8 @@ export class InvitationsService {
     expiresAt?: Date;
   }): Promise<{ id: string; token: string }> {
     // Omitted roles default to the seeded Member role, when the creator may grant it.
-    const intendedRoleIds = args.intendedRoleIds ?? (await this.defaultRoles(args.creatorUserId));
+    // No org role by default: everyone holds Everyone, and Member comes with joining a unit (ADR 0022).
+    const intendedRoleIds = args.intendedRoleIds ?? [];
     // Privilege bound at creation — the creator may only pre-assign roles they could
     // grant directly (re-validated again at redemption below).
     await this.assertRolesGrantable(args.creatorUserId, intendedRoleIds);

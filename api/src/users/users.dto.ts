@@ -28,6 +28,7 @@ const settingsFields = {
   gracePeriodHours: z.number().int().nonnegative().max(8760).optional(),
   requireDiscordLink: z.boolean().optional(),
   discordClientId: z.string().max(64).nullable().optional(),
+  defaultUnitRoleId: z.string().uuid().nullable().optional(),
 };
 
 export const updateConfigSchema = z
@@ -46,6 +47,8 @@ export const updateConfigSchema = z
     // write-only (encrypted at rest, never returned). Empty string clears it.
     discordClientId: z.string().max(64).optional(),
     discordClientSecret: z.string().max(256).optional(),
+    // The unit role new divisions and teams start with as their default (ADR 0022).
+    defaultUnitRoleId: z.string().uuid().nullable().optional(),
     // Optional stale check: the values the editor last read for the fields it changes.
     // Settings share one row whose `updated_at` moves with every permission change, so
     // the check is per field rather than by version.

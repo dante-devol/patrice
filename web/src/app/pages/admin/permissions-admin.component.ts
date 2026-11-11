@@ -41,10 +41,23 @@ import {
 
 type View = 'role' | 'action';
 
-/** Roles are one kind now: belonging to a division or team is a membership, not a role. */
-const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
-  { kind: 'org', name: 'Org roles', label: 'Org role' },
-  { kind: 'unit', name: 'Unit roles', label: 'Unit role' },
+/** What each role kind is, for the group headers and the role header's tooltip. */
+const ROLE_KINDS: { kind: Role['kind']; name: string; label: string; hint: string }[] = [
+  {
+    kind: 'baseline',
+    name: 'Everyone',
+    label: 'Held by everyone',
+    hint:
+      "Every signed-in person holds Everyone. It can't be given or taken away, and isn't shown on " +
+      'people; edit here what it lets everyone do.',
+  },
+  { kind: 'org', name: 'Org roles', label: 'Org role', hint: 'Given to people across the whole organization.' },
+  {
+    kind: 'unit',
+    name: 'Unit roles',
+    label: 'Unit role',
+    hint: 'Held at a division or team, and only applies there. Divisions and teams give their default unit role to people who join.',
+  },
 ];
 
 /**
@@ -112,14 +125,19 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
                  [ngModel]="roleQuery()" (ngModelChange)="roleQuery.set($event)" />
           <div class="sheet">
             @for (g of roleGroups(); track g.kind) {
-              <button class="group-head" (click)="toggle('roles:' + g.kind)" [attr.aria-expanded]="!isCollapsed('roles:' + g.kind)">
-                <span class="group-name">{{ g.name }}</span><span class="group-count">{{ g.roles.length }}</span>
-                <span class="flex-1"></span><span aria-hidden="true">{{ isCollapsed('roles:' + g.kind) ? '+' : '−' }}</span>
-              </button>
-              @if (!isCollapsed('roles:' + g.kind)) {
+              <!-- Everyone is one role on its own: no group header, just the row. -->
+              @if (g.kind !== 'baseline') {
+                <button class="group-head" (click)="toggle('roles:' + g.kind)" [attr.aria-expanded]="!isCollapsed('roles:' + g.kind)"
+                        [title]="g.hint">
+                  <span class="group-name">{{ g.name }}</span><span class="group-count">{{ g.roles.length }}</span>
+                  <span class="flex-1"></span><span aria-hidden="true">{{ isCollapsed('roles:' + g.kind) ? '+' : '−' }}</span>
+                </button>
+              }
+              @if (g.kind === 'baseline' || !isCollapsed('roles:' + g.kind)) {
                 @for (r of g.roles; track r.id) {
                   <button class="row-item" [class.is-current]="r.id === selectedRoleId()"
                           [style.box-shadow]="r.id === selectedRoleId() ? null : roleEdge(r)"
+                          [title]="r.kind === 'baseline' ? g.hint : ''"
                           (click)="selectedRoleId.set(r.id)">
                     <span class="min-w-0 truncate">{{ r.name }}</span><span class="flex-1"></span>
                     @if (dirtyRoles().has(r.id)) { <span class="dot" aria-label="Unsaved changes"></span> }
@@ -162,7 +180,16 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
             <div class="sheet">
               <div class="px-3 py-2.5">
                 <div class="font-display font-bold text-[18px] leading-tight">{{ r.name }}</div>
-                <div class="text-ink-soft mt-0.5">{{ kindLabel(r) }}, {{ grantCount(r.id) }} {{ grantCount(r.id) === 1 ? 'grant' : 'grants' }}</div>
+                <div class="text-ink-soft mt-0.5">
+                  <span class="hint hint--start" [attr.data-hint]="kindHint(r)" tabindex="0">{{ kindLabel(r) }}</span>,
+                  {{ grantCount(r.id) }} {{ grantCount(r.id) === 1 ? 'grant' : 'grants' }}
+                </div>
+                @if (r.kind === 'baseline') {
+                  <p class="mt-1.5 mb-0 max-w-[60ch]">
+                    Every signed-in person holds this role. Anything granted here applies to everyone, so keep it to what
+                    anyone may do; work in a division or team comes from unit roles such as Member.
+                  </p>
+                }
                 <div class="flex flex-wrap items-center gap-3 mt-2">
                   <input class="pick flex-1 min-w-[160px]" type="search" placeholder="Filter actions" aria-label="Filter actions"
                          [ngModel]="actionQuery()" (ngModelChange)="actionQuery.set($event)" />
@@ -260,7 +287,8 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
                 <select class="pick" [class.pick--unset]="!d.scopeRoleId" aria-label="Role"
                         [ngModel]="d.scopeRoleId ?? ''" (ngModelChange)="setTarget(d, 'scopeRoleId', $event)">
                   <option value="" disabled>Pick a role</option>
-                  @for (x of activeRoles(); track x.id) { <option [value]="x.id">{{ x.name }}</option> }
+                  <!-- Everyone is never given or taken away, so it isn't a target. -->
+                  @for (x of activeRoles(); track x.id) { @if (x.kind !== 'baseline') { <option [value]="x.id">{{ x.name }}</option> } }
                 </select>
               }
             </div>
@@ -442,23 +470,33 @@ export class PermissionsAdminComponent implements OnDestroy {
   scopeOptions(roleId: string, a: ActionInfo): ScopeOption[] {
     return [
       { value: '', ...NOT_GRANTED },
-      ...this.scopesFor(roleId, a).map((s) => ({ value: s, name: scopeLabel(s, a), description: scopeHint(s, a) })),
+      ...this.scopesFor(roleId, a).map((s) => ({
+        value: s,
+        name: scopeLabel(s, a),
+        description: scopeHint(s, a, undefined, this.isUnitRole(roleId)),
+      })),
     ];
   }
   hint(d: DraftGrant, a: ActionInfo): string {
-    return scopeHint(d.scopeKind, a, this.targetName(d) ?? undefined);
+    return scopeHint(d.scopeKind, a, this.targetName(d) ?? undefined, this.isUnitRole(d.roleId));
   }
   kindLabel(r: Role): string {
-    return r.kind === 'unit' ? 'Unit role' : 'Org role';
+    return ROLE_KINDS.find((k) => k.kind === r.kind)?.label ?? 'Role';
+  }
+  kindHint(r: Role): string {
+    return ROLE_KINDS.find((k) => k.kind === r.kind)?.hint ?? '';
+  }
+  private isUnitRole(roleId: string): boolean {
+    return this.activeRoles().find((r) => r.id === roleId)?.kind === 'unit';
   }
 
   /**
-   * The scopes a role may use for an action: a unit role only `assigned` (and only on
-   * unit actions), an org role everything else.
+   * The scopes a role may use for an action: a unit role `assigned`, or `own` limited
+   * to its unit (unit actions only); org roles and Everyone everything else.
    */
   scopesFor(roleId: string, a: ActionInfo): ScopeKind[] {
-    const unit = this.activeRoles().find((r) => r.id === roleId)?.kind === 'unit';
-    return unit ? a.scopes.filter((s) => s === 'assigned') : a.scopes.filter((s) => s !== 'assigned');
+    if (!this.isUnitRole(roleId)) return a.scopes.filter((s) => s !== 'assigned');
+    return a.scopes.includes('assigned') ? a.scopes.filter((s) => s === 'assigned' || s === 'own') : [];
   }
   /** Roles carry no unit colour any more (units are memberships). */
   roleEdge(_r: Role): string | null {

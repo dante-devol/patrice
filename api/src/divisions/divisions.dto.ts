@@ -15,6 +15,8 @@ export const createDivisionSchema = z
     openingsLocked: z.boolean().optional(),
     restrictClaims: z.boolean().optional(),
     allowCustomTemplates: z.boolean().optional(),
+    // The unit role people get when they join (ADR 0022). Omitted: the org's default.
+    defaultRoleId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -25,6 +27,7 @@ export const updateDivisionSchema = z
     openingsLocked: z.boolean().optional(),
     restrictClaims: z.boolean().optional(),
     allowCustomTemplates: z.boolean().optional(),
+    defaultRoleId: z.string().uuid().nullable().optional(),
     // Optional optimistic-lock check: the version the client last read.
     version: z.number().int().nonnegative().optional(),
   })

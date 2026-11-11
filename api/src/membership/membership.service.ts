@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { LifecycleState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityService } from '../activity/activity.service';
-import { ConflictError, DeniedError, NotFoundError, ValidationError } from '../common/errors';
+import { ConflictError, DeniedError, NotFoundError, UnprocessableError, ValidationError } from '../common/errors';
 import { AccessService, ResourceRef } from '../access/access.service';
 import { ACTIONS } from '../access/actions';
 import { divisionRef, TEAM_REF_SELECT, teamRefOf } from '../access/entity-loader';
 import { BatchMembershipsDto } from './membership.dto';
+import { UnitDefaultsService } from './unit-defaults.service';
 
 export type UnitKind = 'division' | 'team';
 
@@ -56,6 +57,7 @@ export class MembershipService {
     private readonly prisma: PrismaService,
     private readonly activity: ActivityService,
     private readonly access: AccessService,
+    private readonly defaults: UnitDefaultsService,
   ) {}
 
   private unitKey(kind: UnitKind, id: string): string {
@@ -183,12 +185,15 @@ export class MembershipService {
     await this.prisma.$transaction(async (tx) => {
       for (const c of changes) {
         const where = { userId: c.userId, ...this.unitWhere(c.unitType, c.unitId) };
+        const unit = { kind: c.unitType, id: c.unitId };
         if (c.op === 'add') {
           if (await tx.membership.findFirst({ where, select: { id: true } })) throw stale();
           await tx.membership.create({ data: { ...where, grantedBy: actorUserId } });
+          await this.defaults.joined(tx, c.userId, unit, actorUserId);
         } else {
           const { count } = await tx.membership.deleteMany({ where });
           if (count === 0) throw stale();
+          await this.defaults.left(tx, c.userId, unit, actorUserId);
         }
         await this.activity.logActivity({
           tx,
@@ -245,6 +250,7 @@ export class MembershipService {
     if (!existing) {
       await this.prisma.$transaction(async (tx) => {
         await tx.membership.create({ data: { userId, ...this.unitWhere(kind, unitId), grantedBy: actorUserId } });
+        await this.defaults.joined(tx, userId, { kind, id: unitId }, actorUserId);
         await this.activity.logActivity({
           tx,
           actorUserId,
@@ -258,12 +264,28 @@ export class MembershipService {
     return this.list(kind, unitId);
   }
 
+  /**
+   * Give the unit's default role to every current member who doesn't hold it there
+   * (after an admin changes the default; ADR 0022). Recorded as joining gave it.
+   */
+  async giveDefaultToMembers(kind: UnitKind, unitId: string, actorUserId: string): Promise<{ given: number }> {
+    await this.assertUnit(kind, unitId, true);
+    const given = await this.prisma.$transaction(async (tx) => {
+      const roleId = await this.defaults.defaultRoleOf(tx, { kind, id: unitId });
+      if (!roleId) throw new UnprocessableError('NOT_A_DEFAULT_ROLE', 'This unit has no default role to give');
+      const members = await tx.membership.findMany({ where: this.unitWhere(kind, unitId), select: { userId: true } });
+      return this.defaults.give(tx, members.map((m) => m.userId), roleId, { kind, id: unitId }, actorUserId);
+    });
+    return { given };
+  }
+
   /** Remove a member. Idempotent. */
   async remove(kind: UnitKind, unitId: string, userId: string, actorUserId: string): Promise<void> {
     await this.assertUnit(kind, unitId, false);
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.membership.deleteMany({ where: { userId, ...this.unitWhere(kind, unitId) } });
       if (count > 0) {
+        await this.defaults.left(tx, userId, { kind, id: unitId }, actorUserId);
         await this.activity.logActivity({
           tx,
           actorUserId,

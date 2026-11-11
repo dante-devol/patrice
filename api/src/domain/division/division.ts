@@ -10,6 +10,8 @@ export interface DivisionSettings {
   restrictClaims: boolean;
   /** Any requester may write their own questions for a task here. */
   allowCustomTemplates: boolean;
+  /** The unit role people get when they join (ADR 0022), or null. */
+  defaultRoleId: string | null;
 }
 
 export interface DivisionState extends DivisionSettings {
@@ -36,6 +38,7 @@ export class Division extends AggregateRoot {
       openingsLocked: s.openingsLocked,
       restrictClaims: s.restrictClaims,
       allowCustomTemplates: s.allowCustomTemplates,
+      defaultRoleId: s.defaultRoleId,
     };
     this._lifecycle = s.lifecycle;
   }
@@ -48,6 +51,7 @@ export class Division extends AggregateRoot {
       openingsLocked: settings.openingsLocked ?? false,
       restrictClaims: settings.restrictClaims ?? false,
       allowCustomTemplates: settings.allowCustomTemplates ?? false,
+      defaultRoleId: settings.defaultRoleId ?? null,
       lifecycle: Lifecycle.active(),
       version: 0,
     });
@@ -88,6 +92,7 @@ export class Division extends AggregateRoot {
       openingsLocked: changes.openingsLocked ?? this._settings.openingsLocked,
       restrictClaims: changes.restrictClaims ?? this._settings.restrictClaims,
       allowCustomTemplates: changes.allowCustomTemplates ?? this._settings.allowCustomTemplates,
+      defaultRoleId: changes.defaultRoleId !== undefined ? changes.defaultRoleId : this._settings.defaultRoleId,
     };
     this.raise({
       type: 'division.updated',
@@ -101,6 +106,7 @@ export class Division extends AggregateRoot {
           'openingsLocked',
           'restrictClaims',
           'allowCustomTemplates',
+          'defaultRoleId',
         ]),
       },
     });

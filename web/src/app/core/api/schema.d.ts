@@ -1050,6 +1050,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/divisions/{id}/members/default-role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give the division's default role to its current members who don't hold it
+         * @description Gated by the `division:manage_members` action.
+         */
+        post: operations["giveDivisionDefaultRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/teams/{id}/members/default-role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give the team's default role to its current members who don't hold it
+         * @description Gated by the `team:manage_members` action.
+         */
+        post: operations["giveTeamDefaultRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/teams/{id}/members/{userId}": {
         parameters: {
             query?: never;
@@ -2094,7 +2134,7 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ASSIGNMENT_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_MEMBERSHIP" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DIVISION_SOLE_TEAM_DIVISION" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "TEAM_DIVISION_IN_USE" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "NOT_A_UNIT_ROLE" | "UNIT_ROLE_NOT_GRANTABLE" | "UNIT_ROLE_SCOPE" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ASSIGNMENT_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_MEMBERSHIP" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DIVISION_SOLE_TEAM_DIVISION" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "TEAM_DIVISION_IN_USE" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "NOT_A_UNIT_ROLE" | "UNIT_ROLE_NOT_GRANTABLE" | "UNIT_ROLE_SCOPE" | "BASELINE_ROLE" | "NOT_A_DEFAULT_ROLE" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
@@ -2235,13 +2275,15 @@ export interface components {
             requireDiscordLink: boolean;
             discordClientId: string | null;
             discordOAuthConfigured: boolean;
+            /** Format: uuid */
+            defaultUnitRoleId: string | null;
         };
         Role: {
             /** Format: uuid */
             id: string;
             name: string;
             /** @enum {string} */
-            kind: "org" | "unit";
+            kind: "org" | "unit" | "baseline";
             assignableByLeads: boolean;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
@@ -2289,6 +2331,8 @@ export interface components {
             openingsLocked: boolean;
             restrictClaims: boolean;
             allowCustomTemplates: boolean;
+            /** Format: uuid */
+            defaultRoleId: string | null;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
             retiredAt: string | null;
@@ -2380,6 +2424,9 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        DefaultRoleGiven: {
+            given: number;
+        };
         UnitRoleAssignment: {
             /** Format: uuid */
             id: string;
@@ -2447,6 +2494,8 @@ export interface components {
             allDivisions: boolean;
             name: string;
             restrictClaims: boolean;
+            /** Format: uuid */
+            defaultRoleId: string | null;
             lifecycleState: components["schemas"]["Lifecycle"];
             /** Format: date-time */
             retiredAt: string | null;
@@ -4085,6 +4134,8 @@ export interface operations {
                     requireDiscordLink?: boolean;
                     discordClientId?: string;
                     discordClientSecret?: string;
+                    /** Format: uuid */
+                    defaultUnitRoleId?: string | null;
                     expected?: {
                         requireVerifiedEmailToLogIn?: boolean;
                         selfReviewAllowed?: boolean;
@@ -4094,6 +4145,8 @@ export interface operations {
                         gracePeriodHours?: number;
                         requireDiscordLink?: boolean;
                         discordClientId?: string | null;
+                        /** Format: uuid */
+                        defaultUnitRoleId?: string | null;
                     };
                 };
             };
@@ -4595,6 +4648,8 @@ export interface operations {
                     openingsLocked?: boolean;
                     restrictClaims?: boolean;
                     allowCustomTemplates?: boolean;
+                    /** Format: uuid */
+                    defaultRoleId?: string | null;
                 };
             };
         };
@@ -4636,6 +4691,8 @@ export interface operations {
                     openingsLocked?: boolean;
                     restrictClaims?: boolean;
                     allowCustomTemplates?: boolean;
+                    /** Format: uuid */
+                    defaultRoleId?: string | null;
                     version?: number;
                 };
             };
@@ -5330,6 +5387,68 @@ export interface operations {
             };
         };
     };
+    giveDivisionDefaultRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Give the division's default role to its current members who don't hold it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultRoleGiven"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    giveTeamDefaultRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Give the team's default role to its current members who don't hold it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultRoleGiven"];
+                };
+            };
+            /** @description An error; `error.code` is one of `ErrorCode` */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     removeTeamMember: {
         parameters: {
             query?: never;
@@ -5743,6 +5862,8 @@ export interface operations {
                     allDivisions?: boolean;
                     name: string;
                     restrictClaims?: boolean;
+                    /** Format: uuid */
+                    defaultRoleId?: string | null;
                 };
             };
         };
@@ -5781,6 +5902,8 @@ export interface operations {
                 "application/json": {
                     name?: string;
                     restrictClaims?: boolean;
+                    /** Format: uuid */
+                    defaultRoleId?: string | null;
                     divisionIds?: string[];
                     allDivisions?: boolean;
                     version?: number;

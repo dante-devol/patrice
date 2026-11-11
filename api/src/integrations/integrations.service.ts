@@ -13,6 +13,7 @@ import { nextReconcileAt } from './reconcile-floor';
 import { mappingTarget } from './sync/mapping-target';
 import type { SyncTarget } from './sync/reconciler';
 import type { StoreTokenJob } from './token.worker';
+import { UnitDefaultsService } from '../membership/unit-defaults.service';
 import {
   ConnectIntegrationDto,
   CreateMappingDto,
@@ -76,6 +77,7 @@ export class IntegrationsService {
     private readonly queue: QueueService,
     private readonly admin: AdministrabilityService,
     private readonly links: DiscordLinkService,
+    private readonly defaults: UnitDefaultsService,
   ) {}
 
   // ---- Connections -----------------------------------------------------------
@@ -341,11 +343,20 @@ export class IntegrationsService {
         ).count;
       }
       if (where.memberships) {
-        affected += (
-          disposition === GrantDisposition.keep
-            ? await tx.membership.updateMany({ where: where.memberships, data: native })
-            : await tx.membership.deleteMany({ where: where.memberships })
-        ).count;
+        if (disposition === GrantDisposition.keep) {
+          affected += (await tx.membership.updateMany({ where: where.memberships, data: native })).count;
+        } else {
+          // Leaving takes the unit's default role with it (ADR 0022).
+          const leaving = await tx.membership.findMany({
+            where: where.memberships,
+            select: { userId: true, divisionId: true, teamId: true },
+          });
+          affected += (await tx.membership.deleteMany({ where: where.memberships })).count;
+          for (const m of leaving) {
+            const unit = m.divisionId ? { kind: 'division' as const, id: m.divisionId } : { kind: 'team' as const, id: m.teamId! };
+            await this.defaults.left(tx, m.userId, unit, actorUserId);
+          }
+        }
       }
       return affected;
     };
@@ -398,6 +409,7 @@ export class IntegrationsService {
       if (role.lifecycleState === LifecycleState.retired) {
         throw new UnprocessableError('ROLE_RETIRED', 'Cannot map a retired role');
       }
+      if (role.kind === 'baseline') throw new ConflictError('BASELINE_ROLE', 'Everyone is held by every user; it is never given or taken away');
       if (role.kind === 'unit') {
         throw new UnprocessableError('UNIT_ROLE_NOT_GRANTABLE', 'Unit roles cannot be mapped to an external group');
       }

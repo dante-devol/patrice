@@ -140,6 +140,8 @@ export const OrgSettings = z
     requireDiscordLink: z.boolean(),
     discordClientId: z.string().nullable(),
     discordOAuthConfigured: z.boolean(),
+    /** The unit role new divisions and teams start with as their default (ADR 0022). */
+    defaultUnitRoleId: id.nullable(),
   })
   .strict()
   .openapi('OrgSettings');
@@ -150,7 +152,7 @@ export const Role = z
   .object({
     id,
     name: z.string(),
-    kind: z.enum(['org', 'unit']),
+    kind: z.enum(['org', 'unit', 'baseline']),
     assignableByLeads: z.boolean(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
@@ -169,6 +171,8 @@ export const Division = z
     openingsLocked: z.boolean(),
     restrictClaims: z.boolean(),
     allowCustomTemplates: z.boolean(),
+    /** The unit role people get when they join (ADR 0022). */
+    defaultRoleId: id.nullable(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
@@ -184,12 +188,17 @@ export const Team = z
     allDivisions: z.boolean(),
     name: z.string(),
     restrictClaims: z.boolean(),
+    /** The unit role people get when they join (ADR 0022). */
+    defaultRoleId: id.nullable(),
     lifecycleState: Lifecycle,
     retiredAt: nullableTimestamp,
     version: z.number().int(),
   })
   .strict()
   .openapi('Team');
+
+/** How many current members were given a unit's default role. */
+export const DefaultRoleGiven = z.object({ given: z.number().int() }).strict().openapi('DefaultRoleGiven');
 
 export const Member = z
   .object({ userId: id, source: z.enum(['patrice', 'integration']), createdAt: timestamp })

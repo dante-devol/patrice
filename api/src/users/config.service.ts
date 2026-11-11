@@ -6,6 +6,7 @@ import { SettingsService, SYSTEM_SUBJECT_ID } from '../settings/settings.service
 import { SecretStore } from '../settings/secret-store.service';
 import { UpdateConfigDto } from './users.dto';
 import { diffFields } from '../activity/changes';
+import { UnitDefaultsService } from '../membership/unit-defaults.service';
 import { ConflictError } from '../common/errors';
 
 /** The public view: the client *id* is shown, the secret is replaced by a boolean. */
@@ -19,6 +20,8 @@ export type OrgSettings = {
   requireDiscordLink: boolean;
   discordClientId: string | null;
   discordOAuthConfigured: boolean;
+  /** The unit role new divisions and teams start with as their default (ADR 0022). */
+  defaultUnitRoleId: string | null;
 };
 
 /**
@@ -36,6 +39,7 @@ export class ConfigService {
     private readonly activity: ActivityService,
     private readonly settings: SettingsService,
     private readonly secrets: SecretStore,
+    private readonly defaults: UnitDefaultsService,
   ) {}
 
   async get(): Promise<OrgSettings> {
@@ -50,6 +54,7 @@ export class ConfigService {
       requireDiscordLink: s.requireDiscordLink,
       discordClientId: s.discordClientId,
       discordOAuthConfigured: await this.secrets.has('discord_oauth_client_secret'),
+      defaultUnitRoleId: s.defaultUnitRoleId,
     };
   }
 
@@ -58,6 +63,7 @@ export class ConfigService {
     const { discordClientSecret, expected, ...rest } = dto;
     const changedKeys = Object.keys(dto).filter((k) => k !== 'expected');
     const before = await this.settings.get();
+    await this.defaults.assertDefaultRole(this.prisma, rest.defaultUnitRoleId);
 
     await this.prisma.$transaction(async (tx) => {
       if (expected) {

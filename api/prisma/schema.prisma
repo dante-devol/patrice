@@ -69,6 +69,8 @@ enum ScopeKind {
 enum RoleKind {
   org
   unit
+  /// The one Everyone role: held by every user structurally, never granted (ADR 0022).
+  baseline
 }
 
 enum UserRoleSource {
@@ -192,13 +194,19 @@ model SystemSettings {
   requireDiscordLink          Boolean  @default(false) @map("require_discord_link")
   discordClientId             String?  @map("discord_client_id")
   /// The seeded Member role, pre-assigned on new invitations (null if deleted).
+  /// The org-wide Member role from before ADR 0022; read once by the upgrade, then null.
   memberRoleId                String?  @map("member_role_id") @db.Uuid
   memberRoleSeeded            Boolean  @default(false) @map("member_role_seeded")
+  /// Set once Everyone and the Member unit role are seeded (or the old Member upgraded).
+  memberUnitSeeded            Boolean  @default(false) @map("member_unit_seeded")
+  /// The default role given to new divisions and teams (a unit role).
+  defaultUnitRoleId           String?  @map("default_unit_role_id") @db.Uuid
   projectLeadSeeded           Boolean  @default(false) @map("project_lead_seeded")
   createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberRole Role? @relation(fields: [memberRoleId], references: [id], onDelete: SetNull)
+  memberRole      Role? @relation(fields: [memberRoleId], references: [id], onDelete: SetNull)
+  defaultUnitRole Role? @relation("SettingsDefaultUnitRole", fields: [defaultUnitRoleId], references: [id], onDelete: SetNull)
 
   @@map("system_settings")
 }
@@ -222,6 +230,8 @@ model Division {
   restrictClaims       Boolean        @default(false) @map("restrict_claims")
   /// Any requester may write their own questions for a task in this division.
   allowCustomTemplates Boolean        @default(false) @map("allow_custom_templates")
+  /// The unit role people get when they join (ADR 0022); null for none.
+  defaultRoleId        String?        @map("default_role_id") @db.Uuid
   lifecycleState       LifecycleState @default(active) @map("lifecycle_state")
   retiredAt            DateTime?      @map("retired_at") @db.Timestamptz(6)
   version              Int            @default(0)
@@ -236,6 +246,7 @@ model Division {
   scopedGrants     Grant[]
   groupMappings    ExternalGroupMapping[]
   unitRoles        UnitRoleAssignment[]
+  defaultRole      Role?                  @relation("DivisionDefaultRole", fields: [defaultRoleId], references: [id], onDelete: SetNull)
 
   @@map("division")
 }
@@ -249,12 +260,15 @@ model Team {
   /// `divisions` rows (at least one).
   allDivisions   Boolean        @default(false) @map("all_divisions")
   restrictClaims Boolean        @default(false) @map("restrict_claims")
+  /// The unit role people get when they join (ADR 0022); null for none.
+  defaultRoleId  String?        @map("default_role_id") @db.Uuid
   lifecycleState LifecycleState @default(active) @map("lifecycle_state")
   retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
   version        Int            @default(0)
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  defaultRole   Role?                  @relation("TeamDefaultRole", fields: [defaultRoleId], references: [id], onDelete: SetNull)
   divisions     TeamDivision[]
   tasks         Task[]
   memberships   Membership[]
@@ -427,13 +441,16 @@ model Role {
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  userRoles       UserRole[]
-  grants          Grant[]
-  groupMappings   ExternalGroupMapping[]
-  memberRoleOf    SystemSettings[]
-  scopedGrants    Grant[]                @relation("GrantScopeRole")
-  invitations     InvitationRole[]
-  unitAssignments UnitRoleAssignment[]
+  userRoles          UserRole[]
+  grants             Grant[]
+  groupMappings      ExternalGroupMapping[]
+  memberRoleOf       SystemSettings[]
+  scopedGrants       Grant[]                @relation("GrantScopeRole")
+  invitations        InvitationRole[]
+  unitAssignments    UnitRoleAssignment[]
+  defaultOfDivisions Division[]             @relation("DivisionDefaultRole")
+  defaultOfTeams     Team[]                 @relation("TeamDefaultRole")
+  defaultUnitRoleOf  SystemSettings[]       @relation("SettingsDefaultUnitRole")
 
   @@map("role")
 }
@@ -448,6 +465,9 @@ model UnitRoleAssignment {
   divisionId String?  @map("division_id") @db.Uuid
   teamId     String?  @map("team_id") @db.Uuid
   grantedBy  String?  @map("granted_by") @db.Uuid
+  /// Given because the person joined the unit (its default role), not appointed.
+  /// Leaving the unit removes it; appointed roles stay (ADR 0022).
+  viaDefault Boolean  @default(false) @map("via_default")
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user     AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)

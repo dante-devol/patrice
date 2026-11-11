@@ -21,7 +21,6 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
   let app: INestApplication;
   let admin: AdminSession;
   let prisma: PrismaClient;
-  let memberRoleId: string;
   let adminUserId: string;
   let openId: string;
   let secretId: string;
@@ -44,7 +43,6 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
     app = booted.app;
     admin = await bootstrapAdmin(booted);
     prisma = new PrismaClient();
-    memberRoleId = (await prisma.systemSettings.findFirstOrThrow()).memberRoleId!;
     adminUserId = (await http().get('/api/me').set('Cookie', admin.cookies)).body.id;
 
     openId = (await auth(http().post('/api/divisions')).send({ name: 'Open' })).body.id;
@@ -54,8 +52,8 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
         questions: [{ type: 'text', prompt: 'Q', required: true, constraints: {} }],
       });
     }
-    member = await inviteAndAccept(booted, admin, { email: 'member@example.com', intendedRoleIds: [memberRoleId] });
-    outsider = await inviteAndAccept(booted, admin, { email: 'outsider@example.com', intendedRoleIds: [memberRoleId] });
+    member = await inviteAndAccept(booted, admin, { email: 'member@example.com', intendedRoleIds: [] });
+    outsider = await inviteAndAccept(booted, admin, { email: 'outsider@example.com', intendedRoleIds: [] });
     await auth(http().post(`/api/divisions/${openId}/members`)).send({ userId: member.userId });
     await auth(http().post(`/api/divisions/${secretId}/members`)).send({ userId: member.userId });
   });
@@ -66,10 +64,18 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
   });
 
   describe('a fresh install can do work', () => {
-    it('new invitations pre-assign Member by default', async () => {
+    it('new invitations pre-assign no role: Everyone is held by all, Member comes with joining (ADR 0022)', async () => {
       const inv = await auth(http().post('/api/invitations')).send({});
       const roles = await prisma.invitationRole.findMany({ where: { invitationId: inv.body.id } });
-      expect(roles.map((r) => r.roleId)).toEqual([memberRoleId]);
+      expect(roles).toEqual([]);
+    });
+
+    it("joining a division gives its default role, Member; leaving takes it away", async () => {
+      const memberRole = (await prisma.systemSettings.findFirstOrThrow()).defaultUnitRoleId!;
+      expect((await prisma.role.findUniqueOrThrow({ where: { id: memberRole } })).kind).toBe('unit');
+      const held = await prisma.unitRoleAssignment.findMany({ where: { userId: member.userId, roleId: memberRole } });
+      expect(held.map((a) => a.divisionId).sort()).toEqual([openId, secretId].sort());
+      expect(held.every((a) => a.viaDefault)).toBe(true);
     });
 
     it('Admin creates a task with no extra grants; a Member claims and submits it', async () => {

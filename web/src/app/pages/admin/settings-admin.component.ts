@@ -1,8 +1,8 @@
-import { AdminApi } from '../../core/api/org.api';
+import { AdminApi, OrgApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ConfigUpdate, OrgSettings } from '../../core/api.types';
+import { ConfigUpdate, OrgSettings, Role } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { SaveBarComponent } from './save-bar.component';
@@ -21,6 +21,7 @@ const FIELDS: Field[] = [
   'gracePeriodHours',
   'requireDiscordLink',
   'discordClientId',
+  'defaultUnitRoleId',
 ];
 
 /**
@@ -44,6 +45,15 @@ const FIELDS: Field[] = [
             Require a verified email to log in</label>
           <label [class.is-changed]="changed('selfReviewAllowed')"><input type="checkbox" [ngModel]="s.selfReviewAllowed" (ngModelChange)="set('selfReviewAllowed', $event)" />
             Allow self-review (submitters may review their own work)</label>
+        </div>
+        <div class="settings-group">
+          <div class="settings-group-label">Divisions and teams</div>
+          <label [class.is-changed]="changed('defaultUnitRoleId')">Default role for new divisions and teams: what people get when they join one.
+            Each division and team can change its own.
+            <select [ngModel]="s.defaultUnitRoleId ?? ''" (ngModelChange)="set('defaultUnitRoleId', $event || null)">
+              <option value="">None</option>
+              @for (r of unitRoles(); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
+            </select></label>
         </div>
         <div class="settings-group">
           <div class="settings-group-label">Member records</div>
@@ -93,6 +103,9 @@ export class SettingsAdminComponent implements OnDestroy {
   private readonly unsaved = inject(UnsavedChangesService);
   private readonly saved = signal<OrgSettings | null>(null);
   readonly draft = signal<Editable | null>(null);
+  private readonly orgApi = inject(OrgApi);
+  /** Active unit roles, for the new-unit default. */
+  readonly unitRoles = signal<Role[]>([]);
   readonly busy = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly saveError = signal<string | null>(null);
@@ -125,7 +138,12 @@ export class SettingsAdminComponent implements OnDestroy {
 
   private async load(): Promise<void> {
     try {
-      this.setSaved(await firstValueFrom(this.adminApi.getConfig()));
+      const [config, roles] = await Promise.all([
+        firstValueFrom(this.adminApi.getConfig()),
+        firstValueFrom(this.orgApi.listRoles()),
+      ]);
+      this.unitRoles.set(roles.filter((r) => r.kind === 'unit').sort((a, b) => a.name.localeCompare(b.name)));
+      this.setSaved(config);
       this.loadError.set(null);
     } catch (e) {
       this.loadError.set(errorMessage(e));

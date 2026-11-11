@@ -20,7 +20,8 @@ export class VisibilityService {
         where: {
           action,
           effect: 'permit',
-          role: { lifecycleState: 'active', userRoles: { some: { userId } } },
+          // Org roles the user holds, and Everyone, which every user holds (ADR 0022).
+          role: { lifecycleState: 'active', OR: [{ userRoles: { some: { userId } } }, { kind: 'baseline' }] },
         },
         select: { scopeKind: true, scopeDivisionId: true, scopeTeamId: true },
       }),
@@ -62,6 +63,14 @@ export class VisibilityService {
       },
       select: { divisionId: true, teamId: true },
     });
+    // A unit role's `own` grant is "involved, in that unit": requested or seated is a superset.
+    const ownViaUnit = await this.prisma.unitRoleAssignment.count({
+      where: {
+        userId,
+        role: { lifecycleState: 'active', grants: { some: { action, effect: 'permit', scopeKind: 'own' } } },
+      },
+    });
+    if (ownViaUnit > 0) or.push({ requesterUserId: userId }, { claimants: { some: { userId, leftAt: null } } });
     const ledDivisions = assigned.flatMap((a) => (a.divisionId ? [a.divisionId] : []));
     const ledTeams = assigned.flatMap((a) => (a.teamId ? [a.teamId] : []));
     if (ledDivisions.length > 0) or.push({ divisionId: { in: ledDivisions } });

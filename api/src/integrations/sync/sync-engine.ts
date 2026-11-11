@@ -23,6 +23,7 @@ import {
   type IntegrationSyncPort,
   type OutboundFailReason,
 } from './integration-sync.port';
+import { UnitDefaultsService } from '../../membership/unit-defaults.service';
 import {
   BaselineEdge,
   Holding,
@@ -69,6 +70,7 @@ export class SyncEngine {
     private readonly admin: AdministrabilityService,
     private readonly events: EventStore,
     @Inject(INTEGRATION_SYNC_PORT) private readonly port: IntegrationSyncPort,
+    private readonly defaults: UnitDefaultsService,
   ) {}
 
   /** Reconcile a whole connection. */
@@ -338,12 +340,17 @@ export class SyncEngine {
       return;
     }
     const unit = op.target.kind === 'division' ? { divisionId: op.target.id } : { teamId: op.target.id };
+    const ref = { kind: op.target.kind, id: op.target.id } as const;
     if (op.kind === 'grant') {
       await tx.membership.create({
         data: { userId: op.userId, ...unit, source: UserRoleSource.integration, sourceConnectionId: connectionId },
       });
+      await this.defaults.joined(tx, op.userId, ref, null);
     } else {
-      await tx.membership.deleteMany({ where: { userId: op.userId, ...unit, source: UserRoleSource.integration } });
+      const { count } = await tx.membership.deleteMany({
+        where: { userId: op.userId, ...unit, source: UserRoleSource.integration },
+      });
+      if (count > 0) await this.defaults.left(tx, op.userId, ref, null);
     }
     await this.activity.logActivity({
       tx, actorUserId: null, subjectType: 'membership', subjectId: op.userId,

@@ -10,6 +10,7 @@ import { ConflictError, NotFoundError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter, isRevivable } from '../common/lifecycle';
 import { CreateTeamDto, UpdateTeamDto } from './teams.dto';
+import { UnitDefaultsService } from '../membership/unit-defaults.service';
 import { diffFields } from '../activity/changes';
 
 export interface TeamView {
@@ -19,6 +20,8 @@ export interface TeamView {
   allDivisions: boolean;
   name: string;
   restrictClaims: boolean;
+  /** The unit role people get when they join (ADR 0022). */
+  defaultRoleId: string | null;
   lifecycleState: LifecycleState;
   retiredAt: Date | null;
   version: number;
@@ -27,6 +30,7 @@ export interface TeamView {
 const TEAM_SELECT = {
   ...TEAM_REF_SELECT,
   name: true,
+  defaultRoleId: true,
   lifecycleState: true,
   retiredAt: true,
   version: true,
@@ -44,6 +48,7 @@ const toView = (t: TeamRow): TeamView => ({
   allDivisions: t.allDivisions,
   name: t.name,
   restrictClaims: t.restrictClaims,
+  defaultRoleId: t.defaultRoleId,
   lifecycleState: t.lifecycleState,
   retiredAt: t.retiredAt,
   version: t.version,
@@ -68,6 +73,7 @@ export class TeamsService {
     private readonly access: AccessService,
     private readonly activity: ActivityService,
     private readonly grace: GraceService,
+    private readonly defaults: UnitDefaultsService,
   ) {}
 
   /** The teams the user may see (`team:read`). */
@@ -89,6 +95,8 @@ export class TeamsService {
     const wanted = await this.divisionSet(dto.allDivisions === true, dto.divisionIds ?? []);
     const id = uuidv7();
     const restrictClaims = dto.restrictClaims ?? false;
+    await this.defaults.assertDefaultRole(this.prisma, dto.defaultRoleId);
+    const defaultRoleId = dto.defaultRoleId !== undefined ? dto.defaultRoleId : await this.defaults.forNewUnit(this.prisma);
     await this.access.assert(actorUserId, ACTIONS.teamCreate.action, teamRef({ id, restrictClaims, ...wanted }));
     const team = await this.prisma.$transaction(async (tx) => {
       await tx.team.create({
@@ -96,6 +104,7 @@ export class TeamsService {
           id,
           name: dto.name,
           restrictClaims,
+          defaultRoleId,
           allDivisions: wanted.allDivisions,
           divisions: { create: wanted.divisionIds.map((divisionId) => ({ divisionId })) },
         },
@@ -130,6 +139,7 @@ export class TeamsService {
     if (team.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('TEAM_RETIRED', 'Team is retired');
     }
+    await this.defaults.assertDefaultRole(this.prisma, dto.defaultRoleId);
     const before: DivisionSet = { allDivisions: team.allDivisions, divisionIds: divisionIdsOf(team) };
     let after: DivisionSet | null = null;
     if (dto.allDivisions !== undefined || dto.divisionIds !== undefined) {
@@ -152,6 +162,7 @@ export class TeamsService {
         data: {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.restrictClaims !== undefined ? { restrictClaims: dto.restrictClaims } : {}),
+          ...(dto.defaultRoleId !== undefined ? { defaultRoleId: dto.defaultRoleId } : {}),
           ...(after ? { allDivisions: after.allDivisions } : {}),
           version: { increment: 1 },
         },
@@ -161,7 +172,7 @@ export class TeamsService {
       }
       if (after) await this.replaceDivisions(tx, team.id, after);
       const updated = await tx.team.findUniqueOrThrow({ where: { id: team.id }, select: TEAM_SELECT });
-      const fields = diffFields(team, updated, ['name', 'restrictClaims']);
+      const fields = diffFields(team, updated, ['name', 'restrictClaims', 'defaultRoleId']);
       const describe = (d: DivisionSet) => (d.allDivisions ? 'all' : d.divisionIds);
       const changes = after ? { ...fields, divisions: { from: describe(before), to: describe(after) } } : fields;
       await this.activity.logActivity({

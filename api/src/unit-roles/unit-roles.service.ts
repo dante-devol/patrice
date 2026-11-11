@@ -8,6 +8,7 @@ import { CedarEngine } from '../access/cedar/engine';
 import type { ResourceRef } from '../access/access.service';
 import { ActivityService } from '../activity/activity.service';
 import { EventStore } from '../events/event-store.service';
+import { UnitDefaultsService } from '../membership/unit-defaults.service';
 import { ConflictError, NotFoundError, UnprocessableError } from '../common/errors';
 
 export type UnitType = 'division' | 'team';
@@ -76,6 +77,7 @@ export class UnitRolesService {
     private readonly access: AccessService,
     private readonly activity: ActivityService,
     private readonly events: EventStore,
+    private readonly defaults: UnitDefaultsService,
   ) {}
 
   private unitWhere(unitType: UnitType, unitId: string) {
@@ -281,6 +283,7 @@ export class UnitRolesService {
     const where = { userId, ...this.unitWhere(unitType, unitId) };
     if (await tx.membership.findFirst({ where, select: { id: true } })) return;
     await tx.membership.create({ data: { ...where, grantedBy: actorUserId } });
+    await this.defaults.joined(tx, userId, { kind: unitType, id: unitId }, actorUserId);
     await this.activity.logActivity({
       tx,
       actorUserId,

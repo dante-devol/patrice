@@ -377,10 +377,7 @@ const run = async () => {
   ]) {
     await grant(adminRoleId, action, 'global');
   }
-  const memberRoleId = await ensureRole('Member');
-  await grant(memberRoleId, 'task:assign', 'global');
-  await grant(memberRoleId, 'task:submit', 'own');
-  log(c.ok('  grants in place (admin global · Member self-claim/submit)'));
+  log(c.ok('  grants in place (admin global)'));
 
   step(`Division + request template (${DIVISION_NAME})`);
   const division = await ensureDivision(DIVISION_NAME);
@@ -407,8 +404,10 @@ const run = async () => {
     users[name] = await ensureUser({
       email: slugEmail(name),
       displayName: name,
-      roleIds: [memberRoleId],
+      roleIds: [],
     });
+    // Joining the division gives its default role, Member, which claims and submits (ADR 0022).
+    await req('POST', `/divisions/${division.id}/members`, { session: admin, body: { userId: users[name].userId } });
   }
 
   step('Tasks');

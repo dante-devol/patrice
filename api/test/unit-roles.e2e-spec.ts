@@ -22,6 +22,8 @@ describe('Unit roles', () => {
   let access: AccessService;
 
   let projectLeadId: string;
+  /** The seeded Member unit role: every unit's default, lead-assignable (ADR 0022). */
+  let memberId: string;
   let writingId: string;
   let artId: string;
   let draftsTeamId: string; // in Writing
@@ -39,9 +41,8 @@ describe('Unit roles', () => {
     access.decide({ userId, action, resource: await new EntityLoader(prisma).task(taskId) });
 
   let n = 0;
-  let memberRoleId: string;
   const newUser = async () =>
-    inviteAndAccept(booted, admin, { email: `u${++n}@example.com`, intendedRoleIds: [memberRoleId] });
+    inviteAndAccept(booted, admin, { email: `u${++n}@example.com`, intendedRoleIds: [] });
 
   const task = async (divisionId: string, teamId?: string) => {
     const res = await auth(http().post('/api/tasks')).send({
@@ -62,10 +63,9 @@ describe('Unit roles', () => {
     admin = await bootstrapAdmin(booted);
     prisma = new PrismaClient();
     access = app.get(AccessService);
-
-    memberRoleId = (await prisma.systemSettings.findUniqueOrThrow({ where: { id: 1 } })).memberRoleId!;
     const lead = await prisma.role.findFirstOrThrow({ where: { name: 'Project lead' } });
     projectLeadId = lead.id;
+    memberId = (await prisma.systemSettings.findFirstOrThrow()).defaultUnitRoleId!;
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
     artId = (await auth(http().post('/api/divisions')).send({ name: 'Art' })).body.id;
     draftsTeamId = (await auth(http().post('/api/teams')).send({ divisionIds: [writingId], name: 'Drafts' })).body.id;
@@ -159,7 +159,8 @@ describe('Unit roles', () => {
       select: { verb: true, payload: true },
     });
     const mine = verbs.filter((v) => (v.payload as { userId: string }).userId === userId).map((v) => v.verb);
-    expect(mine.sort()).toEqual(['membership.added', 'unit_role.assigned']);
+    // Joining also gave the division's default role, Member (ADR 0022); only the appointment notifies.
+    expect(mine.sort()).toEqual(['membership.added', 'unit_role.assigned', 'unit_role.assigned']);
     expect(await prisma.notification.count({ where: { recipientUserId: userId, type: 'unit_role.assigned' } })).toBe(1);
 
     // Idempotent.
@@ -174,7 +175,12 @@ describe('Unit roles', () => {
     // The users list carries each user's unit roles (Admin > Users).
     const users = await auth(http().get('/api/users'));
     const row = users.body.find((u: { id: string }) => u.id === userId);
-    expect(row.unitRoles).toEqual([{ id: res.body.id, roleId: projectLeadId, unitType: 'division', unitId: writingId }]);
+    expect(row.unitRoles).toEqual(
+      expect.arrayContaining([
+        { id: res.body.id, roleId: projectLeadId, unitType: 'division', unitId: writingId },
+        expect.objectContaining({ roleId: memberId, unitType: 'division', unitId: writingId }),
+      ]),
+    );
 
     const del = await auth(http().delete(`/api/divisions/${writingId}/role-assignments/${res.body.id}`));
     expect(del.status).toBe(204);
@@ -204,9 +210,9 @@ describe('Unit roles', () => {
 
     const pickable = await as(lead.session)(http().get(`/api/divisions/${writingId}/assignable-roles`));
     expect(pickable.status).toBe(200);
-    expect(pickable.body.map((r: { id: string }) => r.id)).toEqual([reviewer.body.id]);
+    expect(pickable.body.map((r: { id: string }) => r.id).sort()).toEqual([memberId, reviewer.body.id].sort());
     const adminPickable = await auth(http().get(`/api/divisions/${writingId}/assignable-roles`));
-    expect(adminPickable.body.map((r: { id: string }) => r.id).sort()).toEqual([projectLeadId, reviewer.body.id].sort());
+    expect(adminPickable.body.map((r: { id: string }) => r.id).sort()).toEqual([memberId, projectLeadId, reviewer.body.id].sort());
 
     const ok = await as(lead.session)(http().post(`/api/divisions/${writingId}/role-assignments`)).send({
       userId: target.userId,
@@ -312,8 +318,11 @@ describe('Unit roles', () => {
     const res = await as(session)(http().get('/api/me/units'));
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
-      { unitType: 'division', unitId: artId, name: 'Art', divisionIds: [], allDivisions: false, member: true, roles: [] },
-      { unitType: 'team', unitId: draftsTeamId, name: 'Drafts', divisionIds: [writingId], allDivisions: false, member: true, roles: [{ id: projectLeadId, name: 'Project lead' }] },
+      { unitType: 'division', unitId: artId, name: 'Art', divisionIds: [], allDivisions: false, member: true, roles: [{ id: memberId, name: 'Member' }] },
+      {
+        unitType: 'team', unitId: draftsTeamId, name: 'Drafts', divisionIds: [writingId], allDivisions: false, member: true,
+        roles: expect.arrayContaining([{ id: projectLeadId, name: 'Project lead' }, { id: memberId, name: 'Member' }]),
+      },
     ]);
   });
 });

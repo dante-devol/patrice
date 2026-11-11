@@ -15,6 +15,7 @@ import {
   grantToPolicies,
   ownRelation,
   staticPolicies,
+  supportsOwnScope,
 } from '../access/cedar/policies';
 
 /**
@@ -255,15 +256,32 @@ export class GrantsService {
 
   /**
    * Unit roles take only unit actions (on tasks, messages, attachments, divisions,
-   * teams) at the `assigned` scope, which is theirs alone; so a unit role can never
-   * reach org-wide authority or affect the admin floor.
+   * teams) at the `assigned` scope, which is theirs alone, or at `own` limited to their
+   * unit (ADR 0022); so a unit role can never reach org-wide authority or affect the
+   * admin floor. Nothing may target Everyone with a `role`-scoped grant: it's never
+   * given or taken away.
    */
-  private async assertKindRules(roleId: string, action: string, scopeKind: string): Promise<void> {
+  private async assertKindRules(
+    roleId: string,
+    action: string,
+    scopeKind: string,
+    scopeRoleId?: string | null,
+  ): Promise<void> {
+    if (scopeKind === 'role' && scopeRoleId) {
+      const target = await this.prisma.role.findUnique({ where: { id: scopeRoleId }, select: { kind: true } });
+      if (target?.kind === 'baseline') {
+        throw new ConflictError('BASELINE_ROLE', 'Everyone is never given or taken away, so no grant can target it');
+      }
+    }
     const role = await this.prisma.role.findUnique({ where: { id: roleId }, select: { kind: true } });
     if (!role) return; // assertRole reports it
     const unit = role.kind === 'unit';
-    if (unit && (scopeKind !== 'assigned' || !UNIT_ROLE_ACTIONS.includes(action))) {
-      throw new UnprocessableError('UNIT_ROLE_SCOPE', 'A unit role takes only unit actions, at the assigned scope');
+    const unitScope = scopeKind === 'assigned' || (scopeKind === 'own' && supportsOwnScope(action));
+    if (unit && (!unitScope || !UNIT_ROLE_ACTIONS.includes(action))) {
+      throw new UnprocessableError(
+        'UNIT_ROLE_SCOPE',
+        'A unit role takes only unit actions, where the role is held or on your own things there',
+      );
     }
     if (!unit && scopeKind === 'assigned') {
       throw new UnprocessableError('UNIT_ROLE_SCOPE', 'Only a unit role can use the assigned scope');
@@ -294,7 +312,7 @@ export class GrantsService {
     this.assertShape(dto.action, dto);
     await this.assertRole(dto.roleId);
     await this.assertNotGovernanceToMappedRole(dto.roleId, dto.action, dto.effect);
-    await this.assertKindRules(dto.roleId, dto.action, dto.scopeKind);
+    await this.assertKindRules(dto.roleId, dto.action, dto.scopeKind, dto.scopeRoleId);
 
     const candidate: ProjectableGrant = {
       id: randomUUID(),
@@ -381,7 +399,7 @@ export class GrantsService {
     };
     this.assertShape(merged.action, merged);
     await this.assertNotGovernanceToMappedRole(existing.roleId, merged.action, merged.effect);
-    await this.assertKindRules(existing.roleId, merged.action, merged.scopeKind);
+    await this.assertKindRules(existing.roleId, merged.action, merged.scopeKind, merged.scopeRoleId);
 
     const candidate: ProjectableGrant = {
       id: existing.id,
@@ -505,7 +523,7 @@ export class GrantsService {
       };
       this.assertShape(candidate.action, candidate);
       await this.assertNotGovernanceToMappedRole(candidate.roleId, candidate.action, candidate.effect);
-      await this.assertKindRules(candidate.roleId, candidate.action, candidate.scopeKind);
+      await this.assertKindRules(candidate.roleId, candidate.action, candidate.scopeKind, candidate.scopeRoleId);
       candidates.push(candidate);
     }
     await this.validateActivation(candidates, touchedIds);

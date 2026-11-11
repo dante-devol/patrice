@@ -4,7 +4,8 @@ import { firstValueFrom } from 'rxjs';
 import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Division } from '../../core/api.types';
+import { Division, Role } from '../../core/api.types';
+import { DefaultRoleCellComponent } from './default-role-cell.component';
 import { errorMessage } from '../../core/errors';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
@@ -18,6 +19,8 @@ interface Fields {
   defaultOpenings: number;
   openingsLocked: boolean;
   restrictClaims: boolean;
+  /** A unit role id, or '' for none (ADR 0022). */
+  defaultRoleId: string;
 }
 
 /**
@@ -28,7 +31,7 @@ interface Fields {
 @Component({
   selector: 'divisions-admin',
   standalone: true,
-  imports: [FormsModule, RouterLink, RequestTemplateBuilderComponent, SaveBarComponent, LoadingTableRowsComponent],
+  imports: [FormsModule, RouterLink, RequestTemplateBuilderComponent, SaveBarComponent, LoadingTableRowsComponent, DefaultRoleCellComponent],
   template: `
     <div class="panel">
       <h2>Divisions</h2>
@@ -38,10 +41,10 @@ interface Fields {
       @if (loadError()) { <p class="error">{{ loadError() }}</p> }
       <table [attr.aria-busy]="!loaded()">
         <thead>
-          <tr><th>Name</th><th>Color</th><th>Default openings</th><th>Locked</th><th>Restrict claims</th><th>State</th><th></th></tr>
+          <tr><th>Name</th><th>Color</th><th>Default openings</th><th>Locked</th><th>Restrict claims</th><th>Default role</th><th>State</th><th></th></tr>
         </thead>
         @if (!loaded()) {
-          <tbody loadingRows [cols]="7" [rows]="5" label="Loading divisions"></tbody>
+          <tbody loadingRows [cols]="8" [rows]="5" label="Loading divisions"></tbody>
         } @else {
         <tbody>
           @for (c of rows.creates(); track c.key) {
@@ -51,6 +54,7 @@ interface Fields {
               <td><input type="number" min="1" [ngModel]="c.fields.defaultOpenings" (ngModelChange)="rows.updateCreate(c.key, 'defaultOpenings', +$event)" style="width:5rem" aria-label="Default openings" /></td>
               <td><input type="checkbox" [ngModel]="c.fields.openingsLocked" (ngModelChange)="rows.updateCreate(c.key, 'openingsLocked', $event)" aria-label="Openings locked" /></td>
               <td><input type="checkbox" [ngModel]="c.fields.restrictClaims" (ngModelChange)="rows.updateCreate(c.key, 'restrictClaims', $event)" aria-label="Restrict claims" /></td>
+              <td><span class="muted" title="New divisions start with the default role set in Settings">From Settings</span></td>
               <td><span class="staged-note">New, added on save</span></td>
               <td><button class="quiet" (click)="rows.removeCreate(c.key)">Remove</button></td>
             </tr>
@@ -72,6 +76,11 @@ interface Fields {
               <td><input type="checkbox" [ngModel]="rows.value(d, 'openingsLocked')" (ngModelChange)="rows.set(d, 'openingsLocked', $event)" aria-label="Openings locked" /></td>
               <td><input type="checkbox" [ngModel]="rows.value(d, 'restrictClaims')" (ngModelChange)="rows.set(d, 'restrictClaims', $event)" aria-label="Restrict claims" /></td>
               <td>
+                <default-role-cell [roles]="unitRoles()" [value]="rows.value(d, 'defaultRoleId')" [savedValue]="d.defaultRoleId ?? ''"
+                                   [changed]="rows.isChanged(d, 'defaultRoleId')" unitType="division" [unitId]="d.id"
+                                   (valueChange)="rows.set(d, 'defaultRoleId', $event)" />
+              </td>
+              <td>
                 @if (lc) { <span class="staged-note">{{ lc === 'retire' ? 'Retires on save' : 'Revives on save' }}</span> }
                 @else { <span [class]="lcStamp(d.lifecycleState)">{{ d.lifecycleState }}</span> }
               </td>
@@ -90,9 +99,9 @@ interface Fields {
               </td>
             </tr>
             @if (openRequestTemplate() === d.id) {
-              <tr><td colspan="7"><request-template-builder [divisionId]="d.id" /></td></tr>
+              <tr><td colspan="8"><request-template-builder [divisionId]="d.id" /></td></tr>
             }
-          } @empty { <tr><td colspan="7" class="muted">No divisions.</td></tr> }
+          } @empty { <tr><td colspan="8" class="muted">No divisions.</td></tr> }
         </tbody>
         }
       </table>
@@ -105,9 +114,17 @@ export class DivisionsAdminComponent implements OnDestroy {
   private readonly orgApi = inject(OrgApi);
   private readonly unsaved = inject(UnsavedChangesService);
   readonly rows = new StagedRows<Division, Fields>(
-    (d) => ({ name: d.name, defaultOpenings: d.defaultOpenings, openingsLocked: d.openingsLocked, restrictClaims: d.restrictClaims }),
-    () => ({ name: '', defaultOpenings: 1, openingsLocked: false, restrictClaims: false }),
+    (d) => ({
+      name: d.name,
+      defaultOpenings: d.defaultOpenings,
+      openingsLocked: d.openingsLocked,
+      restrictClaims: d.restrictClaims,
+      defaultRoleId: d.defaultRoleId ?? '',
+    }),
+    () => ({ name: '', defaultOpenings: 1, openingsLocked: false, restrictClaims: false, defaultRoleId: '' }),
   );
+  /** Active unit roles, for the default-role picker. */
+  readonly unitRoles = signal<Role[]>([]);
   readonly busy = signal(false);
   /** The first load has finished (or failed): until then the table shows placeholders. */
   readonly loaded = signal(false);
@@ -144,7 +161,11 @@ export class DivisionsAdminComponent implements OnDestroy {
     try {
       // Admin view opts into retired rows so retired divisions (and their Revive
       // action) remain visible.
-      const divisions = await firstValueFrom(this.orgApi.listDivisions(true));
+      const [divisions, roles] = await Promise.all([
+        firstValueFrom(this.orgApi.listDivisions(true)),
+        firstValueFrom(this.orgApi.listRoles()),
+      ]);
+      this.unitRoles.set(roles.filter((r) => r.kind === 'unit').sort((a, b) => a.name.localeCompare(b.name)));
       if (discard) this.rows.reset(divisions);
       else this.rows.saved.set(divisions);
       this.loadError.set(null);
@@ -175,13 +196,24 @@ export class DivisionsAdminComponent implements OnDestroy {
     }
     const ops: StagedOp[] = [
       ...this.rows.creates().map((c) => ({
-        run: () => firstValueFrom(this.orgApi.createDivision({ ...c.fields, name: c.fields.name.trim() })),
+        // New divisions take the org's default role (Settings), so it isn't sent.
+        run: () => {
+          const { defaultRoleId: _unused, ...fields } = c.fields;
+          return firstValueFrom(this.orgApi.createDivision({ ...fields, name: fields.name.trim() }));
+        },
         clear: () => this.rows.removeCreate(c.key),
       })),
       ...Object.entries(this.rows.edits()).map(([id, patch]) => ({
         run: () => {
           const d = this.rows.saved().find((x) => x.id === id)!;
-          return firstValueFrom(this.orgApi.updateDivision(id, { ...patch, version: d.version }));
+          const { defaultRoleId, ...rest } = patch;
+          return firstValueFrom(
+            this.orgApi.updateDivision(id, {
+              ...rest,
+              ...(defaultRoleId !== undefined ? { defaultRoleId: defaultRoleId || null } : {}),
+              version: d.version,
+            }),
+          );
         },
         clear: () => this.rows.clearEdit(id),
       })),

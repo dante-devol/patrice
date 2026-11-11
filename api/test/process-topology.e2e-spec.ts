@@ -127,9 +127,7 @@ describe('Process topology and background work', () => {
       expect(res.body).toHaveLength(1);
       expect(res.body[0]).toMatchObject({ queue: 'auth.mail' });
       expect(res.body[0]).not.toHaveProperty('data');
-
-      const memberRoleId = (await auth(http().get('/api/roles'))).body.find((r: { name: string }) => r.name === 'Member').id;
-      const member = await inviteAndAccept(booted, admin, { email: 'm@example.com', intendedRoleIds: [memberRoleId] });
+      const member = await inviteAndAccept(booted, admin, { email: 'm@example.com', intendedRoleIds: [] });
       const denied = await http().get('/api/jobs/dead-letters').set('Cookie', member.session.cookies);
       expect(denied.status).toBe(403);
     });

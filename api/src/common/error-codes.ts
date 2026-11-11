@@ -111,7 +111,15 @@ export const ERROR_CODES = {
   ROLE_RETIRED: { status: 422, description: 'Role is retired' },
   NOT_A_UNIT_ROLE: { status: 422, description: 'That role is not a unit role' },
   UNIT_ROLE_NOT_GRANTABLE: { status: 422, description: 'A unit role is assigned at a division or team, not held org-wide' },
-  UNIT_ROLE_SCOPE: { status: 422, description: 'A unit role takes only unit actions at the assigned scope; org roles cannot use that scope' },
+  UNIT_ROLE_SCOPE: {
+    status: 422,
+    description: "A unit role takes only unit actions, where it's held or on your own things there; org roles can't use the assigned scope",
+  },
+  BASELINE_ROLE: {
+    status: 409,
+    description: 'Everyone is held by every user: it is never given, taken away, mapped, renamed, retired or targeted by a grant',
+  },
+  NOT_A_DEFAULT_ROLE: { status: 422, description: "A unit's default role must be an active unit role" },
   WRONG_PASSWORD: { status: 422, description: 'The current password is wrong' },
 
   // 429

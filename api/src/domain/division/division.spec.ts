@@ -16,7 +16,7 @@ describe('Division', () => {
   it('creates with defaults and raises a creation event', () => {
     const d = Division.create('  Writing  ');
     expect(d.name).toBe('Writing');
-    expect(d.settings).toEqual({ defaultOpenings: 1, openingsLocked: false, restrictClaims: false, allowCustomTemplates: false });
+    expect(d.settings).toEqual({ defaultOpenings: 1, openingsLocked: false, restrictClaims: false, allowCustomTemplates: false, defaultRoleId: null });
     expect(d.pullEvents().map((e) => e.type)).toEqual(['division.created']);
     expect(d.pullEvents()).toEqual([]);
   });
@@ -33,7 +33,7 @@ describe('Division', () => {
     const d = Division.create('Art', { restrictClaims: true, defaultOpenings: 3 });
     d.update({ name: 'Visual Art' });
     expect(d.name).toBe('Visual Art');
-    expect(d.settings).toEqual({ defaultOpenings: 3, openingsLocked: false, restrictClaims: true, allowCustomTemplates: false });
+    expect(d.settings).toEqual({ defaultOpenings: 3, openingsLocked: false, restrictClaims: true, allowCustomTemplates: false, defaultRoleId: null });
   });
 
   it('retire and revive enforce the grace window; a retired division is read-only', () => {

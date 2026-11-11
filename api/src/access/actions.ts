@@ -151,46 +151,54 @@ export const EFFECTIVE_ADMIN_ACTIONS: readonly string[] = [
 /** The seeded Admin role holds every action at global scope, new ones included. */
 export const ADMIN_SEED_ACTIONS: readonly string[] = ALL_ACTION_STRINGS;
 
-/**
- * The seeded Member role: see names, work on the tasks of your divisions and teams,
- * and run the tasks you requested. Editable like any role; new invitations pre-assign
- * it. `own` on reading and commenting covers only tasks you requested or hold a seat
- * on, so seeing (and claiming) the rest of your units' tasks comes from the
- * division and team grants (ADR 0021).
- */
-export const MEMBER_SEED_GRANTS: ReadonlyArray<{
+export interface SeedGrant {
   action: string;
-  scopeKind: 'global' | 'own' | 'own_division' | 'own_team';
-}> = [
-  // Names and structure, so the client can render people and units.
+  scopeKind: 'global' | 'own' | 'assigned';
+}
+
+/** Reads of a task and its parts: `own` here means involved (requested or seated). */
+const TASK_READS = ['task:read', 'message:read', 'submission:read', 'attachment:read'];
+
+/**
+ * The seeded **Everyone** role (ADR 0022), held by every user without being given:
+ * see people, roles and the structure, the tasks you're involved in, and give up a seat
+ * you hold. Nothing else that acts; that comes from unit roles. Editable like any role, never grantable.
+ */
+export const EVERYONE_SEED_GRANTS: readonly SeedGrant[] = [
   { action: 'user:read', scopeKind: 'global' },
+  { action: 'role:read', scopeKind: 'global' },
   { action: 'division:read', scopeKind: 'global' },
   { action: 'team:read', scopeKind: 'global' },
-  { action: 'role:read', scopeKind: 'global' },
   { action: 'request_template:read', scopeKind: 'global' },
-  // Tasks you can see: ones you're involved in, and every task of your divisions and teams.
-  ...['task:read', 'message:read', 'submission:read', 'attachment:read', 'message:create'].flatMap((action) =>
-    (['own', 'own_division', 'own_team'] as const).map((scopeKind) => ({ action, scopeKind })),
-  ),
-  // Claiming in your divisions and teams (a unit that restricts claims still needs you as a member).
-  { action: 'task:assign', scopeKind: 'own_division' },
-  { action: 'task:assign', scopeKind: 'own_team' },
-  // Doing the work.
+  ...TASK_READS.map((action) => ({ action, scopeKind: 'own' as const })),
+  // Giving up your own seat, even after leaving the unit.
   { action: 'task:leave', scopeKind: 'own' },
-  { action: 'task:submit', scopeKind: 'own' },
-  { action: 'message:update', scopeKind: 'own' },
-  { action: 'message:delete', scopeKind: 'own' },
-  { action: 'attachment:create', scopeKind: 'own' },
-  { action: 'attachment:delete', scopeKind: 'own' },
-  // Requesting work in your divisions, and running the tasks you requested.
-  { action: 'task:create', scopeKind: 'own_division' },
-  { action: 'task:update', scopeKind: 'own' },
-  { action: 'task:retire', scopeKind: 'own' },
-  { action: 'task:review', scopeKind: 'own' },
-  { action: 'task:retire_submission', scopeKind: 'own' },
-  { action: 'task:complete', scopeKind: 'own' },
-  { action: 'task:manage_claims', scopeKind: 'own' },
-  { action: 'task:configure_request_template', scopeKind: 'own' },
+];
+
+/**
+ * The seeded **Member** unit role (ADR 0022), every unit's default to start with:
+ * see, discuss, claim and request the unit's tasks, and do your own work there.
+ * `own` on a unit role means "your own, in that unit".
+ */
+export const MEMBER_UNIT_SEED_GRANTS: readonly SeedGrant[] = [
+  ...[...TASK_READS, 'message:create', 'task:assign', 'task:create'].map((action) => ({
+    action,
+    scopeKind: 'assigned' as const,
+  })),
+  ...[
+    'task:submit',
+    'message:update',
+    'message:delete',
+    'attachment:create',
+    'attachment:delete',
+    'task:update',
+    'task:retire',
+    'task:review',
+    'task:retire_submission',
+    'task:complete',
+    'task:manage_claims',
+    'task:configure_request_template',
+  ].map((action) => ({ action, scopeKind: 'own' as const })),
 ];
 
 /**

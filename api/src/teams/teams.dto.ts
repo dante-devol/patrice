@@ -18,6 +18,8 @@ export const createTeamSchema = z
     allDivisions: z.boolean().optional(),
     name,
     restrictClaims: z.boolean().optional(),
+    // The unit role people get when they join (ADR 0022). Omitted on create: the org's default.
+    defaultRoleId: z.string().uuid().nullable().optional(),
   })
   .strict()
   .refine(oneDivisionChoice, choiceMessage)
@@ -30,6 +32,8 @@ export const updateTeamSchema = z
   .object({
     name: name.optional(),
     restrictClaims: z.boolean().optional(),
+    // The unit role people get when they join (ADR 0022). Omitted on create: the org's default.
+    defaultRoleId: z.string().uuid().nullable().optional(),
     /** Replaces the team's division list (and turns off allDivisions). */
     divisionIds: divisionIds.optional(),
     /** True: support every division. False needs divisionIds alongside it. */

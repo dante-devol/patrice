@@ -24,7 +24,6 @@ describe('Work model', () => {
   let admin: AdminSession;
   let prisma: PrismaClient;
   let divisionId: string;
-  let memberRoleId: string;
   let ana: { userId: string; session: AdminSession };
   let ben: { userId: string; session: AdminSession };
 
@@ -74,7 +73,6 @@ describe('Work model', () => {
     app = booted.app;
     admin = await bootstrapAdmin(booted);
     prisma = new PrismaClient();
-    memberRoleId = (await prisma.systemSettings.findFirstOrThrow()).memberRoleId!;
     divisionId = (await auth(http().post('/api/divisions')).send({ name: 'QA', defaultOpenings: 2 })).body.id;
     await auth(http().post(`/api/divisions/${divisionId}/request-templates`)).send({
       name: 'Bug report',
@@ -84,8 +82,8 @@ describe('Work model', () => {
         { type: 'attachment', prompt: 'Screenshot', required: true, constraints: { allowedTypes: ['image/png'], maxBytes: 100 } },
       ],
     });
-    ana = await inviteAndAccept(booted, admin, { email: 'ana@example.com', intendedRoleIds: [memberRoleId] });
-    ben = await inviteAndAccept(booted, admin, { email: 'ben@example.com', intendedRoleIds: [memberRoleId] });
+    ana = await inviteAndAccept(booted, admin, { email: 'ana@example.com', intendedRoleIds: [] });
+    ben = await inviteAndAccept(booted, admin, { email: 'ben@example.com', intendedRoleIds: [] });
     // Member claims and sees tasks in its own divisions (ADR 0021).
     for (const u of [ana, ben]) {
       await auth(http().post(`/api/divisions/${divisionId}/members`)).send({ userId: u.userId });

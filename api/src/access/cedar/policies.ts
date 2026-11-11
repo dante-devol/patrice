@@ -29,6 +29,10 @@ export interface ProjectableGrant {
   scopeDivisionId: string | null;
   scopeTeamId: string | null;
   scopeRoleId: string | null;
+  /** The grant belongs to Everyone, which every user holds without a role row (ADR 0022). */
+  everyone?: boolean;
+  /** The grant belongs to a unit role: `assigned` and `own` are projected per unit. */
+  unit?: boolean;
 }
 
 const NS = CEDAR_NAMESPACE;
@@ -174,19 +178,21 @@ function scopeCondition(g: ProjectableGrant): string {
     case 'assigned':
       // Projected per unit assignment by grantToPolicies; never on its own.
       throw new Error('An assigned-scope grant is projected per unit assignment');
-    case 'own': {
-      const when = OWN_WHEN_BY_ACTION[g.action];
-      if (when) return ` when { ${when} }`;
-      if (OWN_SELF_ACTIONS.has(g.action)) return ' when { resource == principal }';
-      const attr = OWN_ATTR_BY_ACTION[g.action];
-      if (!attr) {
-        throw new Error(
-          `No own-relation mapping for action "${g.action}"; cannot project an 'own' grant.`,
-        );
-      }
-      return ` when { resource has ${attr} && resource.${attr} == principal }`;
-    }
+    case 'own':
+      return ` when { ${ownCondition(g.action)} }`;
   }
+}
+
+/** What `own` checks for an action, as a Cedar expression. */
+function ownCondition(action: string): string {
+  const when = OWN_WHEN_BY_ACTION[action];
+  if (when) return when;
+  if (OWN_SELF_ACTIONS.has(action)) return 'resource == principal';
+  const attr = OWN_ATTR_BY_ACTION[action];
+  if (!attr) {
+    throw new Error(`No own-relation mapping for action "${action}"; cannot project an 'own' grant.`);
+  }
+  return `resource has ${attr} && resource.${attr} == principal`;
 }
 
 /** Where a unit role is assigned: a division (covering its single-division teams) or one team. */
@@ -205,13 +211,17 @@ const ASSIGN_ROLE_ACTIONS = new Set(['division:assign_roles', 'team:assign_roles
 
 /**
  * Project a grant to its Cedar policies. Most grants are one policy. A unit role's
- * grant (scope `assigned`) becomes one policy per unit where the role is assigned:
+ * grant (scope `assigned`, or `own` limited to the unit) becomes one policy per unit
+ * where the role is assigned:
  * holders there are `in UnitRole::"<role>@<unit>"`, and the policy applies to
  * resources in that unit. Its `*:assign_roles` grants also require the target role
  * to be assignable by leads, so leads can't hand out roles admins keep for themselves.
  */
 export function grantToPolicies(g: ProjectableGrant, placements: readonly UnitPlacement[] = []): string[] {
-  if (g.scopeKind !== 'assigned') return [grantToPolicy(g)];
+  const perUnit = g.scopeKind === 'assigned' || (g.unit === true && g.scopeKind === 'own');
+  if (!perUnit) return [grantToPolicy(g)];
+  // A unit role's `own` is "own, and in this unit" (ADR 0022).
+  const own = g.scopeKind === 'own' ? ` && (${ownCondition(g.action)})` : '';
   return placements.map((p) => {
     const unit =
       p.unitType === 'division'
@@ -228,17 +238,19 @@ export function grantToPolicies(g: ProjectableGrant, placements: readonly UnitPl
       `  principal in ${NS}::UnitRole::"${unitRoleId(g.roleId, p)}",`,
       `  action == ${actionRef(g.action)},`,
       `  resource`,
-      `) when { ${unit}${leads} };`,
+      `) when { (${unit})${own}${leads} };`,
     ].join('\n');
   });
 }
 
 /** Project a single grant row to one annotated Cedar policy. */
 export function grantToPolicy(g: ProjectableGrant): string {
+  // Everyone's grants apply to every principal; other org roles' to their holders.
+  const principal = g.everyone ? 'principal' : `principal in ${roleRef(g.roleId)}`;
   const head =
     `@id("grant_${g.id}")\n` +
     `${g.effect}(\n` +
-    `  principal in ${roleRef(g.roleId)},\n` +
+    `  ${principal},\n` +
     `  action == ${actionRef(g.action)},\n` +
     `  resource\n` +
     `)`;

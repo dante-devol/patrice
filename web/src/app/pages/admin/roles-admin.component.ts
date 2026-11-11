@@ -130,7 +130,7 @@ export class RolesAdminComponent implements OnDestroy {
   private readonly unsaved = inject(UnsavedChangesService);
   /** `kind` is picked when a role is added and fixed after; leads-assignable applies to unit roles only. */
   readonly rows = new StagedRows<Role, { name: string; kind: 'org' | 'unit'; assignableByLeads: boolean }>(
-    (r) => ({ name: r.name, kind: r.kind, assignableByLeads: r.assignableByLeads }),
+    (r) => ({ name: r.name, kind: r.kind === 'unit' ? 'unit' : 'org', assignableByLeads: r.assignableByLeads }),
     () => ({ name: '', kind: 'org', assignableByLeads: false }),
   );
   readonly mappingsByRole = signal<Map<string, RoleMapping[]>>(new Map());
@@ -158,7 +158,8 @@ export class RolesAdminComponent implements OnDestroy {
 
   private async load(discard: boolean): Promise<void> {
     try {
-      const roles = await firstValueFrom(this.orgApi.listRoles(true));
+      // Everyone is held by all and edited only in Permissions (ADR 0022).
+      const roles = (await firstValueFrom(this.orgApi.listRoles(true))).filter((r) => r.kind !== 'baseline');
       if (discard) this.rows.reset(roles);
       else this.rows.saved.set(roles);
       this.loadError.set(null);

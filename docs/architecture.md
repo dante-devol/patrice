@@ -70,7 +70,10 @@ queue's due jobs in-process before returning.
 - **Unit roles** (ADR 0019): a role is an org role or a unit role. A unit role is assigned
   to a person at a division or team, and its grants (scope `assigned`) apply only there;
   a division assignment covers its tasks and its single-division teams. Leads can assign only unit roles marked
-  assignable by leads. The division and team pages (`/divisions/:id`, `/teams/:id`) show
+  assignable by leads. **Everyone** (ADR 0022) is a hidden role every user holds: its
+  grants project with an unconstrained principal. **Member** is a unit role, and each
+  division and team names a default unit role that people get on joining (marked
+  `via_default`, removed on leaving). The division and team pages (`/divisions/:id`, `/teams/:id`) show
   the unit's leadership, members, tasks and stats, counted over the tasks you can see. The
   status-over-time chart reads `task_status_history`, which a database trigger on `task`
   fills on every change of a task's state (its status, or done / retired).

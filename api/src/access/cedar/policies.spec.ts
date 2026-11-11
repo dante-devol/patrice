@@ -300,3 +300,54 @@ describe('team scopes — multi-division teams', () => {
     ).toBe(true);
   });
 });
+
+/** ADR 0022: Everyone's grants reach every principal; a unit role's `own` stays in its unit. */
+describe('Everyone and unit-role own', () => {
+  const engine = new CedarEngine();
+  const NS = 'Patrice';
+  const ROLE = '00000000-0000-0000-0000-000000000001';
+  const WRITING = '00000000-0000-0000-0000-0000000000a1';
+  const ART = '00000000-0000-0000-0000-0000000000a2';
+  const ref = (type: string, id: string) => ({ __entity: { type: `${NS}::${type}`, id } });
+  const g = (over: Partial<ProjectableGrant>): ProjectableGrant => ({
+    id: 'g1', roleId: ROLE, action: 'task:read', effect: 'permit', scopeKind: 'global',
+    scopeDivisionId: null, scopeTeamId: null, scopeRoleId: null, ...over,
+  });
+  const decide = (
+    policies: string[],
+    action: string,
+    resource: { type: string; attrs: Record<string, unknown> },
+    parents: { type: string; id: string }[] = [],
+  ) => {
+    const principal = { uid: { type: `${NS}::User`, id: 'u1' }, attrs: { memberDivisions: [], memberTeams: [] }, parents };
+    const res = { uid: { type: `${NS}::${resource.type}`, id: 'r1' }, attrs: resource.attrs, parents: [] };
+    return engine.authorize({
+      principal: principal.uid,
+      action: { type: `${NS}::Action`, id: action },
+      resource: res.uid,
+      entities: [principal, res, ...parents.map((p) => ({ uid: p, attrs: {}, parents: [] }))],
+      policiesText: policies.join(' '),
+    });
+  };
+
+  it("Everyone's grant applies to a user who holds no role", () => {
+    const p = grantToPolicy(g({ everyone: true }));
+    expect(p).not.toContain('principal in');
+    expect(engine.validationErrors(p)).toEqual([]);
+    expect(decide([p], 'task:read', { type: 'Task', attrs: { division: ref('Division', WRITING) } })).toBe(true);
+  });
+
+  it("a unit role's own grant covers your own things in its unit only", () => {
+    const placement = { unitType: 'division' as const, unitId: WRITING };
+    const [p] = grantToPolicies(g({ action: 'message:update', scopeKind: 'own', unit: true }), [placement]);
+    expect(engine.validationErrors(p)).toEqual([]);
+    const holder = [{ type: `${NS}::UnitRole`, id: unitRoleId(ROLE, placement) }];
+    const msg = (division: string, sender: string) => ({
+      type: 'Message',
+      attrs: { division: ref('Division', division), sender: ref('User', sender) },
+    });
+    expect(decide([p], 'message:update', msg(WRITING, 'u1'), holder)).toBe(true);
+    expect(decide([p], 'message:update', msg(WRITING, 'someone'), holder)).toBe(false);
+    expect(decide([p], 'message:update', msg(ART, 'u1'), holder)).toBe(false);
+  });
+});

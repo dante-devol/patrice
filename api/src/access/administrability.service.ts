@@ -42,19 +42,32 @@ export class AdministrabilityService {
     const db = tx ?? this.prisma;
     // Candidates: active users holding an active role with any permit grant on a
     // governance action. Cedar then decides, forbids included.
+    // Everyone's governance grants make every active user a candidate (ADR 0022).
+    const everyoneGoverns =
+      (await db.grant.count({
+        where: {
+          effect: 'permit',
+          action: { in: [...EFFECTIVE_ADMIN_ACTIONS] },
+          role: { kind: 'baseline', lifecycleState: 'active' },
+        },
+      })) > 0;
     const candidates = await db.appUser.findMany({
       where: {
         lifecycleState: 'active',
-        userRoles: {
-          some: {
-            role: {
-              lifecycleState: 'active',
-              grants: {
-                some: { effect: 'permit', action: { in: [...EFFECTIVE_ADMIN_ACTIONS] } },
+        ...(everyoneGoverns
+          ? {}
+          : {
+              userRoles: {
+                some: {
+                  role: {
+                    lifecycleState: 'active',
+                    grants: {
+                      some: { effect: 'permit', action: { in: [...EFFECTIVE_ADMIN_ACTIONS] } },
+                    },
+                  },
+                },
               },
-            },
-          },
-        },
+            }),
       },
       select: { id: true },
     });

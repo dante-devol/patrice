@@ -56,6 +56,22 @@ export class MembershipController {
     return this.members.add('division', id, body.userId, user.id);
   }
 
+  @Contract(ROUTES.giveDivisionDefaultRole)
+  @Post('divisions/:id/members/default-role')
+  @HttpCode(200)
+  @Authorize(ACTIONS.divisionManageMembers.action, divisionResource)
+  async giveDivisionDefault(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.members.giveDefaultToMembers('division', id, user.id);
+  }
+
+  @Contract(ROUTES.giveTeamDefaultRole)
+  @Post('teams/:id/members/default-role')
+  @HttpCode(200)
+  @Authorize(ACTIONS.teamManageMembers.action, teamResource)
+  async giveTeamDefault(@Param('id') id: string, @CurrentUser() user: CurrentUserRef) {
+    return this.members.giveDefaultToMembers('team', id, user.id);
+  }
+
   @Contract(ROUTES.removeDivisionMember)
   @Delete('divisions/:id/members/:userId')
   @HttpCode(204)

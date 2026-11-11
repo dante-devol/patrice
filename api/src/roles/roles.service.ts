@@ -14,7 +14,10 @@ import { CreateRoleDto, UpdateRoleDto } from './roles.dto';
 export type RoleView = {
   id: string;
   name: string;
-  /** `org`: held org-wide. `unit`: only ever assigned at a division or team. */
+  /**
+   * `org`: held org-wide. `unit`: only ever assigned at a division or team.
+   * `baseline`: Everyone, held by every user without being given (ADR 0022).
+   */
   kind: RoleKind;
   /** Unit roles: whether someone appointing through a unit role may assign it. */
   assignableByLeads: boolean;
@@ -101,6 +104,9 @@ export class RolesService {
     if (role.lifecycleState === LifecycleState.retired) {
       throw new UnprocessableError('ROLE_RETIRED', 'Role is retired');
     }
+    if (role.kind === RoleKind.baseline) {
+      throw new ConflictError('BASELINE_ROLE', 'Everyone keeps its name; only its permissions can change');
+    }
     if (dto.assignableByLeads !== undefined && role.kind !== RoleKind.unit) {
       throw new UnprocessableError('NOT_A_UNIT_ROLE', 'Only a unit role can be assignable by leads');
     }
@@ -133,6 +139,9 @@ export class RolesService {
     const role = await this.load(id);
     if (role.lifecycleState === LifecycleState.retired) {
       throw new ConflictError('ALREADY_RETIRED', 'Role is already retired');
+    }
+    if (role.kind === RoleKind.baseline) {
+      throw new ConflictError('BASELINE_ROLE', 'Everyone is held by every user and can never be retired');
     }
     // Retiring a role drops its grants from the projection — if it carried the last
     // global governance grant, the admin floor would hit zero. Guarded.

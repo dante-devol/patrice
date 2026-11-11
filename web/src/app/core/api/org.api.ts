@@ -126,6 +126,12 @@ export class OrgApi {
   removeTeamMember(id: string, userId: string) {
     return this.api.delete('/teams/{id}/members/{userId}', { path: { id, userId } });
   }
+  /** Give the unit's default role to current members who don't hold it (ADR 0022). */
+  giveDefaultRole(unitType: 'division' | 'team', id: string) {
+    return unitType === 'division'
+      ? this.api.post('/divisions/{id}/members/default-role', undefined, { path: { id } })
+      : this.api.post('/teams/{id}/members/default-role', undefined, { path: { id } });
+  }
 }
 
 /** Users and the permission matrix. */

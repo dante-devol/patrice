@@ -21,8 +21,6 @@ describe('Multi-division teams', () => {
   let app: INestApplication;
   let admin: AdminSession;
   let prisma: PrismaClient;
-
-  let memberRoleId: string;
   let projectLeadId: string;
   let writingId: string;
   let artId: string;
@@ -37,7 +35,7 @@ describe('Multi-division teams', () => {
 
   let n = 0;
   const newUser = async (roleIds: string[] = []) =>
-    inviteAndAccept(booted, admin, { email: `mdt${++n}@example.com`, intendedRoleIds: [memberRoleId, ...roleIds] });
+    inviteAndAccept(booted, admin, { email: `mdt${++n}@example.com`, intendedRoleIds: roleIds });
   const team = async (body: Record<string, unknown>, s: AdminSession = admin) =>
     as(s)(http().post('/api/teams')).send({ name: `Team ${++n}`, ...body });
   const createTask = (divisionId: string, teamId?: string) =>
@@ -55,7 +53,6 @@ describe('Multi-division teams', () => {
     app = booted.app;
     admin = await bootstrapAdmin(booted);
     prisma = new PrismaClient();
-    memberRoleId = (await prisma.systemSettings.findUniqueOrThrow({ where: { id: 1 } })).memberRoleId!;
     projectLeadId = (await prisma.role.findFirstOrThrow({ where: { name: 'Project lead' } })).id;
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
     artId = (await auth(http().post('/api/divisions')).send({ name: 'Art' })).body.id;

@@ -386,23 +386,6 @@ const THREAD_REPLIES = [
 // ── Idempotent ensure-helpers ────────────────────────────────────────────────
 
 let admin; // { cookie, csrf }
-let existingGrants = new Set(); // `${roleId}|${action}|${scopeKind}`
-
-async function ensureRole(name) {
-  const roles = must(await req('GET', '/roles', { session: admin }), 'GET /roles');
-  const found = roles.find((r) => r.name === name && r.lifecycleState === 'active');
-  if (found) return found.id;
-  return must(await req('POST', '/roles', { session: admin, body: { name } }), `create role ${name}`).id;
-}
-
-async function grant(roleId, action, scopeKind) {
-  const sig = `${roleId}|${action}|${scopeKind}`;
-  if (existingGrants.has(sig)) return;
-  const r = await req('POST', '/grants', { session: admin, body: { roleId, action, scopeKind } });
-  if (ok(r)) existingGrants.add(sig);
-  else log(c.warn(`  grant ${action}/${scopeKind} → ${r.status} (skipped)`));
-}
-
 async function ensureDivision(name, existing) {
   const found = existing.find((d) => d.name === name && d.lifecycleState === 'active');
   if (found) return found;
@@ -584,29 +567,13 @@ const run = async () => {
   step('Authenticating');
   admin = await getAdminSession();
 
-  step('Roles + permissions');
-  const usersList = must(await req('GET', '/users', { session: admin }), 'GET /users');
-  const adminRoleId = usersList.find((u) => u.email === ADMIN_EMAIL)?.roleIds?.[0];
-  if (!adminRoleId) throw new Error('Could not resolve the admin role.');
-  existingGrants = new Set(
-    must(await req('GET', '/grants', { session: admin }), 'GET /grants').map(
-      (g) => `${g.roleId}|${g.action}|${g.scopeKind}`,
-    ),
-  );
-  // Fresh installs seed a Member role with these (ADR 0016); older ones may not have it.
-  const memberRoleId = await ensureRole('Member');
-  for (const [action, scope] of [
-    ['task:read', 'own'], ['task:read', 'own_division'], ['task:read', 'own_team'],
-    ['message:create', 'own'], ['message:create', 'own_division'], ['message:create', 'own_team'],
-    ['task:assign', 'own_division'], ['task:assign', 'own_team'], ['task:submit', 'own'],
-    ['task:create', 'own_division'], ['task:review', 'own'], ['task:complete', 'own'],
-    ['task:retire', 'own'], ['task:manage_claims', 'own'],
-  ]) {
-    await grant(memberRoleId, action, scope);
-  }
+  step('Roles');
+  // The API seeds Everyone and the Member unit role (ADR 0022): every division and team
+  // gives Member to people who join, so joining is all a person needs to do work.
   const roles = must(await req('GET', '/roles', { session: admin }), 'GET /roles');
+  const memberRole = roles.find((r) => r.name === 'Member' && r.kind === 'unit' && r.lifecycleState === 'active');
   const leadRole = roles.find((r) => r.name === 'Project lead' && r.lifecycleState === 'active');
-  log(c.ok(`  Member role ready${leadRole ? ' · Project lead unit role found' : ''}`));
+  log(c.ok(`  ${memberRole ? 'Member unit role found' : 'no Member unit role'}${leadRole ? ' · Project lead unit role found' : ''}`));
 
   step('Divisions + request templates');
   const existingDivs = must(await req('GET', '/divisions', { session: admin }), 'GET /divisions');
@@ -630,7 +597,7 @@ const run = async () => {
   const people = buildPeople();
   const users = {};
   for (const p of people) {
-    users[p.name] = { ...p, ...(await ensureUser({ email: p.email, displayName: p.name, roleIds: [memberRoleId] })) };
+    users[p.name] = { ...p, ...(await ensureUser({ email: p.email, displayName: p.name, roleIds: [] })) };
   }
 
   step('Memberships');

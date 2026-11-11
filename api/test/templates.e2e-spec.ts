@@ -21,7 +21,6 @@ describe('Request template library', () => {
   let app: INestApplication;
   let admin: AdminSession;
   let prisma: PrismaClient;
-  let memberRoleId: string;
   let writingId: string;
   let artId: string;
   let member: { userId: string; session: AdminSession };
@@ -53,10 +52,9 @@ describe('Request template library', () => {
     app = booted.app;
     admin = await bootstrapAdmin(booted);
     prisma = new PrismaClient();
-    memberRoleId = (await prisma.systemSettings.findFirstOrThrow()).memberRoleId!;
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
     artId = (await auth(http().post('/api/divisions')).send({ name: 'Art' })).body.id;
-    member = await inviteAndAccept(booted, admin, { email: 'member@example.com', intendedRoleIds: [memberRoleId] });
+    member = await inviteAndAccept(booted, admin, { email: 'member@example.com', intendedRoleIds: [] });
     await auth(http().post(`/api/divisions/${writingId}/members`)).send({ userId: member.userId });
   });
 
@@ -198,7 +196,7 @@ describe('Request template library', () => {
         scopeKind: 'specific_division',
         scopeDivisionId: artId,
       });
-      const keeper = await inviteAndAccept(booted, admin, { email: 'keeper@example.com', intendedRoleIds: [role, memberRoleId] });
+      const keeper = await inviteAndAccept(booted, admin, { email: 'keeper@example.com', intendedRoleIds: [role] });
       const art = await createTemplate(artId, { name: 'Art piece', questions: [] });
       const writing = await createTemplate(writingId, { name: 'Writing piece', questions: [] });
       const ok = await as(keeper.session, http().patch(`/api/request-templates/${art.id}`)).send({ version: 0, name: 'Renamed' });
@@ -274,7 +272,7 @@ describe('Request template library', () => {
       });
 
       it('still need task:create in the division', async () => {
-        const outsider = await inviteAndAccept(booted, admin, { email: 'outsider@example.com', intendedRoleIds: [memberRoleId] });
+        const outsider = await inviteAndAccept(booted, admin, { email: 'outsider@example.com', intendedRoleIds: [] });
         const role = (await auth(http().post('/api/roles')).send({ name: 'Composer only' })).body.id;
         await auth(http().post('/api/grants')).send({ roleId: role, action: 'task:compose_template', scopeKind: 'global' });
         await auth(http().post(`/api/users/${outsider.userId}/roles`)).send({ roleId: role });

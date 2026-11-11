@@ -25,7 +25,7 @@ One of five enums on `grant.scope_kind`: `global`, `specific_group` (a fixed div
 _Avoid_: Permission Scope, Scope Type
 
 **Assigned Scope**:
-The `assigned` scope kind, used only by Unit Roles. A grant at `assigned` applies to resources in the divisions and teams where its role is assigned (a division covers its tasks, and the teams that support that division alone; ADR 0020); the projector emits one policy per assignment unit. See ADR 0019.
+The `assigned` scope kind, used only by Unit Roles. A grant at `assigned` applies to resources in the divisions and teams where its role is assigned (a division covers its tasks, and the teams that support that division alone; ADR 0020); the projector emits one policy per assignment unit. A Unit Role's `own` grant is projected the same way, as "own, and in this unit" (ADR 0022). See ADR 0019.
 _Avoid_: Unit Scope, Lead Scope
 
 **Own Family**:

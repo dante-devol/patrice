@@ -441,7 +441,15 @@ export function scopeLabel(scope: ScopeKind, info: ActionInfo): string {
  * The scope's description: one or two sentences on exactly what the grant lets the
  * person do. `target` names the picked division, team or role when there is one.
  */
-export function scopeHint(scope: ScopeKind, info: ActionInfo, target?: string): string {
+export function scopeHint(scope: ScopeKind, info: ActionInfo, target?: string, unitRole = false): string {
+  const hint = baseScopeHint(scope, info, target);
+  // A unit role's `own` is "own, where the role is held" (ADR 0022).
+  return unitRole && scope === 'own'
+    ? `${hint} Only in the divisions and teams where the person holds this role.`
+    : hint;
+}
+
+function baseScopeHint(scope: ScopeKind, info: ActionInfo, target?: string): string {
   const what = things(info);
   const onDivision = info.resourceType === 'Division';
   const onTeam = info.resourceType === 'Team';

@@ -77,6 +77,7 @@ export class AccessService {
         scopeDivisionId: true,
         scopeTeamId: true,
         scopeRoleId: true,
+        role: { select: { kind: true } },
       },
     });
     const statics = staticPolicies({
@@ -87,7 +88,9 @@ export class AccessService {
     const placements = await this.unitPlacements(db);
     const policiesText = [
       ...statics,
-      ...grants.flatMap((g) => grantToPolicies(g as ProjectableGrant, placements.get(g.roleId))),
+      ...grants.flatMap(({ role, ...g }) =>
+        grantToPolicies({ ...(g as ProjectableGrant), everyone: role.kind === 'baseline', unit: role.kind === 'unit' }, placements.get(g.roleId)),
+      ),
     ].join('\n\n');
     const errors = this.cedar.parseErrors(policiesText);
     if (errors.length > 0) {

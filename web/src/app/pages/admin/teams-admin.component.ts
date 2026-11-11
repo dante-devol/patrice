@@ -4,7 +4,8 @@ import { firstValueFrom } from 'rxjs';
 import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Division, Team } from '../../core/api.types';
+import { Division, Role, Team } from '../../core/api.types';
+import { DefaultRoleCellComponent } from './default-role-cell.component';
 import { errorMessage } from '../../core/errors';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { teamColor as computeTeamColor } from '../tasks/task-presentation';
@@ -18,6 +19,8 @@ interface Fields {
   restrictClaims: boolean;
   /** The divisions it supports, as a divisionsKey. */
   divisions: string;
+  /** A unit role id, or '' for none (ADR 0022). */
+  defaultRoleId: string;
 }
 
 /**
@@ -28,7 +31,7 @@ interface Fields {
 @Component({
   selector: 'teams-admin',
   standalone: true,
-  imports: [FormsModule, RouterLink, SaveBarComponent, LoadingTableRowsComponent, DivisionPickerComponent],
+  imports: [FormsModule, RouterLink, SaveBarComponent, LoadingTableRowsComponent, DivisionPickerComponent, DefaultRoleCellComponent],
   template: `
     <div class="panel">
       <h2>Teams</h2>
@@ -37,9 +40,9 @@ interface Fields {
       </div>
       @if (loadError()) { <p class="error">{{ loadError() }}</p> }
       <table [attr.aria-busy]="!loaded()">
-        <thead><tr><th>Name</th><th>Divisions</th><th>Color</th><th>Restrict claims</th><th>State</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Divisions</th><th>Color</th><th>Restrict claims</th><th>Default role</th><th>State</th><th></th></tr></thead>
         @if (!loaded()) {
-          <tbody loadingRows [cols]="6" [rows]="5" label="Loading teams"></tbody>
+          <tbody loadingRows [cols]="7" [rows]="5" label="Loading teams"></tbody>
         } @else {
         <tbody>
           @for (c of rows.creates(); track c.key) {
@@ -50,6 +53,7 @@ interface Fields {
               </td>
               <td></td>
               <td><input type="checkbox" [ngModel]="c.fields.restrictClaims" (ngModelChange)="rows.updateCreate(c.key, 'restrictClaims', $event)" aria-label="Restrict claims" /></td>
+              <td><span class="muted" title="New teams start with the default role set in Settings">From Settings</span></td>
               <td><span class="staged-note">New, added on save</span></td>
               <td><button class="quiet" (click)="rows.removeCreate(c.key)">Remove</button></td>
             </tr>
@@ -73,6 +77,11 @@ interface Fields {
               </td>
               <td><input type="checkbox" [ngModel]="rows.value(t, 'restrictClaims')" (ngModelChange)="rows.set(t, 'restrictClaims', $event)" aria-label="Restrict claims" /></td>
               <td>
+                <default-role-cell [roles]="unitRoles()" [value]="rows.value(t, 'defaultRoleId')" [savedValue]="t.defaultRoleId ?? ''"
+                                   [changed]="rows.isChanged(t, 'defaultRoleId')" unitType="team" [unitId]="t.id"
+                                   (valueChange)="rows.set(t, 'defaultRoleId', $event)" />
+              </td>
+              <td>
                 @if (lc) { <span class="staged-note">{{ lc === 'retire' ? 'Retires on save' : 'Revives on save' }}</span> }
                 @else { <span [class]="lcStamp(t.lifecycleState)">{{ t.lifecycleState }}</span> }
               </td>
@@ -87,7 +96,7 @@ interface Fields {
                 }
               </td>
             </tr>
-          } @empty { <tr><td colspan="6" class="muted">No teams.</td></tr> }
+          } @empty { <tr><td colspan="7" class="muted">No teams.</td></tr> }
         </tbody>
         }
       </table>
@@ -100,9 +109,11 @@ export class TeamsAdminComponent implements OnDestroy {
   private readonly orgApi = inject(OrgApi);
   private readonly unsaved = inject(UnsavedChangesService);
   readonly rows = new StagedRows<Team, Fields>(
-    (t) => ({ name: t.name, restrictClaims: t.restrictClaims, divisions: divisionsKey(t) }),
-    () => ({ name: '', restrictClaims: false, divisions: '' }),
+    (t) => ({ name: t.name, restrictClaims: t.restrictClaims, divisions: divisionsKey(t), defaultRoleId: t.defaultRoleId ?? '' }),
+    () => ({ name: '', restrictClaims: false, divisions: '', defaultRoleId: '' }),
   );
+  /** Active unit roles, for the default-role picker. */
+  readonly unitRoles = signal<Role[]>([]);
   readonly divisions = signal<Division[]>([]);
   readonly busy = signal(false);
   /** The first load has finished (or failed): until then the table shows placeholders. */
@@ -139,10 +150,12 @@ export class TeamsAdminComponent implements OnDestroy {
 
   private async load(discard: boolean): Promise<void> {
     try {
-      const [teams, divisions] = await Promise.all([
+      const [teams, divisions, roles] = await Promise.all([
         firstValueFrom(this.orgApi.listTeams(true)),
         firstValueFrom(this.orgApi.listDivisions()),
+        firstValueFrom(this.orgApi.listRoles()),
       ]);
+      this.unitRoles.set(roles.filter((r) => r.kind === 'unit').sort((a, b) => a.name.localeCompare(b.name)));
       if (discard) this.rows.reset(teams);
       else this.rows.saved.set(teams);
       this.divisions.set(divisions);
@@ -187,7 +200,7 @@ export class TeamsAdminComponent implements OnDestroy {
           ),
         clear: () => this.rows.removeCreate(c.key),
       })),
-      ...Object.entries(this.rows.edits()).map(([id, { divisions, ...patch }]) => ({
+      ...Object.entries(this.rows.edits()).map(([id, { divisions, defaultRoleId, ...patch }]) => ({
         run: () => {
           const t = this.rows.saved().find((x) => x.id === id)!;
           const divisionChange =
@@ -196,7 +209,8 @@ export class TeamsAdminComponent implements OnDestroy {
               : divisions === 'all'
                 ? { allDivisions: true }
                 : { allDivisions: false, ...fromDivisionsKey(divisions) };
-          return firstValueFrom(this.orgApi.updateTeam(id, { ...patch, ...divisionChange, version: t.version }));
+          const roleChange = defaultRoleId === undefined ? {} : { defaultRoleId: defaultRoleId || null };
+          return firstValueFrom(this.orgApi.updateTeam(id, { ...patch, ...divisionChange, ...roleChange, version: t.version }));
         },
         clear: () => this.rows.clearEdit(id),
       })),

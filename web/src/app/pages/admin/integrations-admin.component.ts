@@ -441,7 +441,8 @@ export class IntegrationsAdminComponent implements OnDestroy {
         }),
       );
       this.connections.set(rows);
-      this.roles.set(roles);
+      // Everyone can't be mapped: every user holds it (ADR 0022).
+      this.roles.set(roles.filter((r) => r.kind !== 'baseline'));
     } catch (e) {
       this.loadError.set(errorMessage(e));
     }
