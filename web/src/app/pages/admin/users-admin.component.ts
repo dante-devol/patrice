@@ -8,6 +8,7 @@ import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { UserAvatarComponent } from '../tasks/user-avatar.component';
 import { divisionColor, teamColor } from '../tasks/task-presentation';
 import { SaveBarComponent } from './save-bar.component';
+import { LoadingRowsComponent } from '../../shared/loading';
 import { MembershipDraft, UnitRef, unitKey } from './membership-draft';
 import { StagedOp, isStale, runStaged, stagedErrorMessage } from './staged';
 
@@ -45,7 +46,7 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
   selector: 'users-admin',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, UserAvatarComponent, SaveBarComponent],
+  imports: [FormsModule, UserAvatarComponent, SaveBarComponent, LoadingRowsComponent],
   styles: [`
     :host { display: block; font-size: 13px; }
     .pick { font: inherit; font-size: 13px; color: var(--ink); background: var(--paper); border: 1px solid var(--line);
@@ -72,6 +73,13 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
     .chip button:hover { color: var(--rust); background: none; }
     .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rust); flex: none; }
     .synced { font-size: 12px; color: var(--ink-soft); border: 1px dashed var(--faint); border-radius: 2px; padding: 0 5px; }
+    .search { display: flex; align-items: center; gap: 10px; }
+    .search input { flex: 1; min-width: 0; margin: 0; padding: 7px 10px; background: var(--paper); border: 1px solid var(--line);
+                    border-radius: 2px; color: var(--ink); font: inherit; }
+    .search input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+    /* One way to clear the search (the Clear button), in every browser. */
+    .search input::-webkit-search-cancel-button { display: none; }
+    .search button { margin: 0; }
   `],
   template: `
     <h2 class="font-display font-bold text-[18px] m-0 mb-3">Users</h2>
@@ -79,6 +87,9 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
 
     <div class="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)] items-start">
       <!-- Left: Overall, then every division with its teams. -->
+      @if (!loaded()) {
+        <loading-rows label="Loading divisions and teams" [rows]="7" [detail]="false" [compact]="true" />
+      } @else {
       <div class="sheet">
         <button class="row-item" [class.is-current]="selected().kind === 'overall'" (click)="selected.set({ kind: 'overall' })">
           <span class="flex-1">Overall</span>
@@ -103,17 +114,28 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
           }
         } @empty { <p class="px-3 py-2 text-ink-soft m-0">No divisions yet.</p> }
       </div>
+      }
 
-      <!-- Right: the people in what's picked. -->
+      <!-- Right: the people in what's picked, narrowed by the search. -->
       <div class="min-w-0">
         @let sel = selected();
-        @if (sel.kind === 'overall') {
+        <div class="search mb-3">
+          <input type="search" [ngModel]="query()" (ngModelChange)="query.set($event)" placeholder="Search people by name or email"
+                 aria-label="Search people by name or email" [disabled]="!loaded()" />
+          @if (query()) {
+            <span class="text-ink-soft whitespace-nowrap" aria-live="polite">{{ searchSummary(sel) }}</span>
+            <button class="quiet" (click)="query.set('')">Clear</button>
+          }
+        </div>
+        @if (!loaded()) {
+          <loading-rows label="Loading people" [rows]="6" />
+        } @else if (sel.kind === 'overall') {
           <div class="sheet">
             <div class="px-3 py-2.5">
               <div class="font-display font-bold text-[18px] leading-tight">Everyone</div>
               <div class="text-ink-soft mt-0.5">{{ users().length }} people. Org roles and account state are set here; pick a division or team to change who's in it and their unit roles there.</div>
             </div>
-            @for (u of users(); track u.id) {
+            @for (u of shownUsers(); track u.id) {
               @let lc = lifecycle()[u.id];
               <div class="person" [class.person--changed]="userChanged(u)" [class.row--retired]="u.lifecycleState === 'retired'">
                 <user-avatar [name]="u.displayName" [seed]="u.id" [size]="28" [imageUrl]="u.avatarUrl" />
@@ -168,7 +190,9 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
                   </div>
                 </div>
               </div>
-            } @empty { <p class="px-3 py-3 text-ink-soft m-0">No users.</p> }
+            } @empty {
+              <p class="px-3 py-3 text-ink-soft m-0">@if (query()) { No one matches “{{ query() }}”. } @else { No users. }</p>
+            }
           </div>
         } @else {
           @let canManage = canManageUnit(sel);
@@ -191,7 +215,7 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
                 <div class="text-ink-soft mt-2">You can see this {{ sel.unitType }}'s members but not change them.</div>
               }
             </div>
-            @for (id of memberships.shown(sel); track id) {
+            @for (id of shownMembers(sel); track id) {
               @let st = memberships.staged(sel, id);
               @let u = userById(id);
               <div class="person" [class.person--changed]="!!st" [class.person--removed]="st === 'removed'">
@@ -236,7 +260,11 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
                   <button class="quiet danger" (click)="memberships.remove(sel, id)">Remove</button>
                 }
               </div>
-            } @empty { <p class="px-3 py-3 text-ink-soft m-0">Nobody is in this {{ sel.unitType }} yet.</p> }
+            } @empty {
+              <p class="px-3 py-3 text-ink-soft m-0">
+                @if (query()) { No one in this {{ sel.unitType }} matches “{{ query() }}”. } @else { Nobody is in this {{ sel.unitType }} yet. }
+              </p>
+            }
           </div>
         }
         <save-bar [count]="count()" [where]="where()" [saving]="busy()" [error]="saveError()" [stale]="stale()"
@@ -269,6 +297,12 @@ export class UsersAdminComponent implements OnDestroy {
 
   readonly selected = signal<Pick>({ kind: 'overall' });
   readonly busy = signal(false);
+  /** The first load has finished (or failed): until then both lists show placeholders. */
+  readonly loaded = signal(false);
+  /** Search: narrows the people shown, on Everyone and in a division or team. */
+  readonly query = signal('');
+  private readonly needle = computed(() => this.query().trim().toLowerCase());
+  readonly shownUsers = computed(() => this.users().filter((u) => this.matches(u)));
   readonly loadError = signal<string | null>(null);
   readonly saveError = signal<string | null>(null);
   readonly stale = signal(false);
@@ -337,7 +371,33 @@ export class UsersAdminComponent implements OnDestroy {
       this.loadError.set(null);
     } catch (e) {
       this.loadError.set(errorMessage(e));
+    } finally {
+      this.loaded.set(true);
     }
+  }
+
+  // ── Search ─────────────────────────────────────────────────────────────
+
+  /** Whether someone matches the search: their name or email contains it. */
+  matches(u: AdminUser | undefined): boolean {
+    const q = this.needle();
+    if (!q) return true;
+    if (!u) return false;
+    return u.displayName.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q);
+  }
+
+  /** A unit's members (as staged), narrowed by the search. */
+  shownMembers(sel: UnitRef): string[] {
+    const ids = this.memberships.shown(sel);
+    return this.needle() ? ids.filter((id) => this.matches(this.userById(id))) : ids;
+  }
+
+  searchSummary(sel: Pick): string {
+    const [shown, all] =
+      sel.kind === 'overall'
+        ? [this.shownUsers().length, this.users().length]
+        : [this.shownMembers(sel).length, this.memberships.shown(sel).length];
+    return `Showing ${shown} of ${all}`;
   }
 
   // ── Reading ────────────────────────────────────────────────────────────

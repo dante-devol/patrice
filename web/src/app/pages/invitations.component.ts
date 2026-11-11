@@ -1,3 +1,4 @@
+import { LoadingTableRowsComponent } from '../shared/loading';
 import { AdminApi } from '../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { DatePipe } from '@angular/common';
@@ -10,7 +11,7 @@ import { errorMessage } from '../core/errors';
 @Component({
   selector: 'invitations-admin',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, LoadingTableRowsComponent],
   template: `
     @if (auth.canInvite()) {
       <div class="panel">
@@ -26,10 +27,13 @@ import { errorMessage } from '../core/errors';
     }
 
     <div class="panel">
-      <table>
+      <table [attr.aria-busy]="!loaded()">
         <thead>
           <tr><th>Email</th><th>Status</th><th>Uses</th><th>Expires</th><th></th></tr>
         </thead>
+        @if (!loaded()) {
+          <tbody loadingRows [cols]="5" [rows]="5" label="Loading invitations"></tbody>
+        } @else {
         <tbody>
           @for (inv of invites(); track inv.id) {
             <tr>
@@ -47,6 +51,7 @@ import { errorMessage } from '../core/errors';
             <tr><td colspan="5" class="muted">No invitations yet.</td></tr>
           }
         </tbody>
+        }
       </table>
     </div>
   `,
@@ -58,6 +63,8 @@ export class InvitationsComponent {
   email = '';
   readonly invites = signal<InvitationListItem[]>([]);
   readonly busy = signal(false);
+  /** The first load has finished (or failed): until then the table shows placeholders. */
+  readonly loaded = signal(false);
   readonly error = signal<string | null>(null);
   readonly lastUrl = signal<string | null>(null);
 
@@ -70,6 +77,8 @@ export class InvitationsComponent {
       this.invites.set(await firstValueFrom(this.adminApi.listInvitations()));
     } catch (e) {
       this.error.set(errorMessage(e));
+    } finally {
+      this.loaded.set(true);
     }
   }
 

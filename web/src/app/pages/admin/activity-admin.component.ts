@@ -1,3 +1,4 @@
+import { LoadingTableRowsComponent } from '../../shared/loading';
 import { AccessApi, AdminApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, inject, signal } from '@angular/core';
@@ -135,7 +136,7 @@ interface Target {
 @Component({
   selector: 'activity-admin',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, LoadingTableRowsComponent],
   template: `
     <div class="panel">
       <h2>Activity log</h2>
@@ -182,10 +183,13 @@ interface Target {
 
       @if (error()) { <p class="error">{{ error() }}</p> }
 
-      <table>
+      <table [attr.aria-busy]="!!firstPage()">
         <thead>
           <tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Source</th></tr>
         </thead>
+        @if (!!firstPage()) {
+          <tbody loadingRows [cols]="5" [rows]="5" label="Loading activity"></tbody>
+        } @else {
         <tbody>
           @for (a of items(); track a.id) {
             <tr>
@@ -210,6 +214,7 @@ interface Target {
             <tr><td colspan="5" class="muted">No activity matches these filters.</td></tr>
           }
         </tbody>
+        }
       </table>
 
       <div class="more">
@@ -241,6 +246,8 @@ export class ActivityAdminComponent {
   readonly users = signal<AdminUser[]>([]);
   readonly cursor = signal<string | null>(null);
   readonly loading = signal(false);
+  /** The first page of a search is loading (opening the tab, or a filter changed). */
+  readonly firstPage = signal(true);
   readonly error = signal<string | null>(null);
 
   // Filter model (bound to the controls).
@@ -273,6 +280,7 @@ export class ActivityAdminComponent {
   /** Re-run from the top with the current filters. */
   async apply(): Promise<void> {
     this.loading.set(true);
+    this.firstPage.set(true);
     this.error.set(null);
     try {
       const res = await firstValueFrom(this.adminApi.listActivity(this.filters(), { limit: 50 }));
@@ -287,6 +295,7 @@ export class ActivityAdminComponent {
       this.error.set(errorMessage(e));
     } finally {
       this.loading.set(false);
+      this.firstPage.set(false);
     }
   }
 

@@ -1,3 +1,4 @@
+import { LoadingTableRowsComponent } from '../../shared/loading';
 import { OrgApi } from '../../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
@@ -27,7 +28,7 @@ interface Fields {
 @Component({
   selector: 'divisions-admin',
   standalone: true,
-  imports: [FormsModule, RouterLink, RequestTemplateBuilderComponent, SaveBarComponent],
+  imports: [FormsModule, RouterLink, RequestTemplateBuilderComponent, SaveBarComponent, LoadingTableRowsComponent],
   template: `
     <div class="panel">
       <h2>Divisions</h2>
@@ -35,10 +36,13 @@ interface Fields {
         <button class="secondary" (click)="rows.addCreate()">Add division</button>
       </div>
       @if (loadError()) { <p class="error">{{ loadError() }}</p> }
-      <table>
+      <table [attr.aria-busy]="!loaded()">
         <thead>
           <tr><th>Name</th><th>Color</th><th>Default openings</th><th>Locked</th><th>Restrict claims</th><th>State</th><th></th></tr>
         </thead>
+        @if (!loaded()) {
+          <tbody loadingRows [cols]="7" [rows]="5" label="Loading divisions"></tbody>
+        } @else {
         <tbody>
           @for (c of rows.creates(); track c.key) {
             <tr class="is-staged">
@@ -90,6 +94,7 @@ interface Fields {
             }
           } @empty { <tr><td colspan="7" class="muted">No divisions.</td></tr> }
         </tbody>
+        }
       </table>
     </div>
     <save-bar [count]="rows.count()" [where]="where()" [saving]="busy()" [error]="saveError()" [stale]="stale()"
@@ -104,6 +109,8 @@ export class DivisionsAdminComponent implements OnDestroy {
     () => ({ name: '', defaultOpenings: 1, openingsLocked: false, restrictClaims: false }),
   );
   readonly busy = signal(false);
+  /** The first load has finished (or failed): until then the table shows placeholders. */
+  readonly loaded = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly saveError = signal<string | null>(null);
   readonly stale = signal(false);
@@ -143,6 +150,8 @@ export class DivisionsAdminComponent implements OnDestroy {
       this.loadError.set(null);
     } catch (e) {
       this.loadError.set(errorMessage(e));
+    } finally {
+      this.loaded.set(true);
     }
   }
 

@@ -1,7 +1,8 @@
 // Build-time half of the browser demo, run in Node: apply the real migrations to a
 // PGlite database, serve the demo composition over HTTP, seed it through the API with
 // the regular seed script, and (with --snapshot <file>) save the database as a
-// tarball the service worker loads. Without --snapshot it just keeps serving.
+// tarball the service worker loads. With --seed it seeds and keeps serving (a
+// throwaway API for trying the web app); with neither, it serves an empty database.
 import { PGlite } from '@electric-sql/pglite';
 // @ts-expect-error -- subpath export; resolves at runtime and in the bundler
 import { citext } from '@electric-sql/pglite/contrib/citext';
@@ -30,6 +31,7 @@ function run(cmd: string, args: string[]): Promise<void> {
 
 async function main(): Promise<void> {
   const snapshot = arg('--snapshot');
+  const seedOnly = process.argv.includes('--seed');
   const t0 = Date.now();
   setDemoEnv('http://localhost:4300');
   const db = new PGlite({ extensions: { citext } });
@@ -53,7 +55,7 @@ async function main(): Promise<void> {
   await app.get(BootstrapService).openBootstrap();
   console.log = log;
 
-  if (!snapshot) {
+  if (!snapshot && !seedOnly) {
     console.log(`bootstrap key: ${key}`);
     return;
   }
@@ -63,6 +65,10 @@ async function main(): Promise<void> {
   process.env.NODE_ENV = 'test';
   await run(process.execPath, ['scripts/seed.mjs', '--base', `http://localhost:${PORT}/api`, '--key', key!]);
   process.env.NODE_ENV = 'development';
+  if (!snapshot) {
+    console.log(`seeded; serving on :${PORT}`);
+    return;
+  }
   await app.close();
   const tar = await db.dumpDataDir('gzip');
   fs.mkdirSync(path.dirname(snapshot), { recursive: true });

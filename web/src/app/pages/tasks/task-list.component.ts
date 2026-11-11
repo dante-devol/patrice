@@ -1,3 +1,4 @@
+import { LoadingRowsComponent, LoadingValueComponent } from '../../shared/loading';
 import { RequestTemplateBuilderComponent } from '../../features/request-template/request-template-builder.component';
 import { TasksApi, TemplatesApi } from '../../core/api/work.api';
 import { firstValueFrom } from 'rxjs';
@@ -35,7 +36,7 @@ export interface TaskListFacets {
 @Component({
   selector: 'task-list',
   standalone: true,
-  imports: [FormsModule, TaskRowComponent, RequestTemplateBuilderComponent],
+  imports: [FormsModule, TaskRowComponent, RequestTemplateBuilderComponent, LoadingRowsComponent, LoadingValueComponent],
   template: `
     @if (discordGated()) {
       <div class="discord-gate">
@@ -54,7 +55,9 @@ export interface TaskListFacets {
             } @else {
               <h1 class="font-display font-bold text-[28px] leading-tight">Work board</h1>
             }
-            <span class="text-[13px] text-ink-soft">{{ openCount() }} open, {{ inFlightCount() }} in progress</span>
+            <span class="text-[13px] text-ink-soft" [attr.aria-busy]="listLoading()">
+              @if (listLoading()) { <loading-value width="9em" /> } @else { {{ openCount() }} open, {{ inFlightCount() }} in progress }
+            </span>
           </div>
           <button class="shrink-0 rounded bg-accent text-paper font-bold text-[13px] px-3.5 py-2 hover:bg-accent-ink"
                   (click)="toggleCreate()">Request a task</button>
@@ -166,16 +169,20 @@ export interface TaskListFacets {
 
         @if (error()) { <p class="text-[13px] text-rust mb-3">{{ error() }}</p> }
 
-        <div class="sheet">
-          @for (t of tasks(); track t.id) {
-            <task-row [task]="t" />
-          } @empty {
-            <div class="px-5 py-10 text-center">
-              <p class="font-display font-bold text-[17px] mb-1">No tasks match these filters</p>
-              <p class="text-[13.5px] text-ink-soft">Clear a filter, or request a task.</p>
-            </div>
-          }
-        </div>
+        @if (listLoading()) {
+          <loading-rows label="Loading tasks" />
+        } @else {
+          <div class="sheet">
+            @for (t of tasks(); track t.id) {
+              <task-row [task]="t" />
+            } @empty {
+              <div class="px-5 py-10 text-center">
+                <p class="font-display font-bold text-[17px] mb-1">No tasks match these filters</p>
+                <p class="text-[13.5px] text-ink-soft">Clear a filter, or request a task.</p>
+              </div>
+            }
+          </div>
+        }
 
         @if (nextCursor()) {
           <div class="mt-5 flex justify-center">
@@ -223,6 +230,8 @@ export class TaskListComponent implements OnInit {
   readonly tasks = signal<Task[]>([]);
   readonly nextCursor = signal<string | null>(null);
   readonly busy = signal(false);
+  /** The list itself is (re)loading: first load, or a filter changed. */
+  readonly listLoading = signal(true);
   readonly error = signal<string | null>(null);
   readonly createError = signal<string | null>(null);
   readonly showCreate = signal(false);
@@ -290,9 +299,11 @@ export class TaskListComponent implements OnInit {
     if (this.extra?.statuses?.length === 0 && !this.extra.includeRetired) {
       this.tasks.set([]);
       this.nextCursor.set(null);
+      this.listLoading.set(false);
       return;
     }
     this.busy.set(true);
+    this.listLoading.set(true);
     this.error.set(null);
     try {
       const res = await firstValueFrom(this.tasksApi.listTasks(this.cleanFilters(), { limit: 20 }));
@@ -302,6 +313,7 @@ export class TaskListComponent implements OnInit {
       this.error.set(errorMessage(e));
     } finally {
       this.busy.set(false);
+      this.listLoading.set(false);
     }
   }
 

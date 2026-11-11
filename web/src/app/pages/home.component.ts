@@ -2,6 +2,7 @@ import { TasksApi } from '../core/api/work.api';
 import { OrgApi } from '../core/api/org.api';
 import { firstValueFrom } from 'rxjs';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { LoadingRowsComponent, LoadingValueComponent } from '../shared/loading';
 import { RouterLink } from '@angular/router';
 import { AuthStore } from '../core/auth.store';
 import { LookupStore } from '../core/lookup.store';
@@ -38,7 +39,7 @@ interface WorkGroup {
  */
 @Component({
   standalone: true,
-  imports: [RouterLink, UserAvatarComponent, TaskRowComponent],
+  imports: [RouterLink, UserAvatarComponent, TaskRowComponent, LoadingRowsComponent, LoadingValueComponent],
   template: `
     <div class="tasks-board font-sans">
 
@@ -55,11 +56,13 @@ interface WorkGroup {
             </div>
           }
         </div>
-        <dl class="flex gap-6 shrink-0 text-[13px]">
+        <dl class="flex gap-6 shrink-0 text-[13px]" [attr.aria-busy]="loading()">
           @for (s of ledger; track s) {
             <div class="text-center">
               <dt class="text-ink-soft">{{ label(s) }}</dt>
-              <dd class="font-display font-bold text-[20px] leading-tight mt-0.5">{{ statusCount(s) }}</dd>
+              <dd class="font-display font-bold text-[20px] leading-tight mt-0.5">
+                @if (loading()) { <loading-value width="1.1em" height="0.75em" /> } @else { {{ statusCount(s) }} }
+              </dd>
             </div>
           }
         </dl>
@@ -91,7 +94,9 @@ interface WorkGroup {
         <div class="flex items-baseline gap-3 pb-1.5">
           <h1 class="font-display font-bold text-[22px] leading-tight">Your work</h1>
           <span class="text-[13px] text-ink-soft">
-            {{ activeCount() }} active@if (approvedCount()) {, {{ approvedCount() }} done}
+            @if (loading()) { <loading-value width="5em" /> } @else {
+              {{ activeCount() }} active@if (approvedCount()) {, {{ approvedCount() }} done}
+            }
           </span>
         </div>
 
@@ -116,7 +121,7 @@ interface WorkGroup {
       @if (error()) { <p class="text-[13px] text-rust mb-3">{{ error() }}</p> }
 
       @if (loading()) {
-        <p class="text-[13.5px] text-ink-soft">Loading…</p>
+        <loading-rows label="Loading your work" [rows]="3" />
       } @else if (activeTasks().length === 0 && !showDone()) {
         <div class="paper px-5 py-8 text-center">
           <p class="font-display font-bold text-[17px] mb-1">Nothing claimed yet</p>

@@ -1,3 +1,4 @@
+import { LoadingTableRowsComponent } from '../../shared/loading';
 import { OrgApi } from '../../core/api/org.api';
 import { IntegrationsApi } from '../../core/api/work.api';
 import { firstValueFrom } from 'rxjs';
@@ -22,7 +23,7 @@ interface RoleMapping {
 @Component({
   selector: 'roles-admin',
   standalone: true,
-  imports: [FormsModule, SaveBarComponent],
+  imports: [FormsModule, SaveBarComponent, LoadingTableRowsComponent],
   styles: [`
     .map-chip {
       display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
@@ -40,8 +41,11 @@ interface RoleMapping {
         <button class="secondary" (click)="rows.addCreate()">Add role</button>
       </div>
       @if (loadError()) { <p class="error">{{ loadError() }}</p> }
-      <table>
+      <table [attr.aria-busy]="!loaded()">
         <thead><tr><th>Name</th><th>Kind</th><th>Integration</th><th>State</th><th></th></tr></thead>
+        @if (!loaded()) {
+          <tbody loadingRows [cols]="5" [rows]="5" label="Loading roles"></tbody>
+        } @else {
         <tbody>
           @for (c of rows.creates(); track c.key) {
             <tr class="is-staged">
@@ -113,6 +117,7 @@ interface RoleMapping {
             </tr>
           } @empty { <tr><td colspan="5" class="muted">No roles.</td></tr> }
         </tbody>
+        }
       </table>
     </div>
     <save-bar [count]="rows.count()" [where]="where()" [saving]="busy()" [error]="saveError()" [stale]="stale()"
@@ -130,6 +135,8 @@ export class RolesAdminComponent implements OnDestroy {
   );
   readonly mappingsByRole = signal<Map<string, RoleMapping[]>>(new Map());
   readonly busy = signal(false);
+  /** The first load has finished (or failed): until then the table shows placeholders. */
+  readonly loaded = signal(false);
   readonly loadError = signal<string | null>(null);
   readonly saveError = signal<string | null>(null);
   readonly stale = signal(false);
@@ -158,6 +165,8 @@ export class RolesAdminComponent implements OnDestroy {
       void this.loadMappings();
     } catch (e) {
       this.loadError.set(errorMessage(e));
+    } finally {
+      this.loaded.set(true);
     }
   }
 

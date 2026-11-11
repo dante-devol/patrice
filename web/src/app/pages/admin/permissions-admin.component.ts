@@ -18,6 +18,7 @@ import { errorMessage } from '../../core/errors';
 import { ToastService } from '../../core/toast.service';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { SaveBarComponent } from './save-bar.component';
+import { LoadingRowsComponent } from '../../shared/loading';
 import { divisionColor, teamColor } from '../tasks/task-presentation';
 import {
   actionLabel,
@@ -53,7 +54,7 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
   selector: 'permissions-admin',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, NgTemplateOutlet, SaveBarComponent],
+  imports: [FormsModule, NgTemplateOutlet, SaveBarComponent, LoadingRowsComponent],
   styles: [`
     :host { display: block; font-size: 13px; }
     .pick { font: inherit; font-size: 13px; color: var(--ink); background: var(--paper);
@@ -101,7 +102,9 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
     <div class="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)] items-start">
       <!-- Left: what you pick — a role or an action. -->
       <div>
-        @if (view() === 'role') {
+        @if (!loaded()) {
+          <loading-rows [label]="view() === 'role' ? 'Loading roles' : 'Loading actions'" [rows]="8" [detail]="false" [compact]="true" />
+        } @else if (view() === 'role') {
           <input class="pick find mb-2" type="search" placeholder="Find a role" aria-label="Find a role"
                  [ngModel]="roleQuery()" (ngModelChange)="roleQuery.set($event)" />
           <div class="sheet">
@@ -148,7 +151,9 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
 
       <!-- Right: the grants for what's picked. -->
       <div class="min-w-0">
-        @if (view() === 'role') {
+        @if (!loaded()) {
+          <loading-rows label="Loading permissions" [rows]="6" />
+        } @else if (view() === 'role') {
           @let r = selectedRole();
           @if (r) {
             <div class="sheet">
@@ -288,6 +293,8 @@ export class PermissionsAdminComponent implements OnDestroy {
   readonly divisions = signal<Division[]>([]);
   readonly teams = signal<Team[]>([]);
   readonly loadError = signal<string | null>(null);
+  /** The first load has finished (or failed): until then both lists show placeholders. */
+  readonly loaded = signal(false);
   readonly saveError = signal<string | null>(null);
   readonly stale = signal(false);
   readonly saving = signal(false);
@@ -402,6 +409,8 @@ export class PermissionsAdminComponent implements OnDestroy {
       this.loadError.set(null);
     } catch (e) {
       this.loadError.set(errorMessage(e));
+    } finally {
+      this.loaded.set(true);
     }
   }
 
