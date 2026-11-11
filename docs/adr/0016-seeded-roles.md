@@ -12,6 +12,8 @@ role existed for ordinary members (problems D29).
 - Member is seeded once with starter grants (read structure and names; see, claim, work
   on and request tasks in your divisions) and pre-assigned to new invitations. It is the
   admins' to edit.
+  *(ADR 0021 narrows "your divisions" to the divisions and teams you belong to, plus tasks you
+  requested or work on.)*
 - Upgrading an install from before Member existed adopts an existing "Member" role and
   gives Member to every active user, because reads used to need no grant (found by the
   cutover rehearsal).

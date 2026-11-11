@@ -59,7 +59,9 @@ const OWN_ATTR_BY_ACTION: Readonly<Record<string, string>> = {
 /**
  * Claim Eligibility AND-Composition (api/CONTEXT.md): for each of division and team,
  * that unit doesn't restrict claims, OR the principal is a member of it. Each side is
- * `has`-guarded so a teamless task never dereferences `resource.team`.
+ * `has`-guarded so a teamless task never dereferences `resource.team`. It is a rule,
+ * not a scope: the static `static_claim_restriction` forbid applies it to every claim,
+ * whatever grant permitted it (ADR 0021).
  */
 const ELIGIBLE =
   '(!(resource has divisionRestrictsClaims && resource.divisionRestrictsClaims) ' +
@@ -72,20 +74,22 @@ const ELIGIBLE =
 const SEATED = 'resource has claimants && resource.claimants.contains(principal)';
 
 /**
- * Can see the task: requested it, holds a seat on it, or could claim it. A restricted
- * division therefore hides its tasks from non-members as well as blocking claims.
+ * Involved in the task: requested it or holds a seat on it. `own` on reading and
+ * commenting means only this; seeing other tasks takes a division, team or assigned
+ * grant (ADR 0021).
  */
-const VISIBLE = `(resource has requester && resource.requester == principal) || (${SEATED}) || (${ELIGIBLE})`;
+const INVOLVED = `(resource has requester && resource.requester == principal) || (${SEATED})`;
 
-/** `own` conditions that aren't a plain owner attribute. */
+/**
+ * `own` conditions that aren't a plain owner attribute. Claiming (`task:assign`) has
+ * no `own`: it is about tasks that aren't yours yet.
+ */
 const OWN_WHEN_BY_ACTION: Readonly<Record<string, string>> = {
-  'task:read': VISIBLE,
-  'message:read': VISIBLE,
-  'submission:read': VISIBLE,
-  'attachment:read': VISIBLE,
-  'message:create': VISIBLE,
-  // Claiming is *becoming* a claimant, so `own` is eligibility, not ownership.
-  'task:assign': ELIGIBLE,
+  'task:read': INVOLVED,
+  'message:read': INVOLVED,
+  'submission:read': INVOLVED,
+  'attachment:read': INVOLVED,
+  'message:create': INVOLVED,
   'task:leave': SEATED,
   'task:submit': SEATED,
 };
@@ -95,15 +99,14 @@ const OWN_SELF_ACTIONS = new Set(['user:read', 'user:update']);
 
 /**
  * What an `own` grant on `action` checks, for the permission editor to explain: an
- * owner relation (`requester`, `sender`…), `visible`, `eligible`, `seated`, `self`,
- * or null when `own` doesn't apply.
+ * owner relation (`requester`, `sender`, `uploader`, `owner`), `involved`, `seated`,
+ * `self`, or null when `own` doesn't apply.
  */
 export function ownRelation(action: string): string | null {
   if (action in OWN_ATTR_BY_ACTION) return OWN_ATTR_BY_ACTION[action];
   if (OWN_SELF_ACTIONS.has(action)) return 'self';
   const when = OWN_WHEN_BY_ACTION[action];
-  if (when === VISIBLE) return 'visible';
-  if (when === ELIGIBLE) return 'eligible';
+  if (when === INVOLVED) return 'involved';
   if (when === SEATED) return 'seated';
   return null;
 }
@@ -288,6 +291,17 @@ export function staticPolicies(opts: StaticPolicyOptions): string[] {
         `permit(principal, action == ${actionRef(
           'task:compose_template',
         )}, resource) when { resource has allowCustomTemplates && resource.allowCustomTemplates };`,
+    );
+  }
+
+  // Claim restriction: a division or team that restricts claims lets only its members
+  // claim its tasks, whatever grant would otherwise permit it (ADR 0021). Putting
+  // people on a task (`task:manage_claims`) isn't a claim and isn't restricted.
+  if (opts.registeredActions.includes('task:assign')) {
+    policies.push(
+      `@id("static_claim_restriction")
+` +
+        `forbid(principal, action == ${actionRef('task:assign')}, resource) unless { ${ELIGIBLE} };`,
     );
   }
 

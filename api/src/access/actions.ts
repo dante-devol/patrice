@@ -152,26 +152,32 @@ export const EFFECTIVE_ADMIN_ACTIONS: readonly string[] = [
 export const ADMIN_SEED_ACTIONS: readonly string[] = ALL_ACTION_STRINGS;
 
 /**
- * The seeded Member role: see names, do work on your own tasks. Editable like any
- * role; new invitations pre-assign it.
+ * The seeded Member role: see names, work on the tasks of your divisions and teams,
+ * and run the tasks you requested. Editable like any role; new invitations pre-assign
+ * it. `own` on reading and commenting covers only tasks you requested or hold a seat
+ * on, so seeing (and claiming) the rest of your units' tasks comes from the
+ * division and team grants (ADR 0021).
  */
-export const MEMBER_SEED_GRANTS: ReadonlyArray<{ action: string; scopeKind: 'global' | 'own' | 'own_division' }> = [
+export const MEMBER_SEED_GRANTS: ReadonlyArray<{
+  action: string;
+  scopeKind: 'global' | 'own' | 'own_division' | 'own_team';
+}> = [
   // Names and structure, so the client can render people and units.
   { action: 'user:read', scopeKind: 'global' },
   { action: 'division:read', scopeKind: 'global' },
   { action: 'team:read', scopeKind: 'global' },
   { action: 'role:read', scopeKind: 'global' },
   { action: 'request_template:read', scopeKind: 'global' },
-  // Tasks you can see: your own, ones you hold a seat on, and ones you could claim.
-  { action: 'task:read', scopeKind: 'own' },
-  { action: 'message:read', scopeKind: 'own' },
-  { action: 'submission:read', scopeKind: 'own' },
-  { action: 'attachment:read', scopeKind: 'own' },
+  // Tasks you can see: ones you're involved in, and every task of your divisions and teams.
+  ...['task:read', 'message:read', 'submission:read', 'attachment:read', 'message:create'].flatMap((action) =>
+    (['own', 'own_division', 'own_team'] as const).map((scopeKind) => ({ action, scopeKind })),
+  ),
+  // Claiming in your divisions and teams (a unit that restricts claims still needs you as a member).
+  { action: 'task:assign', scopeKind: 'own_division' },
+  { action: 'task:assign', scopeKind: 'own_team' },
   // Doing the work.
-  { action: 'task:assign', scopeKind: 'own' },
   { action: 'task:leave', scopeKind: 'own' },
   { action: 'task:submit', scopeKind: 'own' },
-  { action: 'message:create', scopeKind: 'own' },
   { action: 'message:update', scopeKind: 'own' },
   { action: 'message:delete', scopeKind: 'own' },
   { action: 'attachment:create', scopeKind: 'own' },

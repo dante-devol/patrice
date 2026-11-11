@@ -28,7 +28,8 @@ describe('Upgrade seeding', () => {
     expect(members).toHaveLength(1);
     const settings = await prisma.systemSettings.findFirstOrThrow();
     expect(settings.memberRoleId).toBe(members[0].id);
-    expect(await prisma.grant.count({ where: { roleId: members[0].id, action: 'task:read' } })).toBe(1);
+    // Seen where involved, and across the holder's divisions and teams (ADR 0021).
+    expect(await prisma.grant.count({ where: { roleId: members[0].id, action: 'task:read' } })).toBe(3);
     const old = await prisma.appUser.findFirstOrThrow({ where: { email: 'old@example.com' } });
     expect(await prisma.userRole.count({ where: { userId: old.id, roleId: members[0].id } })).toBe(1);
   });

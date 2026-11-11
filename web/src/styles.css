@@ -283,8 +283,9 @@ code {
   pointer-events: none;
   transition: opacity 0.12s;
 }
+.hint--start::after { right: auto; left: 0; }
 .hint:hover::after { opacity: 1; transition-delay: 0.3s; }
-.hint:focus-within::after { opacity: 1; }
+.hint:has(:focus-visible)::after { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .hint::after { transition: none; } }
 
 /* =========================================================================

@@ -103,21 +103,37 @@ describe('Access: membership, visibility, floor, seeded roles, Discord gate', ()
       expect(self.email).toBe('member@example.com');
     });
 
-    it("a restricted division's tasks are invisible to non-members", async () => {
+    it("Member sees its divisions' tasks; someone in no division sees none of them (ADR 0021)", async () => {
       const secretTask = await makeTask(secretId, 'Hidden');
       const openTask = await makeTask(openId, 'Visible');
 
       const outsiderList = await http().get('/api/tasks').set('Cookie', outsider.session.cookies);
       const outsiderIds = outsiderList.body.items.map((t: { id: string }) => t.id);
-      expect(outsiderIds).toContain(openTask);
+      expect(outsiderIds).not.toContain(openTask);
       expect(outsiderIds).not.toContain(secretTask);
+      expect((await http().get(`/api/tasks/${openTask}`).set('Cookie', outsider.session.cookies)).status).toBe(403);
+      expect(
+        (await as(outsider.session, http().post(`/api/tasks/${openTask}/messages`)).send({ body: 'hi' })).status,
+      ).toBe(403);
       expect((await http().get(`/api/tasks/${secretTask}`).set('Cookie', outsider.session.cookies)).status).toBe(403);
       expect(
         (await http().get(`/api/tasks/${secretTask}/messages`).set('Cookie', outsider.session.cookies)).status,
       ).toBe(403);
 
       const memberList = await http().get('/api/tasks').set('Cookie', member.session.cookies);
-      expect(memberList.body.items.map((t: { id: string }) => t.id)).toContain(secretTask);
+      const memberIds = memberList.body.items.map((t: { id: string }) => t.id);
+      expect(memberIds).toContain(secretTask);
+      expect(memberIds).toContain(openTask);
+    });
+
+    it('a restricted division refuses claims from non-members, even with an org-wide claim grant', async () => {
+      const secretTask = await makeTask(secretId, 'Members only');
+      const role = await auth(http().post('/api/roles')).send({ name: 'Claims anywhere' });
+      await auth(http().post('/api/grants')).send({ roleId: role.body.id, action: 'task:assign', scopeKind: 'global' });
+      await auth(http().post(`/api/users/${outsider.userId}/roles`)).send({ roleId: role.body.id });
+      expect((await as(outsider.session, http().post(`/api/tasks/${secretTask}/claim`))).status).toBe(403);
+      const openTask = await makeTask(openId, 'Anyone');
+      expect((await as(outsider.session, http().post(`/api/tasks/${openTask}/claim`))).status).toBe(200);
     });
 
     it('each task carries what the caller may do with it', async () => {

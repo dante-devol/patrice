@@ -378,7 +378,7 @@ const run = async () => {
     await grant(adminRoleId, action, 'global');
   }
   const memberRoleId = await ensureRole('Member');
-  await grant(memberRoleId, 'task:assign', 'own');
+  await grant(memberRoleId, 'task:assign', 'global');
   await grant(memberRoleId, 'task:submit', 'own');
   log(c.ok('  grants in place (admin global · Member self-claim/submit)'));
 

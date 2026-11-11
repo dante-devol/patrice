@@ -46,17 +46,8 @@ export class VisibilityService {
           or.push({ teamId: { in: myTeams } });
           break;
         case 'own':
-          // Requested it, holds a seat, or could claim it (restrictions respected).
-          or.push(
-            { requesterUserId: userId },
-            { claimants: { some: { userId, leftAt: null } } },
-            {
-              AND: [
-                { OR: [{ division: { restrictClaims: false } }, { divisionId: { in: myDivisions } }] },
-                { OR: [{ teamId: null }, { team: { restrictClaims: false } }, { teamId: { in: myTeams } }] },
-              ],
-            },
-          );
+          // Involved in it: requested it, or holds a seat.
+          or.push({ requesterUserId: userId }, { claimants: { some: { userId, leftAt: null } } });
           break;
         default:
           break;

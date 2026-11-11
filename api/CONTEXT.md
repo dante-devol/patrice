@@ -142,7 +142,7 @@ Which root module a process boots, chosen by `PROCESS_ROLE` in `main.ts`: `ApiMo
 _Avoid_: Process Type, Mode, Web/Worker Dyno
 
 **Claim Eligibility AND-Composition**:
-The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: if either is true the claimant must be a member of that unit. Evaluated in Cedar for `task:assign` at `own`; reads `principal.memberDivisions` and `principal.memberTeams`.
+The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: if either is true the claimant must be a member of that unit. Enforced by a static Cedar forbid on `task:assign` (`static_claim_restriction`), whatever grant permits the claim (ADR 0021); reads `principal.memberDivisions` and `principal.memberTeams`.
 _Avoid_: Membership Check, Eligibility Rule
 
 ### Integrations & external sync

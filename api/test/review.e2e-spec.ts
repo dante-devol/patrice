@@ -51,7 +51,7 @@ describe('Review lifecycle', () => {
     const claimerRole = await auth(http().post('/api/roles')).send({ name: 'Claimer' });
     const claimerRoleId = claimerRole.body.id;
     for (const action of ['task:assign', 'task:submit']) {
-      await auth(http().post('/api/grants')).send({ roleId: claimerRoleId, action, scopeKind: 'own' });
+      await auth(http().post('/api/grants')).send({ roleId: claimerRoleId, action, scopeKind: action === 'task:assign' ? 'global' : 'own' });
     }
     claimer = await inviteAndAccept(booted, admin, { email: 'c@example.com', intendedRoleIds: [claimerRoleId] });
     other = await inviteAndAccept(booted, admin, { email: 'o@example.com', intendedRoleIds: [claimerRoleId] });

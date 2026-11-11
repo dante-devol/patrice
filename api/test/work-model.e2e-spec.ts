@@ -86,6 +86,10 @@ describe('Work model', () => {
     });
     ana = await inviteAndAccept(booted, admin, { email: 'ana@example.com', intendedRoleIds: [memberRoleId] });
     ben = await inviteAndAccept(booted, admin, { email: 'ben@example.com', intendedRoleIds: [memberRoleId] });
+    // Member claims and sees tasks in its own divisions (ADR 0021).
+    for (const u of [ana, ben]) {
+      await auth(http().post(`/api/divisions/${divisionId}/members`)).send({ userId: u.userId });
+    }
   });
 
   afterAll(async () => {

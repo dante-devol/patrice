@@ -22,14 +22,8 @@ describe('grantToPolicy — task scopes', () => {
     ...over,
   });
 
-  it('projects task:assign @ own as the eligibility clause and it validates', () => {
-    const policy = grantToPolicy(
-      baseGrant({ action: 'task:assign', scopeKind: 'own' }),
-    );
-    expect(policy).toContain('memberDivisions');
-    expect(policy).toContain('divisionRestrictsClaims');
-    expect(engine.parseErrors(policy)).toEqual([]);
-    expect(engine.validationErrors(policy)).toEqual([]);
+  it('offers no `own` for claiming (task:assign)', () => {
+    expect(supportsOwnScope('task:assign')).toBe(false);
   });
 
   it('projects task:manage_claims @ own as a requester-ownership clause', () => {
@@ -51,12 +45,13 @@ describe('grantToPolicy — task scopes', () => {
     expect(engine.validationErrors(policy)).toEqual([]);
   });
 
-  it('projects message:create @ own as "can see the task"', () => {
+  it('projects message:create @ own as "requested it or holds a seat"', () => {
     const policy = grantToPolicy(
       baseGrant({ action: 'message:create', scopeKind: 'own' }),
     );
     expect(policy).toContain('resource.requester == principal');
     expect(policy).toContain('resource.claimants.contains(principal)');
+    expect(policy).not.toContain('RestrictsClaims');
     expect(engine.validationErrors(policy)).toEqual([]);
   });
 
@@ -91,6 +86,78 @@ describe('grantToPolicy — task scopes', () => {
     );
     expect(policy).toContain('resource.requester == principal');
     expect(engine.validationErrors(policy)).toEqual([]);
+  });
+});
+
+/**
+ * ADR 0021: `own` on reading means requested-or-seated, never "could claim", and a
+ * unit that restricts claims forbids claiming to non-members whatever the grant.
+ */
+describe('own reads and the claim restriction', () => {
+  const engine = new CedarEngine();
+  const NS = 'Patrice';
+  const ROLE = '00000000-0000-0000-0000-000000000001';
+  const WRITING = '00000000-0000-0000-0000-0000000000a1';
+  const ref = (type: string, id: string) => ({ __entity: { type: `${NS}::${type}`, id } });
+  const role = { type: `${NS}::Role`, id: ROLE };
+  const statics = staticPolicies({ selfReviewAllowed: true, registeredActions: ALL_ACTION_STRINGS, discordGatedActions: [] });
+  const restriction = statics.find((p) => p.includes('static_claim_restriction'))!;
+
+  const decide = (
+    policies: string[],
+    action: string,
+    task: { requester?: string; claimants?: string[]; restricts?: boolean },
+    memberDivisions: string[] = [],
+  ) => {
+    const principal = {
+      uid: { type: `${NS}::User`, id: 'u1' },
+      attrs: { memberDivisions: memberDivisions.map((d) => ref('Division', d)), memberTeams: [] },
+      parents: [role],
+    };
+    const resource = {
+      uid: { type: `${NS}::Task`, id: 'task1' },
+      attrs: {
+        division: ref('Division', WRITING),
+        divisionRestrictsClaims: task.restricts ?? false,
+        requester: ref('User', task.requester ?? 'someone-else'),
+        claimants: (task.claimants ?? []).map((u) => ref('User', u)),
+      },
+      parents: [],
+    };
+    return engine.authorize({
+      principal: principal.uid,
+      action: { type: `${NS}::Action`, id: action },
+      resource: resource.uid,
+      entities: [principal, resource, { uid: role, attrs: {}, parents: [] }],
+      policiesText: policies.join(' '),
+    });
+  };
+  const g = (action: string, scopeKind: ProjectableGrant['scopeKind']): ProjectableGrant => ({
+    id: 'g1', roleId: ROLE, action, effect: 'permit', scopeKind, scopeDivisionId: null, scopeTeamId: null, scopeRoleId: null,
+  });
+
+  it('the restriction forbid validates', () => {
+    expect(engine.validationErrors(restriction)).toEqual([]);
+  });
+
+  it('own task:read covers tasks you requested or hold a seat on, not other open tasks', () => {
+    const own = [grantToPolicy(g('task:read', 'own'))];
+    expect(decide(own, 'task:read', {})).toBe(false);
+    expect(decide(own, 'task:read', { requester: 'u1' })).toBe(true);
+    expect(decide(own, 'task:read', { claimants: ['u1'] })).toBe(true);
+  });
+
+  it('own_division task:read covers your divisions only', () => {
+    const p = [grantToPolicy(g('task:read', 'own_division'))];
+    expect(decide(p, 'task:read', {}, [])).toBe(false);
+    expect(decide(p, 'task:read', {}, [WRITING])).toBe(true);
+  });
+
+  it('a restricted division blocks claiming by non-members, even with an org-wide grant', () => {
+    const p = [grantToPolicy(g('task:assign', 'global')), restriction];
+    expect(decide(p, 'task:assign', {})).toBe(true);
+    expect(decide(p, 'task:assign', { restricts: true })).toBe(false);
+    expect(decide(p, 'task:assign', { restricts: true }, [WRITING])).toBe(true);
   });
 });
 

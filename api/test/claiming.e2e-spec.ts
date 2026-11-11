@@ -57,7 +57,7 @@ describe('Claiming, openings, requester', () => {
     // A standalone role that lets a holder self-claim anywhere eligibility permits.
     const claimer = await auth(http().post('/api/roles')).send({ name: 'Claimer' });
     const claimerId = claimer.body.id;
-    await auth(http().post('/api/grants')).send({ roleId: claimerId, action: 'task:assign', scopeKind: 'own' });
+    await auth(http().post('/api/grants')).send({ roleId: claimerId, action: 'task:assign', scopeKind: 'global' });
     await auth(http().post('/api/grants')).send({ roleId: claimerId, action: 'task:leave', scopeKind: 'own' });
 
     userA = await inviteAndAccept(booted, admin, { email: 'a@example.com', intendedRoleIds: [claimerId] });

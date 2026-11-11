@@ -35,12 +35,12 @@ described in [`docs/architecture.md`](docs/architecture.md). The action vocabula
 | **Action** | A closed `resource:verb` string from the fixed vocabulary in `§2.3`; admins grant actions but cannot invent them. | Permission, Capability |
 | **Grant** | A configuration row attaching an Action to a Role at a Scope Shape — the *source* the engine projects, not the enforcement. | Permission, Policy |
 | **Scope Shape** | One of `grant.scope_kind`: `global`, `specific_division`, `specific_team`, `own_division`, `own_team`, `own`, `role`. | Scope Type, Permission Scope |
-| **Own** | What an `own` grant checks for its action: an owner relation (`requester`, `sender`, `uploader`, `owner`), `visible` (can see the task), `eligible` (could claim it), `seated`, or `self`. | Owner Templates, Ownership Policies |
+| **Own** | What an `own` grant checks for its action: an owner relation (`requester`, `sender`, `uploader`, `owner`), `involved` (requested it or holds a seat), `seated`, or `self`. Never "could claim it": seeing and claiming other tasks takes a division, team or assigned grant (ADR 0021). | Owner Templates, Ownership Policies |
 | **Cedar Policy** | A projected rule the Cedar engine evaluates (the matrix compiled to policy text); distinct from a Grant, which is its source row. | Permission, Rule |
 | **Verdict** | The engine's per-request permit/deny decision over cached inputs — the *output*, never a stored row. | Permission, Access |
 | **Baseline Self-Access** | The static Cedar permit for `user:update` on `self == principal`, so a retired/inert role can never lock a User out of their own account. | Self Permission, Own Profile Access |
 | **Admin Floor** | The invariant that at least one Effective Admin remains; any change that could remove authority runs under it and is refused with `LAST_ADMIN`. | Last-admin check |
-| **Claim Eligibility** | The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: a restricted unit admits only its members. Evaluated in Cedar for `task:assign` at `own`. | Membership Check, Eligibility Rule |
+| **Claim Eligibility** | The rule that `division.restrict_claims` and `team.restrict_claims` are AND-composed: a restricted unit admits only its members. A static Cedar forbid on `task:assign`, so it holds whatever grant permits the claim (ADR 0021). | Membership Check, Eligibility Rule |
 
 ## Tasks & request templates
 

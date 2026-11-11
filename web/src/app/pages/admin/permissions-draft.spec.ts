@@ -1,4 +1,4 @@
-import { Grant } from '../../core/api.types';
+import { ActionInfo, Grant } from '../../core/api.types';
 import { changedCells, diffDrafts, draftsFrom, isIncomplete, withScope } from './permissions-draft';
 import { groupActions, scopeHint, scopeLabel } from './permission-labels';
 
@@ -93,8 +93,14 @@ describe('permission labels', () => {
   const settings = { action: 'config:update', resourceType: 'Organization', scopes: ['global'] as const, own: null };
 
   it('names own by what it checks', () => {
-    expect(scopeLabel('own', { ...review, scopes: [...review.scopes] })).toBe('Own requests');
+    expect(scopeLabel('own', { ...review, scopes: [...review.scopes] })).toBe('Tasks they requested');
     expect(scopeHint('own', { ...review, scopes: [...review.scopes] })).toBe('Only tasks the person requested.');
+  });
+
+  it("explains own on reads as tasks they're part of, never tasks they could claim", () => {
+    const read: ActionInfo = { action: 'task:read', resourceType: 'Task', scopes: ['global', 'own'], own: 'involved' };
+    expect(scopeLabel('own', read)).toBe("Tasks they're part of");
+    expect(scopeHint('own', read)).toBe('Only tasks the person requested or holds a seat on.');
   });
 
   it('treats a global-only action as a plain on/off grant', () => {
@@ -103,7 +109,7 @@ describe('permission labels', () => {
 
   it('names the picked target in the hint', () => {
     expect(scopeHint('specific_division', { ...review, scopes: [...review.scopes] }, 'Art')).toBe(
-      'Only tasks in Art, whether or not the person belongs to it.',
+      'Only tasks in Art, whether or not the person is a member.',
     );
   });
 

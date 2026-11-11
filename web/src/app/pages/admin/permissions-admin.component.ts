@@ -18,9 +18,12 @@ import { errorMessage } from '../../core/errors';
 import { ToastService } from '../../core/toast.service';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { SaveBarComponent } from './save-bar.component';
+import { ScopeOption, ScopeSelectComponent } from './scope-select.component';
 import { LoadingRowsComponent } from '../../shared/loading';
 import { divisionColor, teamColor } from '../tasks/task-presentation';
 import {
+  NOT_GRANTED,
+  actionDescription,
   actionLabel,
   groupActions,
   isTargeted,
@@ -54,7 +57,7 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
   selector: 'permissions-admin',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, NgTemplateOutlet, SaveBarComponent, LoadingRowsComponent],
+  imports: [FormsModule, NgTemplateOutlet, SaveBarComponent, LoadingRowsComponent, ScopeSelectComponent],
   styles: [`
     :host { display: block; font-size: 13px; }
     .pick { font: inherit; font-size: 13px; color: var(--ink); background: var(--paper);
@@ -137,7 +140,7 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
               </button>
               @if (!isCollapsed('actions:' + g.name)) {
                 @for (a of g.actions; track a.action) {
-                  <button class="row-item" [class.is-current]="a.action === selectedAction()" (click)="selectedAction.set(a.action)">
+                  <button class="row-item" [class.is-current]="a.action === selectedAction()" [title]="describe(a.action)" (click)="selectedAction.set(a.action)">
                     <span class="min-w-0 truncate">{{ label(a.action) }}</span><span class="flex-1"></span>
                     @if (dirtyActions().has(a.action)) { <span class="dot" aria-label="Unsaved changes"></span> }
                     <span class="text-ink-soft font-normal">{{ holderCount(a.action) }}</span>
@@ -178,7 +181,7 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
                 </button>
                 @if (!isCollapsed('grants:' + g.name)) {
                   @for (a of g.actions; track a.action) {
-                    <ng-container *ngTemplateOutlet="grantRow; context: { roleId: r.id, a: a, title: label(a.action), sub: a.action }" />
+                    <ng-container *ngTemplateOutlet="grantRow; context: { roleId: r.id, a: a, title: label(a.action), sub: a.action, desc: describe(a.action) }" />
                   }
                 }
               } @empty {
@@ -194,7 +197,8 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
             <div class="sheet">
               <div class="px-3 py-2.5">
                 <div class="font-display font-bold text-[18px] leading-tight">{{ label(a.action) }}</div>
-                <div class="text-ink-soft mt-0.5">{{ a.action }}, held by {{ holderCount(a.action) }} of {{ activeRoles().length }} roles</div>
+                <p class="mt-1 mb-0 max-w-[60ch]">{{ describe(a.action) }}</p>
+                <div class="text-ink-soft mt-1">{{ a.action }}, held by {{ holderCount(a.action) }} of {{ activeRoles().length }} roles</div>
               </div>
               @for (r of holders(); track r.id) {
                 <ng-container *ngTemplateOutlet="grantRow; context: { roleId: r.id, a: a, title: r.name, sub: kindLabel(r) }" />
@@ -217,12 +221,17 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
     </div>
 
     <!-- One role × action: its grants (0..n), each a scope picker plus a target picker. -->
-    <ng-template #grantRow let-roleId="roleId" let-a="a" let-title="title" let-sub="sub">
+    <ng-template #grantRow let-roleId="roleId" let-a="a" let-title="title" let-sub="sub" let-desc="desc">
       @let ds = cellDrafts(roleId, a.action);
       @let changed = isChanged(roleId, a.action);
       <div class="perm-row" [class.perm-row--changed]="changed">
         <div class="min-w-0 flex-1 pt-1">
-          <div>{{ title }} <span class="text-ink-soft">{{ sub }}</span></div>
+          <div>
+            @if (desc) {
+              <span class="hint hint--start" [attr.data-hint]="desc" tabindex="0">{{ title }}</span>
+            } @else { {{ title }} }
+            <span class="text-ink-soft ml-1">{{ sub }}</span>
+          </div>
           @if (changed) { <div class="was">{{ savedSummary(roleId, a) }}</div> }
         </div>
         <div class="flex flex-col items-end gap-1.5">
@@ -233,14 +242,8 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
                         title="Add another scope">+</button>
               }
               @if (d.effect === 'forbid') { <span class="text-rust" title="This grant denies the action instead of allowing it.">Denies</span> }
-              <span class="hint" [attr.data-hint]="hint(d, a)">
-                <select class="pick" [class.pick--changed]="changed" [attr.aria-label]="title + ' scope'"
-                        [attr.aria-description]="hint(d, a)"
-                        [ngModel]="d.scopeKind" (ngModelChange)="setScope(d, $event)">
-                  <option value="">Not granted</option>
-                  @for (s of scopesFor(roleId, a); track s) { <option [value]="s" [title]="scopeHintFor(s, a)">{{ scopeName(s, a) }}</option> }
-                </select>
-              </span>
+              <scope-select [options]="scopeOptions(roleId, a)" [value]="d.scopeKind" [hint]="hint(d, a)"
+                            [changed]="changed" [label]="title + ': scope'" (valueChange)="setScope(d, $any($event))" />
               @if (d.scopeKind === 'specific_division') {
                 <select class="pick" [class.pick--unset]="!d.scopeDivisionId" aria-label="Division"
                         [ngModel]="d.scopeDivisionId ?? ''" (ngModelChange)="setTarget(d, 'scopeDivisionId', $event)">
@@ -262,13 +265,8 @@ const ROLE_KINDS: { kind: 'org' | 'unit'; name: string; label: string }[] = [
               }
             </div>
           } @empty {
-            <span class="hint" data-hint="This role can't do this. Pick a scope to grant it.">
-              <select class="pick pick--unset" [class.pick--changed]="changed" [attr.aria-label]="title + ' scope'"
-                      [ngModel]="''" (ngModelChange)="add(roleId, a, $event)">
-                <option value="">Not granted</option>
-                @for (s of scopesFor(roleId, a); track s) { <option [value]="s" [title]="scopeHintFor(s, a)">{{ scopeName(s, a) }}</option> }
-              </select>
-            </span>
+            <scope-select [options]="scopeOptions(roleId, a)" value="" [unset]="true" [changed]="changed"
+                          [label]="title + ': scope'" (valueChange)="add(roleId, a, $any($event))" />
           }
         </div>
       </div>
@@ -437,11 +435,15 @@ export class PermissionsAdminComponent implements OnDestroy {
   label(action: string): string {
     return actionLabel(action);
   }
-  scopeName(s: ScopeKind, a: ActionInfo): string {
-    return scopeLabel(s, a);
+  describe(action: string): string {
+    return actionDescription(action);
   }
-  scopeHintFor(s: ScopeKind, a: ActionInfo): string {
-    return scopeHint(s, a);
+  /** "Not granted" plus the scopes this role may use, each named and explained. */
+  scopeOptions(roleId: string, a: ActionInfo): ScopeOption[] {
+    return [
+      { value: '', ...NOT_GRANTED },
+      ...this.scopesFor(roleId, a).map((s) => ({ value: s, name: scopeLabel(s, a), description: scopeHint(s, a) })),
+    ];
   }
   hint(d: DraftGrant, a: ActionInfo): string {
     return scopeHint(d.scopeKind, a, this.targetName(d) ?? undefined);

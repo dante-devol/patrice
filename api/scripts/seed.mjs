@@ -596,7 +596,9 @@ const run = async () => {
   // Fresh installs seed a Member role with these (ADR 0016); older ones may not have it.
   const memberRoleId = await ensureRole('Member');
   for (const [action, scope] of [
-    ['task:read', 'own'], ['task:assign', 'own'], ['task:submit', 'own'], ['message:create', 'own'],
+    ['task:read', 'own'], ['task:read', 'own_division'], ['task:read', 'own_team'],
+    ['message:create', 'own'], ['message:create', 'own_division'], ['message:create', 'own_team'],
+    ['task:assign', 'own_division'], ['task:assign', 'own_team'], ['task:submit', 'own'],
     ['task:create', 'own_division'], ['task:review', 'own'], ['task:complete', 'own'],
     ['task:retire', 'own'], ['task:manage_claims', 'own'],
   ]) {
