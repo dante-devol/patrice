@@ -68,8 +68,8 @@ describe('Unit roles', () => {
     projectLeadId = lead.id;
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
     artId = (await auth(http().post('/api/divisions')).send({ name: 'Art' })).body.id;
-    draftsTeamId = (await auth(http().post('/api/teams')).send({ divisionId: writingId, name: 'Drafts' })).body.id;
-    editsTeamId = (await auth(http().post('/api/teams')).send({ divisionId: writingId, name: 'Edits' })).body.id;
+    draftsTeamId = (await auth(http().post('/api/teams')).send({ divisionIds: [writingId], name: 'Drafts' })).body.id;
+    editsTeamId = (await auth(http().post('/api/teams')).send({ divisionIds: [writingId], name: 'Edits' })).body.id;
     for (const d of [writingId, artId]) {
       await auth(http().post(`/api/divisions/${d}/request-templates`)).send({
         name: 'Default',
@@ -312,8 +312,8 @@ describe('Unit roles', () => {
     const res = await as(session)(http().get('/api/me/units'));
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
-      { unitType: 'division', unitId: artId, name: 'Art', divisionId: null, member: true, roles: [] },
-      { unitType: 'team', unitId: draftsTeamId, name: 'Drafts', divisionId: writingId, member: true, roles: [{ id: projectLeadId, name: 'Project lead' }] },
+      { unitType: 'division', unitId: artId, name: 'Art', divisionIds: [], allDivisions: false, member: true, roles: [] },
+      { unitType: 'team', unitId: draftsTeamId, name: 'Drafts', divisionIds: [writingId], allDivisions: false, member: true, roles: [{ id: projectLeadId, name: 'Project lead' }] },
     ]);
   });
 });

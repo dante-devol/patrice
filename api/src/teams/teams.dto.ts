@@ -1,27 +1,48 @@
 import { z } from 'zod';
 
 /**
- * Team DTOs. A team belongs to one division, chosen at creation and fixed after.
- * PATCH accepts `name` and `restrictClaims` only; `.strict()` rejects anything else.
+ * Team DTOs. A team supports a set of divisions: `allDivisions: true` (every division,
+ * including ones created later), or `divisionIds` (at least one). Give exactly one.
+ * PATCH may change the set; `.strict()` rejects anything else.
  */
 const name = z.string().trim().min(1, 'Team name is required').max(120);
+const divisionIds = z.array(z.string().uuid()).min(1, 'Choose at least one division').max(200);
+
+const oneDivisionChoice = <T extends { divisionIds?: string[]; allDivisions?: boolean }>(t: T) =>
+  !(t.allDivisions === true && t.divisionIds !== undefined);
+const choiceMessage = { message: 'Give divisionIds or allDivisions: true, not both', path: ['divisionIds'] };
 
 export const createTeamSchema = z
   .object({
-    divisionId: z.string().uuid(),
+    divisionIds: divisionIds.optional(),
+    allDivisions: z.boolean().optional(),
     name,
     restrictClaims: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(oneDivisionChoice, choiceMessage)
+  .refine((t) => t.allDivisions === true || t.divisionIds !== undefined, {
+    message: 'Choose at least one division, or all divisions',
+    path: ['divisionIds'],
+  });
 
 export const updateTeamSchema = z
   .object({
     name: name.optional(),
     restrictClaims: z.boolean().optional(),
+    /** Replaces the team's division list (and turns off allDivisions). */
+    divisionIds: divisionIds.optional(),
+    /** True: support every division. False needs divisionIds alongside it. */
+    allDivisions: z.boolean().optional(),
     // Optional optimistic-lock check: the version the client last read.
     version: z.number().int().nonnegative().optional(),
   })
-  .strict();
+  .strict()
+  .refine(oneDivisionChoice, choiceMessage)
+  .refine((t) => t.allDivisions !== false || t.divisionIds !== undefined, {
+    message: 'Turning off all divisions needs the divisions to keep',
+    path: ['divisionIds'],
+  });
 
 export type CreateTeamDto = z.infer<typeof createTeamSchema>;
 export type UpdateTeamDto = z.infer<typeof updateTeamSchema>;

@@ -20,12 +20,12 @@ described in [`docs/architecture.md`](docs/architecture.md). The action vocabula
 | --- | --- | --- |
 | **Organization** | The singleton owner of all data and configuration in a deployment. | Tenant, Workspace, Account |
 | **Role** | The authorization atom: it holds Grants, and a User may hold many. An **Org Role** is held org-wide; a **Unit Role** is held at a division or team. Belonging to a unit is a Membership. | Group, Permission Set (Discord roles are external groups, not Roles) |
-| **Unit Role** | A Role assigned to a User *at* a Division or Team (a Unit Role Assignment). Its grants use the `assigned` scope and apply only there; a division assignment covers its teams. Project lead is the seeded one. | Project Role, Scoped Role, Lead Role |
+| **Unit Role** | A Role assigned to a User *at* a Division or Team (a Unit Role Assignment). Its grants use the `assigned` scope and apply only there; a division assignment covers its single-division teams. Project lead is the seeded one. | Project Role, Scoped Role, Lead Role |
 | **Unit Role Assignment** | One User holding one Unit Role at one Division or Team. Assigning adds Membership if missing; unassigning keeps it. | Membership (that grants nothing), Appointment |
 | **Assignable by leads** | A Unit Role flag: people who hold `*:assign_roles` through a unit role may assign it. Admins can assign any Unit Role. | Delegable, Lead-grantable |
 | **Membership** | A User's belonging to a Division or Team (a `membership` row). It grants nothing by itself; `own_division`/`own_team` scopes and claim restrictions read it. | Assignment, Enrollment, Inherent Role (gone) |
 | **Division** | The core axis of *labor* (Writing, Art, Testing…); keeps a Template Library, may allow Custom Templates, and is a permission scope. | Department, Category |
-| **Team** | A grouping inside exactly one Division (e.g. "USA") that *may* restrict who claims its tasks. | Squad, Subdivision, Group |
+| **Team** | A grouping that **supports** one Division, several, or all of them (e.g. "USA" for Writing and Art) and *may* restrict who claims its tasks. Division authority reaches it only while it supports exactly that one Division. | Squad, Subdivision, Group |
 | **Integration Connection** | A configured link from the Organization to one external provider workspace (Discord first; a Discord workspace is a **Guild**). | Integration (the machinery), Plugin |
 
 ## Authorization
@@ -106,7 +106,8 @@ described in [`docs/architecture.md`](docs/architecture.md). The action vocabula
 ## Relationships
 
 - An **Organization** owns many **Roles**, **Divisions**, **Teams**, and **Users** (one Organization per deployment).
-- A **Team** belongs to exactly one **Division**; a **User** may hold **Memberships** in either, independently.
+- A **Team** supports one or more **Divisions**, or all of them (including ones created later); a **User** may hold **Memberships** in either, independently.
+- A **Task**'s **Team** must support the **Task**'s **Division**.
 - A **User** holds zero or more **Roles**; a **Grant** attaches one **Action** to one **Role** at one **Scope Shape**.
 - A **Division** keeps a **Template Library**; a **Task** snapshots one template, or **Custom** questions, as its **Task Questions**.
 - A **Task** belongs to exactly one **Division**, optionally one **Team**, and has one **Requester** and **Claimants** in its **Seats**.

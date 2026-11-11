@@ -8,6 +8,14 @@ import {
 } from '../pages/tasks/task-presentation';
 
 
+/** The part of a team that says which divisions it serves. */
+export type TeamDivisions = Pick<Team, 'allDivisions' | 'divisionIds'>;
+
+/** Whether a team supports a division: an all-division team supports every one. */
+export function supports(team: TeamDivisions, divisionId: string): boolean {
+  return team.allDivisions || team.divisionIds.includes(divisionId);
+}
+
 /**
  * Names for divisions, teams and users, from the read endpoints every member may
  * call (`division:read`, `team:read`, `user:read`). Loaded once and cached for the
@@ -89,6 +97,25 @@ export class LookupStore {
   divisionColor(id: string): string {
     const d = this.divisionList().find((div) => div.id === id);
     return d ? computeDivColor(d.name) : '#a7aba3';
+  }
+
+  /**
+   * The divisions a team serves, for labels: "all divisions", or their names joined
+   * ("Writing, Art"). Retired or unreadable divisions keep their "Unknown" name.
+   */
+  teamDivisionsLabel(team: TeamDivisions): string {
+    if (team.allDivisions) return 'all divisions';
+    return team.divisionIds
+      .map((id) => this.divisionName(id))
+      .sort((a, b) => a.localeCompare(b))
+      .join(', ');
+  }
+
+  /** The active teams that support a division, by name. */
+  teamsSupporting(divisionId: string): Team[] {
+    return this.teamList()
+      .filter((t) => t.lifecycleState === 'active' && supports(t, divisionId))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /** Team color, computed from its name (the API stores no colors). */

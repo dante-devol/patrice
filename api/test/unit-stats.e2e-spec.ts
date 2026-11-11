@@ -48,8 +48,8 @@ describe('Unit stats', () => {
     prisma = new PrismaClient();
 
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    draftsTeamId = (await auth(http().post('/api/teams')).send({ divisionId: writingId, name: 'Drafts' })).body.id;
-    editsTeamId = (await auth(http().post('/api/teams')).send({ divisionId: writingId, name: 'Edits' })).body.id;
+    draftsTeamId = (await auth(http().post('/api/teams')).send({ divisionIds: [writingId], name: 'Drafts' })).body.id;
+    editsTeamId = (await auth(http().post('/api/teams')).send({ divisionIds: [writingId], name: 'Edits' })).body.id;
     await auth(http().post(`/api/divisions/${writingId}/request-templates`)).send({
       name: 'Default',
       isDefault: true,

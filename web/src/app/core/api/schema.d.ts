@@ -2094,7 +2094,7 @@ export interface components {
          * @description Every error code the API returns; see the catalog for statuses.
          * @enum {string}
          */
-        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ASSIGNMENT_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_MEMBERSHIP" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "NOT_A_UNIT_ROLE" | "UNIT_ROLE_NOT_GRANTABLE" | "UNIT_ROLE_SCOPE" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
+        ErrorCode: "UNAUTHENTICATED" | "INVALID_CREDENTIALS" | "DISCORD_NO_ACCOUNT" | "FORBIDDEN" | "CSRF_FAILED" | "EMAIL_NOT_VERIFIED" | "INVALID_PASSCODE" | "EMAIL_MISMATCH" | "ROLE_NOT_GRANTABLE" | "NOT_FOUND" | "RECORD_NOT_FOUND" | "ASSIGNMENT_NOT_FOUND" | "ATTACHMENT_NOT_FOUND" | "CLAIMANT_NOT_FOUND" | "CONNECTION_NOT_FOUND" | "DIVISION_NOT_FOUND" | "GRANT_NOT_FOUND" | "INVITE_NOT_FOUND" | "MAPPING_NOT_FOUND" | "MESSAGE_NOT_FOUND" | "PARENT_NOT_FOUND" | "REQUEST_TEMPLATE_NOT_FOUND" | "ROLE_NOT_FOUND" | "SESSION_NOT_FOUND" | "SUBMISSION_NOT_FOUND" | "TASK_NOT_FOUND" | "TEAM_NOT_FOUND" | "USER_NOT_FOUND" | "CONFLICT" | "ALREADY_EXISTS" | "REFERENCE_CONFLICT" | "STALE_GRANT" | "STALE_MEMBERSHIP" | "STALE_VERSION" | "ALREADY_CLAIMED" | "ALREADY_RETIRED" | "ALREADY_SUBMITTED" | "CLAIMS_CLOSED" | "DISCORD_ALREADY_LINKED" | "IDENTITY_TAKEN" | "PROVIDER_ALREADY_CONNECTED" | "DIVISION_RETIRED" | "DIVISION_SOLE_TEAM_DIVISION" | "DUPLICATE_CONNECTION" | "DUPLICATE_MAPPING" | "EMAIL_TAKEN" | "INVALID_OPENINGS" | "INVALID_TRANSITION" | "INVITE_RACE_LOST" | "LAST_ADMIN" | "LAST_AUTH_METHOD" | "MESSAGE_RETIRED" | "NOT_A_MEMBER" | "NOT_CLAIMED" | "NOT_REVIVABLE" | "NO_OPENINGS" | "OPENINGS_LOCKED" | "REQUEST_TEMPLATE_LOCKED" | "TEMPLATE_NAME_TAKEN" | "QUESTION_HAS_ANSWERS" | "SUBMITTED_CANNOT_LEAVE" | "TASK_COMPLETED" | "ALREADY_COMPLETED" | "STALE_SUBMISSION" | "SUBMISSION_RETIRED" | "TASK_RETIRED" | "TEAM_RETIRED" | "TEAM_DIVISION_IN_USE" | "USER_RETIRED" | "GONE" | "INVITE_UNAVAILABLE" | "TOKEN_INVALID" | "VALIDATION_FAILED" | "UNPROCESSABLE" | "DISCORD_NOT_CONFIGURED" | "FILE_TOO_LARGE" | "INVALID_SUBMISSION" | "TEMPLATE_REQUIRED" | "TEMPLATE_NOT_IN_DIVISION" | "UNKNOWN_QUESTION_ID" | "GOVERNANCE_ROLE_NOT_MAPPABLE" | "GOVERNANCE_ROLE_MAPPED" | "NO_FILE" | "TEAM_NOT_IN_DIVISION" | "NOT_LINKED" | "REPLY_TO_REPLY" | "ROLE_RETIRED" | "NOT_A_UNIT_ROLE" | "UNIT_ROLE_NOT_GRANTABLE" | "UNIT_ROLE_SCOPE" | "WRONG_PASSWORD" | "TOO_MANY_REQUESTS" | "INTERNAL" | "ERROR" | "QUEUE_UNAVAILABLE";
         ErrorBody: {
             error: {
                 code: components["schemas"]["ErrorCode"];
@@ -2152,8 +2152,8 @@ export interface components {
             /** Format: uuid */
             unitId: string;
             name: string;
-            /** Format: uuid */
-            divisionId: string | null;
+            divisionIds: string[];
+            allDivisions: boolean;
             member: boolean;
             roles: {
                 /** Format: uuid */
@@ -2443,8 +2443,8 @@ export interface components {
         Team: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            divisionId: string;
+            divisionIds: string[];
+            allDivisions: boolean;
             name: string;
             restrictClaims: boolean;
             lifecycleState: components["schemas"]["Lifecycle"];
@@ -5739,8 +5739,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
-                    /** Format: uuid */
-                    divisionId: string;
+                    divisionIds?: string[];
+                    allDivisions?: boolean;
                     name: string;
                     restrictClaims?: boolean;
                 };
@@ -5781,6 +5781,8 @@ export interface operations {
                 "application/json": {
                     name?: string;
                     restrictClaims?: boolean;
+                    divisionIds?: string[];
+                    allDivisions?: boolean;
                     version?: number;
                 };
             };

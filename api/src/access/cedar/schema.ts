@@ -41,9 +41,13 @@ export const CEDAR_SCHEMA_TEXT = `namespace Patrice {
     targetRoleAssignableByLeads?: Bool
   };
   entity Team {
-    // Self-reference, plus the team's division so division scopes cover its teams.
+    // Self-reference, plus the divisions it supports. Division scopes and division
+    // unit roles reach a team only when it lists exactly one division and isn't an
+    // all-division team; divisionCount is sent because Cedar has no set size.
     team?: Team,
-    division?: Division,
+    divisions?: Set<Division>,
+    allDivisions?: Bool,
+    divisionCount?: Long,
     restrictClaims?: Bool,
     targetRole?: Role,
     targetRoleAssignableByLeads?: Bool

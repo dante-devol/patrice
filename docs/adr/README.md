@@ -16,3 +16,4 @@ Decisions made in the redesign. ADRs 0001–0006 predate it and are in `docs/old
 - [0017 — API and worker are separate root modules](0017-api-and-worker-modules.md)
 - [0018 — Bot tokens: one key, held by the worker](0018-bot-token-custody.md)
 - [0019 — Unit roles: roles held at a division or team](0019-unit-roles.md)
+- [0020 — Teams that serve several divisions](0020-multi-division-teams.md)

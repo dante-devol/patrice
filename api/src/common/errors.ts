@@ -54,8 +54,8 @@ export class UnauthenticatedError extends CodedException {
 }
 
 export class ConflictError extends CodedException {
-  constructor(code: CodeWithStatus<409> = 'CONFLICT', message = 'Conflict') {
-    super(HttpStatus.CONFLICT, code, message);
+  constructor(code: CodeWithStatus<409> = 'CONFLICT', message = 'Conflict', details?: unknown) {
+    super(HttpStatus.CONFLICT, code, message, details);
   }
 }
 

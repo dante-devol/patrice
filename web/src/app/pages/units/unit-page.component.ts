@@ -39,9 +39,17 @@ interface LeadershipGroup {
       <div class="paper p-5 mb-6 relative overflow-hidden">
         <span class="absolute left-0 top-0 bottom-0 w-[3px]" [style.background]="spine()"></span>
         <div class="text-[13px] text-ink-soft">
-          @if (kind() === 'team' && parentDivisionId()) {
-            Team in <a [routerLink]="['/divisions', parentDivisionId()]" class="font-bold hover:underline"
-                       [style.color]="spine()">{{ lookup.divisionName(parentDivisionId()!) }}</a>
+          @if (kind() === 'team') {
+            @if (team(); as t) {
+              Team ·
+              @if (t.allDivisions) { all divisions }
+              @else {
+                @for (d of teamDivisions(); track d; let last = $last) {
+                  <a [routerLink]="['/divisions', d]" class="font-bold hover:underline"
+                     [style.color]="lookup.divisionColor(d)">{{ lookup.divisionName(d) }}</a>@if (!last) {, }
+                }
+              }
+            } @else { Team }
           } @else {
             Division
           }
@@ -148,6 +156,8 @@ interface LeadershipGroup {
         <h2 class="font-display font-bold text-[18px]">Leadership</h2>
         @if (kind() === 'team' && parentDivisionId()) {
           <span class="text-[13px] text-ink-soft">The division's leads also lead this team</span>
+        } @else if (kind() === 'team' && team()) {
+          <span class="text-[13px] text-ink-soft">Division leads don't lead a team that serves several divisions</span>
         }
       </div>
       <div class="sheet mb-2">
@@ -214,8 +224,8 @@ interface LeadershipGroup {
       @for (key of [unitKey()]; track key) {
         @if (kind() === 'division') {
           <task-list [embedded]="true" [division]="id()" [facets]="listFacets()" />
-        } @else if (parentDivisionId()) {
-          <task-list [embedded]="true" [division]="parentDivisionId()!" [team]="id()" [facets]="listFacets()" />
+        } @else {
+          <task-list [embedded]="true" [team]="id()" [facets]="listFacets()" />
         }
       }
     </div>
@@ -273,17 +283,35 @@ export class UnitPageComponent {
   pickUser = '';
   pickRole = '';
 
-  readonly parentDivisionId = computed(() =>
-    this.kind() === 'team' ? (this.lookup.teamList().find((t) => t.id === this.id())?.divisionId ?? null) : this.id(),
+  /** On a team page, the team (null until the lookup has loaded, or if it's hidden). */
+  readonly team = computed(() =>
+    this.kind() === 'team' ? (this.lookup.teamList().find((t) => t.id === this.id()) ?? null) : null,
   );
+  /** The team's divisions, by name. */
+  readonly teamDivisions = computed(() =>
+    [...(this.team()?.divisionIds ?? [])].sort((a, b) =>
+      this.lookup.divisionName(a).localeCompare(this.lookup.divisionName(b)),
+    ),
+  );
+  /**
+   * The division whose authority and color reach this unit: the division itself, or a
+   * team's only division. Null for a team that serves several divisions, or all of them.
+   */
+  readonly parentDivisionId = computed(() => {
+    if (this.kind() === 'division') return this.id();
+    const t = this.team();
+    return t && !t.allDivisions && t.divisionIds.length === 1 ? t.divisionIds[0] : null;
+  });
   readonly name = computed(() =>
     this.kind() === 'division' ? this.lookup.divisionName(this.id()) : this.lookup.teamName(this.id()),
   );
   readonly spine = computed(() => {
     const div = this.parentDivisionId();
-    return div ? this.lookup.divisionColor(div) : '#a7aba3';
+    if (div) return this.lookup.divisionColor(div);
+    return this.kind() === 'team' ? this.lookup.teamColor(this.id()) : '#a7aba3';
   });
-  readonly childTeams = computed(() => this.lookup.teamList().filter((t) => t.divisionId === this.id()));
+  /** On a division page: every team that supports the division, all-division teams included. */
+  readonly childTeams = computed(() => (this.kind() === 'division' ? this.lookup.teamsSupporting(this.id()) : []));
 
   readonly counts = computed(() => {
     const s = this.stats();

@@ -63,7 +63,7 @@ export class VisibilityService {
       }
     }
     // Unit roles: where the user holds a unit role with an `assigned` grant for the
-    // action, its unit's tasks (a division assignment covers its teams' tasks too).
+    // action, its unit's tasks (a division assignment covers every task in the division, whatever its team).
     const assigned = await this.prisma.unitRoleAssignment.findMany({
       where: {
         userId,

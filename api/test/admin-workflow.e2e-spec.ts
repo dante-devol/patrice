@@ -39,7 +39,7 @@ describe('Admin workflow', () => {
 
     adminUserId = (await http().get('/api/me').set('Cookie', admin.cookies)).body.id;
     writingId = (await auth(http().post('/api/divisions')).send({ name: 'Writing' })).body.id;
-    usaTeamId = (await auth(http().post('/api/teams')).send({ name: 'USA', divisionId: writingId })).body.id;
+    usaTeamId = (await auth(http().post('/api/teams')).send({ name: 'USA', divisionIds: [writingId] })).body.id;
     ({ userId: memberId, session: member } = await inviteAndAccept(booted, admin, { email: 'member@example.com' }));
     const adminRole = await prisma.role.findFirstOrThrow({ where: { name: 'Admin' } });
     ({ userId: secondAdminId } = await inviteAndAccept(booted, admin, {

@@ -179,7 +179,9 @@ export const Division = z
 export const Team = z
   .object({
     id,
-    divisionId: id,
+    /** The divisions the team supports; empty when it supports all of them. */
+    divisionIds: z.array(id),
+    allDivisions: z.boolean(),
     name: z.string(),
     restrictClaims: z.boolean(),
     lifecycleState: Lifecycle,
@@ -240,7 +242,9 @@ export const MyUnit = z
     unitType: z.enum(['division', 'team']),
     unitId: id,
     name: z.string(),
-    divisionId: id.nullable(),
+    /** For a team: the divisions it supports (empty for a division, or an all-division team). */
+    divisionIds: z.array(id),
+    allDivisions: z.boolean(),
     member: z.boolean(),
     roles: z.array(z.object({ id, name: z.string() }).strict()),
   })

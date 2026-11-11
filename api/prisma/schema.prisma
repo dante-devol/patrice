@@ -231,7 +231,7 @@ model Division {
   /// The division's template library; at most one is the default (partial unique index).
   requestTemplates RequestTemplate[]
   tasks            Task[]
-  teams            Team[]
+  teams            TeamDivision[]
   memberships      Membership[]
   scopedGrants     Grant[]
   groupMappings    ExternalGroupMapping[]
@@ -244,8 +244,10 @@ model Division {
 /// membership: both are explicit `membership` rows.
 model Team {
   id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  divisionId     String         @map("division_id") @db.Uuid
   name           String
+  /// Supports every division, including ones created later; otherwise exactly its
+  /// `divisions` rows (at least one).
+  allDivisions   Boolean        @default(false) @map("all_divisions")
   restrictClaims Boolean        @default(false) @map("restrict_claims")
   lifecycleState LifecycleState @default(active) @map("lifecycle_state")
   retiredAt      DateTime?      @map("retired_at") @db.Timestamptz(6)
@@ -253,15 +255,27 @@ model Team {
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  division      Division               @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  divisions     TeamDivision[]
   tasks         Task[]
   memberships   Membership[]
   scopedGrants  Grant[]
   groupMappings ExternalGroupMapping[]
   unitRoles     UnitRoleAssignment[]
 
-  @@index([divisionId])
   @@map("team")
+}
+
+/// A division a team supports (unless the team supports all divisions).
+model TeamDivision {
+  teamId     String @map("team_id") @db.Uuid
+  divisionId String @map("division_id") @db.Uuid
+
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  division Division @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+
+  @@id([teamId, divisionId])
+  @@index([divisionId])
+  @@map("team_division")
 }
 
 model AppUser {

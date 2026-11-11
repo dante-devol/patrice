@@ -10,6 +10,7 @@ import { divisionColor, teamColor } from '../tasks/task-presentation';
 import { SaveBarComponent } from './save-bar.component';
 import { LoadingRowsComponent } from '../../shared/loading';
 import { MembershipDraft, UnitRef, unitKey } from './membership-draft';
+import { supports } from '../../core/lookup.store';
 import { StagedOp, isStale, runStaged, stagedErrorMessage } from './staged';
 
 type LifecycleOp = 'deactivate' | 'reactivate' | 'retire' | 'revive';
@@ -30,7 +31,10 @@ const LIFECYCLE_NOTE: Record<LifecycleOp, string> = {
   revive: 'Revived on save',
 };
 
-/** The left list: Overall, then each division with its teams under it. */
+/**
+ * The left list: Overall; each division with the teams that support it under it; then
+ * every team, flat. A team is the same pick wherever it's clicked.
+ */
 type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
 
 /**
@@ -96,7 +100,7 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
           @if (rolesOrLifecycleChanged()) { <span class="dot" aria-label="Unsaved changes"></span> }
           <span class="text-ink-soft font-normal">{{ users().length }}</span>
         </button>
-        <div class="group-head"><span class="group-name">Divisions and teams</span></div>
+        <div class="group-head"><span class="group-name">Divisions</span></div>
         @for (d of divisions(); track d.id) {
           @let du = unit('division', d.id);
           <button class="row-item" [class.is-current]="isSelected(du)" [style.box-shadow]="isSelected(du) ? null : edge(divisionColor(d.name))" (click)="selectUnit(du)">
@@ -106,13 +110,23 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
           </button>
           @for (t of teamsOf(d.id); track t.id) {
             @let tu = unit('team', t.id);
+            @let both = membersOfBoth(du, tu);
             <button class="row-item row-item--team" [class.is-current]="isSelected(tu)" [style.box-shadow]="isSelected(tu) ? null : edge(teamColor(t.name))" (click)="selectUnit(tu)">
               <span class="flex-1 min-w-0 truncate">{{ t.name }}</span>
               @if (memberships.changedUnits().has(key(tu))) { <span class="dot" aria-label="Unsaved changes"></span> }
-              <span class="text-ink-soft font-normal">{{ memberships.memberCount(tu) }}</span>
+              <span class="text-ink-soft font-normal" [title]="both + ' in both ' + d.name + ' and ' + t.name">{{ both }}</span>
             </button>
           }
         } @empty { <p class="px-3 py-2 text-ink-soft m-0">No divisions yet.</p> }
+        <div class="group-head"><span class="group-name">Teams</span></div>
+        @for (t of sortedTeams(); track t.id) {
+          @let tu = unit('team', t.id);
+          <button class="row-item" [class.is-current]="isSelected(tu)" [style.box-shadow]="isSelected(tu) ? null : edge(teamColor(t.name))" (click)="selectUnit(tu)">
+            <span class="flex-1 min-w-0 truncate">{{ t.name }}</span>
+            @if (memberships.changedUnits().has(key(tu))) { <span class="dot" aria-label="Unsaved changes"></span> }
+            <span class="text-ink-soft font-normal">{{ memberships.memberCount(tu) }}</span>
+          </button>
+        } @empty { <p class="px-3 py-2 text-ink-soft m-0">No teams yet.</p> }
       </div>
       }
 
@@ -200,7 +214,7 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
             <div class="px-3 py-2.5">
               <div class="font-display font-bold text-[18px] leading-tight">{{ unitName(sel) }}</div>
               <div class="text-ink-soft mt-0.5">
-                {{ sel.unitType === 'division' ? 'Division' : 'Team in ' + parentDivisionName(sel.unitId) }},
+                {{ sel.unitType === 'division' ? 'Division,' : 'Team · ' + teamDivisionsName(sel.unitId) + '.' }}
                 {{ memberships.memberCount(sel) }} {{ memberships.memberCount(sel) === 1 ? 'member' : 'members' }}.
                 Membership grants nothing by itself; roles do.
               </div>
@@ -241,7 +255,7 @@ type Pick = { kind: 'overall' } | ({ kind: 'unit' } & UnitRef);
                         @if (canManage && st !== 'removed' && unitRolesFor(u, sel).length) {
                           <select #unitRolePick class="pick pick--unset" (change)="assignUnitRole(u, unitRolePick.value, sel); unitRolePick.value = ''"
                                   [attr.aria-label]="'Give ' + u.displayName + ' a unit role here'"
-                                  [title]="'A unit role applies only in this ' + sel.unitType + (sel.unitType === 'division' ? ' and its teams' : '')">
+                                  [title]="'A unit role applies only in this ' + sel.unitType + (sel.unitType === 'division' ? ' and its single-division teams' : '')">
                             <option value="">Give a unit role</option>
                             @for (r of unitRolesFor(u, sel); track r.id) { <option [value]="r.id">{{ r.name }}</option> }
                           </select>
@@ -415,8 +429,16 @@ export class UsersAdminComponent implements OnDestroy {
   edge(color: string): string {
     return `inset 3px 0 0 ${color}`;
   }
+  /** The teams that support a division (all-division teams included), by name. */
   teamsOf(divisionId: string): Team[] {
-    return this.teams().filter((t) => t.divisionId === divisionId);
+    return this.sortedTeams().filter((t) => supports(t, divisionId));
+  }
+  readonly sortedTeams = computed(() => [...this.teams()].sort((a, b) => a.name.localeCompare(b.name)));
+  /** People in both a division and one of its teams (as staged). */
+  membersOfBoth(division: UnitRef, team: UnitRef): number {
+    return this.memberships
+      .shown(team)
+      .filter((id) => this.memberships.isMember(team, id) && this.memberships.isMember(division, id)).length;
   }
   canManageUnit(u: UnitRef): boolean {
     return this.manageable().has(unitKey(u));
@@ -425,9 +447,15 @@ export class UsersAdminComponent implements OnDestroy {
     const list: { id: string; name: string }[] = u.unitType === 'division' ? this.divisions() : this.teams();
     return list.find((x) => x.id === u.unitId)?.name ?? 'Unknown';
   }
-  parentDivisionName(teamId: string): string {
+  /** "Writing, Art", or "all divisions": what a team serves. */
+  teamDivisionsName(teamId: string): string {
     const t = this.teams().find((x) => x.id === teamId);
-    return this.divisions().find((d) => d.id === t?.divisionId)?.name ?? 'a division';
+    if (!t) return 'unknown divisions';
+    if (t.allDivisions) return 'all divisions';
+    return t.divisionIds
+      .map((id) => this.divisions().find((d) => d.id === id)?.name ?? 'Unknown division')
+      .sort((a, b) => a.localeCompare(b))
+      .join(', ');
   }
   userById(id: string): AdminUser | undefined {
     return this.users().find((u) => u.id === id);

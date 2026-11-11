@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { LifecycleState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotFoundError } from '../common/errors';
+import { ConflictError, NotFoundError } from '../common/errors';
 import { GraceService } from '../common/grace.service';
 import { activeFilter } from '../common/lifecycle';
 import { DomainError } from '../domain/shared/domain-error';
@@ -94,6 +94,7 @@ export class DivisionsService {
     return this.uow.run(actorUserId, async (ctx) => {
       const d = await this.load(ctx, id);
       d.retire(new Date());
+      await this.assertNoTeamStranded(ctx, d.id);
       await ctx.divisions.save(d);
       return toView(d);
     });
@@ -107,6 +108,33 @@ export class DivisionsService {
       await ctx.divisions.save(d);
       return toView(d);
     });
+  }
+
+  /**
+   * Retiring a division may not leave an active team with no active division: one that
+   * lists it, isn't an all-division team, and lists no other active division. This
+   * covers single-division teams too; retire (or widen) the team first (ADR 0020).
+   */
+  private async assertNoTeamStranded(ctx: UnitOfWorkContext, divisionId: string): Promise<void> {
+    const stranded = await ctx.tx.team.findMany({
+      where: {
+        lifecycleState: LifecycleState.active,
+        allDivisions: false,
+        divisions: {
+          some: { divisionId },
+          none: { divisionId: { not: divisionId }, division: { lifecycleState: LifecycleState.active } },
+        },
+      },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+    if (stranded.length > 0) {
+      throw new ConflictError(
+        'DIVISION_SOLE_TEAM_DIVISION',
+        `Retire or widen these teams first: ${stranded.map((t) => t.name).join(', ')}`,
+        { teams: stranded },
+      );
+    }
   }
 
   private async load(ctx: UnitOfWorkContext, id: string): Promise<Division> {

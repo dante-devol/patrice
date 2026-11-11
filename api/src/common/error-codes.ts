@@ -54,6 +54,10 @@ export const ERROR_CODES = {
   IDENTITY_TAKEN: { status: 409, description: 'That sign-in account already belongs to another user' },
   PROVIDER_ALREADY_CONNECTED: { status: 409, description: 'A different account from this provider is already connected' },
   DIVISION_RETIRED: { status: 409, description: 'Division is retired' },
+  DIVISION_SOLE_TEAM_DIVISION: {
+    status: 409,
+    description: 'Retiring the division would leave an active team with no active division (details.teams names them)',
+  },
   DUPLICATE_CONNECTION: { status: 409, description: 'That workspace is already connected' },
   DUPLICATE_MAPPING: { status: 409, description: 'That mapping already exists' },
   EMAIL_TAKEN: { status: 409, description: 'That email address is already in use' },
@@ -78,6 +82,10 @@ export const ERROR_CODES = {
   SUBMISSION_RETIRED: { status: 409, description: 'Submission is retired' },
   TASK_RETIRED: { status: 409, description: 'Task is retired' },
   TEAM_RETIRED: { status: 409, description: 'Team is retired' },
+  TEAM_DIVISION_IN_USE: {
+    status: 409,
+    description: "The team has tasks in a division it would no longer support (details.divisions counts them)",
+  },
   USER_RETIRED: { status: 409, description: 'User is retired' },
 
   // 410
@@ -97,7 +105,7 @@ export const ERROR_CODES = {
   GOVERNANCE_ROLE_NOT_MAPPABLE: { status: 422, description: 'A role holding governance grants cannot be mapped to an external group' },
   GOVERNANCE_ROLE_MAPPED: { status: 422, description: 'A role an integration grants cannot hold governance actions' },
   NO_FILE: { status: 422, description: 'No file was uploaded' },
-  TEAM_NOT_IN_DIVISION: { status: 422, description: "The team belongs to a different division than the task" },
+  TEAM_NOT_IN_DIVISION: { status: 422, description: "The team doesn't support the task's division" },
   NOT_LINKED: { status: 422, description: 'The account is not linked' },
   REPLY_TO_REPLY: { status: 422, description: 'Threads are one level deep' },
   ROLE_RETIRED: { status: 422, description: 'Role is retired' },

@@ -223,12 +223,12 @@ async function ensureDivision(name) {
   );
 }
 
-async function ensureTeam(name) {
+async function ensureTeam(name, divisionId) {
   const teams = must(await req('GET', '/teams', { session: admin }), 'GET /teams');
   const found = teams.find((t) => t.name === name && t.lifecycleState === 'active');
   if (found) return found;
   return must(
-    await req('POST', '/teams', { session: admin, body: { name } }),
+    await req('POST', '/teams', { session: admin, body: { name, divisionIds: [divisionId] } }),
     `create team ${name}`,
   );
 }
@@ -393,7 +393,7 @@ const run = async () => {
   log(c.ok(`  ${DIVISION_NAME}`));
 
   step(`Team (${TEAM_NAME})`);
-  const team = await ensureTeam(TEAM_NAME);
+  const team = await ensureTeam(TEAM_NAME, division.id);
   log(c.ok(`  ${TEAM_NAME}`));
 
   step('Users');

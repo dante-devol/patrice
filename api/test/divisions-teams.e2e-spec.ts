@@ -54,9 +54,10 @@ describe('Divisions, teams and membership', () => {
   it('a team belongs to a division', async () => {
     const missing = await auth(http().post('/api/teams')).send({ name: 'USA' });
     expect(missing.status).toBe(422);
-    const res = await auth(http().post('/api/teams')).send({ name: 'USA', divisionId: writingId });
+    const res = await auth(http().post('/api/teams')).send({ name: 'USA', divisionIds: [writingId] });
     expect(res.status).toBe(201);
-    expect(res.body.divisionId).toBe(writingId);
+    expect(res.body.divisionIds).toEqual([writingId]);
+    expect(res.body.allDivisions).toBe(false);
     usaTeamId = res.body.id;
   });
 
@@ -130,6 +131,13 @@ describe('Divisions, teams and membership', () => {
   });
 
   it('a retired division refuses edits and new members, and revives within grace', async () => {
+    // USA's only division is Writing, so Writing can't be retired while USA is active.
+    const blocked = await auth(http().post(`/api/divisions/${writingId}/retire`));
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error.code).toBe('DIVISION_SOLE_TEAM_DIVISION');
+    expect(blocked.body.error.details.teams).toEqual([{ id: usaTeamId, name: 'USA' }]);
+    expect((await auth(http().post(`/api/teams/${usaTeamId}/retire`))).status).toBe(201);
+
     const res = await auth(http().post(`/api/divisions/${writingId}/retire`));
     expect(res.status).toBe(201);
     expect(res.body.lifecycleState).toBe('retired');
@@ -143,6 +151,7 @@ describe('Divisions, teams and membership', () => {
     const revive = await auth(http().post(`/api/divisions/${writingId}/revive`));
     expect(revive.status).toBe(201);
     expect(revive.body.lifecycleState).toBe('active');
+    expect((await auth(http().post(`/api/teams/${usaTeamId}/revive`))).status).toBe(201);
   });
 
   it('restrict_claims is persisted on both division and team', async () => {

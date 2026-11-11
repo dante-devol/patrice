@@ -26,12 +26,22 @@ export interface MyUnitView {
   unitType: UnitType;
   unitId: string;
   name: string;
-  /** For a team: the division it belongs to. */
-  divisionId: string | null;
+  /** For a team: the divisions it supports (empty when it supports all of them). */
+  divisionIds: string[];
+  /** For a team: whether it supports every division. False for a division. */
+  allDivisions: boolean;
   member: boolean;
   /** The unit roles the caller holds there. */
   roles: { id: string; name: string }[];
 }
+
+const TEAM_SELECT = {
+  id: true,
+  name: true,
+  lifecycleState: true,
+  allDivisions: true,
+  divisions: { select: { divisionId: true } },
+} as const;
 
 const VIEW = {
   id: true,
@@ -209,7 +219,7 @@ export class UnitRolesService {
         where: { userId },
         select: {
           division: { select: { id: true, name: true, lifecycleState: true } },
-          team: { select: { id: true, name: true, divisionId: true, lifecycleState: true } },
+          team: { select: TEAM_SELECT },
         },
       }),
       this.prisma.unitRoleAssignment.findMany({
@@ -217,20 +227,34 @@ export class UnitRolesService {
         select: {
           role: { select: { id: true, name: true } },
           division: { select: { id: true, name: true, lifecycleState: true } },
-          team: { select: { id: true, name: true, divisionId: true, lifecycleState: true } },
+          team: { select: TEAM_SELECT },
         },
       }),
     ]);
     const units = new Map<string, MyUnitView>();
     const upsert = (
-      u: { id: string; name: string; lifecycleState: LifecycleState; divisionId?: string },
+      u: {
+        id: string;
+        name: string;
+        lifecycleState: LifecycleState;
+        allDivisions?: boolean;
+        divisions?: { divisionId: string }[];
+      },
       unitType: UnitType,
     ): MyUnitView | null => {
       if (u.lifecycleState === LifecycleState.retired) return null;
       const key = `${unitType}:${u.id}`;
       let v = units.get(key);
       if (!v) {
-        v = { unitType, unitId: u.id, name: u.name, divisionId: u.divisionId ?? null, member: false, roles: [] };
+        v = {
+          unitType,
+          unitId: u.id,
+          name: u.name,
+          divisionIds: u.allDivisions ? [] : (u.divisions ?? []).map((d) => d.divisionId),
+          allDivisions: u.allDivisions ?? false,
+          member: false,
+          roles: [],
+        };
         units.set(key, v);
       }
       return v;

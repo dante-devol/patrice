@@ -1,5 +1,5 @@
 // Dev + demo seed — loads a realistic working organisation into a *running* Patrice
-// API: four divisions, twelve teams, 50 members with team and division memberships and
+// API: four divisions, eight teams, 50 members with team and division memberships and
 // project leads, and ~500 tasks spread across every status, with submissions, reviews
 // and thread messages. The browser demo's snapshot is built from this script too
 // (demo/src/node-server.ts), and the demo start page reads its admin login from here.
@@ -190,50 +190,65 @@ const COUNTRIES = [
 const ARTISTS = ['Isla Moreno', 'Theo Laurent', 'Priya Nair', 'Oscar Lindqvist', 'Nadia Petrova', 'Diego Alvarez', 'Freya Olsen', 'Kenji Mori', 'Amara Okafor', 'Rosa Delgado'];
 const TESTERS = ['Sam Patel', 'Noor Haddad', 'Ethan Clarke', 'Zoe Kim', 'Omar Farouk'];
 
-const teamName = (country, division) => `${country} — ${division}`;
-
 /**
- * Who belongs where. Every team sits in one division, and a member of a team is always
- * a member of that team's division too (derived below, never listed by hand).
- *  - Each country has 7 people: [0] works on both its Coding and Writing teams and
- *    leads them; [1–3] code; [4–6] write. [3] also tests (Testing division, no team).
- *  - Artists: [0–4] 3D Art, [4–9] Portrait Art ([4] on both); [0] leads Art.
- *  - Testers sit in Testing with no team; [0] leads Testing and also helps in Coding.
+ * Who belongs where. A team supports one division, several, or all of them; a member
+ * of a single-division team is always a member of that division too (derived below).
+ * The other divisions people are in are listed with them.
+ *  - Each country has one team serving Coding and Writing, and 7 people: [0] works in
+ *    both divisions and leads the team; [1–3] code; [4–6] write. [3] also tests.
+ *  - Artists: [0–4] 3D Art, [4–9] Portrait Art ([4] on both); [0] leads Art. Both
+ *    teams serve Art alone.
+ *  - Testers sit in Testing, and form Playtest, a team serving every division; [0]
+ *    leads Testing and Playtest, and also helps in Coding.
  */
 function buildPeople() {
   const people = [];
-  const add = (name, teams, extraDivisions = [], leads = []) =>
-    people.push({ name, email: emailFor(name), teams, extraDivisions, leads });
+  const add = (name, teams, divisions = [], leads = []) =>
+    people.push({ name, email: emailFor(name), teams, divisions, leads });
   for (const country of COUNTRIES) {
     const [lead, c1, c2, c3, w1, w2, w3] = country.people;
-    const coding = teamName(country.name, 'Coding');
-    const writing = teamName(country.name, 'Writing');
-    add(lead, [coding, writing], [], [{ team: coding }, { team: writing }]);
-    for (const n of [c1, c2]) add(n, [coding]);
-    add(c3, [coding], ['Testing']);
-    for (const n of [w1, w2, w3]) add(n, [writing]);
+    add(lead, [country.name], ['Coding', 'Writing'], [{ team: country.name }]);
+    for (const n of [c1, c2]) add(n, [country.name], ['Coding']);
+    add(c3, [country.name], ['Coding', 'Testing']);
+    for (const n of [w1, w2, w3]) add(n, [country.name], ['Writing']);
   }
   ARTISTS.forEach((n, i) => {
     const teams = i < 4 ? ['3D Art'] : i === 4 ? ['3D Art', 'Portrait Art'] : ['Portrait Art'];
     add(n, teams, [], i === 0 ? [{ division: 'Art' }] : []);
   });
   TESTERS.forEach((n, i) => {
-    add(n, [], i === 0 ? ['Testing', 'Coding'] : ['Testing'], i === 0 ? [{ division: 'Testing' }] : []);
+    add(
+      n,
+      [PLAYTEST],
+      i === 0 ? ['Testing', 'Coding'] : ['Testing'],
+      i === 0 ? [{ division: 'Testing' }, { team: PLAYTEST }] : [],
+    );
   });
   return people;
+}
+
+/** The divisions a person is in: the ones listed, plus each single-division team's. */
+function divisionsOf(p) {
+  const out = new Set(p.divisions);
+  for (const tn of p.teams) {
+    const t = TEAMS.find((x) => x.name === tn);
+    if (t.divisions?.length === 1) out.add(t.divisions[0]);
+  }
+  return out;
 }
 
 function emailFor(name) {
   return `${name.toLowerCase().replace(/[^a-z]+/g, '.').replace(/^\.|\.$/g, '')}@example.com`;
 }
 
+const PLAYTEST = 'Playtest';
+
+/** The three shapes: a team per country serving two divisions, two Art-only teams, and one serving all. */
 const TEAMS = [
-  ...COUNTRIES.flatMap((ct) => [
-    { name: teamName(ct.name, 'Coding'), division: 'Coding', country: ct },
-    { name: teamName(ct.name, 'Writing'), division: 'Writing', country: ct },
-  ]),
-  { name: '3D Art', division: 'Art', kind: '3d' },
-  { name: 'Portrait Art', division: 'Art', kind: 'portrait' },
+  ...COUNTRIES.map((ct) => ({ name: ct.name, divisions: ['Coding', 'Writing'], country: ct })),
+  { name: '3D Art', divisions: ['Art'], kind: '3d' },
+  { name: 'Portrait Art', divisions: ['Art'], kind: 'portrait' },
+  { name: PLAYTEST, all: true },
 ];
 
 // ── Task content ─────────────────────────────────────────────────────────────
@@ -394,15 +409,11 @@ async function ensureDivision(name, existing) {
   return must(await req('POST', '/divisions', { session: admin, body: { name } }), `create division ${name}`);
 }
 
-async function ensureTeam(name, divisionId, existing) {
-  const found = existing.find(
-    (t) => t.name === name && t.divisionId === divisionId && t.lifecycleState === 'active',
-  );
+/** `body` is `{ divisionIds }` or `{ allDivisions: true }`. */
+async function ensureTeam(name, body, existing) {
+  const found = existing.find((t) => t.name === name && t.lifecycleState === 'active');
   if (found) return found;
-  return must(
-    await req('POST', '/teams', { session: admin, body: { name, divisionId } }),
-    `create team ${name}`,
-  );
+  return must(await req('POST', '/teams', { session: admin, body: { name, ...body } }), `create team ${name}`);
 }
 
 async function setRequestTemplate(divisionId) {
@@ -608,8 +619,9 @@ const run = async () => {
   const existingTeams = must(await req('GET', '/teams', { session: admin }), 'GET /teams');
   const teams = {};
   for (const t of TEAMS) {
-    teams[t.name] = { ...t, ...(await ensureTeam(t.name, divisions[t.division].id, existingTeams)) };
-    log(c.ok(`  ${t.name} ${c.dim(`(${t.division})`)}`));
+    const body = t.all ? { allDivisions: true } : { divisionIds: t.divisions.map((dn) => divisions[dn].id) };
+    teams[t.name] = { ...t, ...(await ensureTeam(t.name, body, existingTeams)) };
+    log(c.ok(`  ${t.name} ${c.dim(`(${t.all ? 'all divisions' : t.divisions.join(', ')})`)}`));
   }
 
   step('Users');
@@ -625,12 +637,8 @@ const run = async () => {
     want.set(`${unitType}|${unitId}|${userId}`, { op: 'add', unitType, unitId, userId });
   for (const p of people) {
     const u = users[p.name];
-    const divs = new Set(p.extraDivisions);
-    for (const tn of p.teams) {
-      addWant('team', teams[tn].id, u.userId);
-      divs.add(teams[tn].division); // in a team ⇒ in its division
-    }
-    for (const dn of divs) addWant('division', divisions[dn].id, u.userId);
+    for (const tn of p.teams) addWant('team', teams[tn].id, u.userId);
+    for (const dn of divisionsOf(p)) addWant('division', divisions[dn].id, u.userId);
   }
   const current = must(await req('GET', '/memberships', { session: admin }), 'GET /memberships');
   for (const m of current.items) want.delete(`${m.unitType}|${m.unitId}|${m.userId}`);
@@ -673,18 +681,21 @@ const run = async () => {
     log(c.dim('  this instance already has tasks — skipped (pass --append to add another set)'));
   } else {
     const membersOf = (pred) => people.filter(pred).map((p) => users[p.name]);
-    const inDivision = (dn) => (p) =>
-      p.extraDivisions.includes(dn) || p.teams.some((tn) => teams[tn].division === dn);
-    const units = [
-      ...TEAMS.map((t) => ({
-        label: t.name,
-        division: t.division,
-        divisionId: divisions[t.division].id,
+    const inDivision = (dn) => (p) => divisionsOf(p).has(dn);
+    // A team's tasks, per division it serves: requested and worked by its members there.
+    // Playtest (every division) files its own in Testing and Coding.
+    const teamUnits = (t) =>
+      (t.all ? ['Testing', 'Coding'] : t.divisions).map((dn) => ({
+        label: `${t.name} (${dn})`,
+        division: dn,
+        divisionId: divisions[dn].id,
         team: t,
         teamId: teams[t.name].id,
-        pool: membersOf((p) => p.teams.includes(t.name)),
-        weight: t.division === 'Art' ? 9 : t.division === 'Writing' ? 6 : 5.6,
-      })),
+        pool: membersOf((p) => p.teams.includes(t.name) && inDivision(dn)(p)),
+        weight: t.all ? (dn === 'Testing' ? 4 : 1.5) : dn === 'Art' ? 9 : dn === 'Writing' ? 6 : 5.6,
+      }));
+    const units = [
+      ...TEAMS.flatMap(teamUnits),
       ...DIVISIONS.map((dn) => ({
         label: dn,
         division: dn,

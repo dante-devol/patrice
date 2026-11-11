@@ -17,8 +17,12 @@ import {
   staticPolicies,
 } from '../access/cedar/policies';
 
-/** Resource types whose entities carry a `division`/`team` (group-scopable). */
-const GROUP_SCOPABLE = new Set(['Task', 'Message', 'Attachment', 'Division']);
+/**
+ * Resource types whose entities carry a `division`/`team` (group-scopable). A Team
+ * matches its own team scopes, and division scopes only while it lists exactly that
+ * one division (ADR 0020).
+ */
+const GROUP_SCOPABLE = new Set(['Task', 'Message', 'Attachment', 'Division', 'Team']);
 /** Resource types whose entities carry a `targetRole` (role-scope). */
 const ROLE_SCOPABLE = new Set(['User']);
 import { ConflictError, NotFoundError, UnprocessableError, ValidationError } from '../common/errors';

@@ -139,7 +139,7 @@ export class GcService {
   private async divisionCollectable(divisionId: string): Promise<boolean> {
     const [tasks, teams] = await Promise.all([
       this.prisma.task.count({ where: { divisionId } }),
-      this.prisma.team.count({ where: { divisionId } }),
+      this.prisma.teamDivision.count({ where: { divisionId } }),
     ]);
     return tasks === 0 && teams === 0;
   }

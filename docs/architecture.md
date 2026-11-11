@@ -65,11 +65,11 @@ queue's due jobs in-process before returning.
   Discord). Sessions are opaque, server-side, revocable (`/me/sessions`). Accounts are
   self-service: password, email change (confirmed from the new address), providers.
 - **Membership is not authority** (ADR 0007): belonging to a division or team is a
-  `membership` row. Teams belong to exactly one division. Authority comes only from
+  `membership` row. A team supports one division, several, or all of them (ADR 0020). Authority comes only from
   **Roles** holding **Grants** (action × scope × effect).
 - **Unit roles** (ADR 0019): a role is an org role or a unit role. A unit role is assigned
   to a person at a division or team, and its grants (scope `assigned`) apply only there;
-  a division assignment covers its teams. Leads can assign only unit roles marked
+  a division assignment covers its tasks and its single-division teams. Leads can assign only unit roles marked
   assignable by leads. The division and team pages (`/divisions/:id`, `/teams/:id`) show
   the unit's leadership, members, tasks and stats, counted over the tasks you can see. The
   status-over-time chart reads `task_status_history`, which a database trigger on `task`

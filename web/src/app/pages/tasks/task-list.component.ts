@@ -5,8 +5,8 @@ import { firstValueFrom } from 'rxjs';
 import { Component, Input, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthStore } from '../../core/auth.store';
-import { LookupStore } from '../../core/lookup.store';
-import { RequestTemplateLibrary, Task, TaskFilters, TaskStatus, TemplateChoice } from '../../core/api.types';
+import { LookupStore, supports } from '../../core/lookup.store';
+import { Division, RequestTemplateLibrary, Task, TaskFilters, TaskStatus, Team, TemplateChoice } from '../../core/api.types';
 import { errorMessage } from '../../core/errors';
 import { TaskRowComponent } from './task-row.component';
 import { stampLabel, stampStatus } from './task-presentation';
@@ -80,17 +80,16 @@ export interface TaskListFacets {
                 <span class="text-[13px] text-ink-soft">Division</span>
                 <select [(ngModel)]="newTask.divisionId" (ngModelChange)="divisionChosen($event)" class="field mt-1">
                   <option [ngValue]="''">Select a division</option>
-                  @for (d of lookup.divisionList(); track d.id) { <option [ngValue]="d.id">{{ d.name }}</option> }
+                  <!-- Narrowed to the chosen team's divisions. -->
+                  @for (d of createDivisions(); track d.id) { <option [ngValue]="d.id">{{ d.name }}</option> }
                 </select>
               </label>
               <label class="block">
                 <span class="text-[13px] text-ink-soft">Team (optional)</span>
-                <select [(ngModel)]="newTask.teamId" class="field mt-1">
+                <select [ngModel]="newTask.teamId" (ngModelChange)="teamChosen($event)" class="field mt-1">
                   <option [ngValue]="''">No team</option>
-                  <!-- A task's team must belong to its division. -->
-                  @for (t of lookup.teamList(); track t.id) {
-                    @if (t.divisionId === newTask.divisionId) { <option [ngValue]="t.id">{{ t.name }}</option> }
-                  }
+                  <!-- A task's team must support its division; with no division yet, every team. -->
+                  @for (t of createTeams(); track t.id) { <option [ngValue]="t.id">{{ t.name }}</option> }
                 </select>
               </label>
               @if (newTask.divisionId) {
@@ -160,7 +159,7 @@ export interface TaskListFacets {
               <select [(ngModel)]="filters.team" (ngModelChange)="reload()" class="text-ink border border-line rounded bg-paper px-2 py-0.5">
                 <option [ngValue]="undefined">All teams</option>
                 @for (t of lookup.teamList(); track t.id) {
-                  @if (!division || t.divisionId === division) { <option [ngValue]="t.id">{{ t.name }}</option> }
+                  @if (!division || supports(t, division)) { <option [ngValue]="t.id">{{ t.name }}</option> }
                 }
               </select>
             </label>
@@ -261,15 +260,53 @@ export class TaskListComponent implements OnInit {
     void this.lookup.refresh().then(() => this.reload());
   }
 
-  /** Open the create form; inside a unit page it starts in that unit. */
+  /**
+   * Open the create form; inside a unit page it starts in that unit. On a team page the
+   * team is preset, and its division too when it has only one.
+   */
   toggleCreate(): void {
     const opening = !this.showCreate();
     this.showCreate.set(opening);
-    if (opening && this.division && !this.newTask.divisionId) {
-      void this.divisionChosen(this.division).then(() => {
-        if (this.team) this.newTask.teamId = this.team;
-      });
+    if (!opening || this.newTask.divisionId || this.newTask.teamId) return;
+    if (this.team) this.teamChosen(this.team);
+    else if (this.division) {
       this.newTask.divisionId = this.division;
+      void this.divisionChosen(this.division);
+    }
+  }
+
+  readonly supports = supports;
+
+  /** The chosen team, if any. */
+  private chosenTeam(): Team | undefined {
+    return this.newTask.teamId ? this.lookup.teamList().find((t) => t.id === this.newTask.teamId) : undefined;
+  }
+
+  /** Divisions you can request in, narrowed to the chosen team's. */
+  createDivisions(): Division[] {
+    const team = this.chosenTeam();
+    return this.lookup.divisionList().filter((d) => !team || supports(team, d.id));
+  }
+
+  /** "No team", plus the active teams that support the chosen division (all of them with none chosen). */
+  createTeams(): Team[] {
+    const division = this.newTask.divisionId;
+    return this.lookup
+      .teamList()
+      .filter((t) => t.lifecycleState === 'active' && (!division || supports(t, division)));
+  }
+
+  /**
+   * A team was picked. If it leaves exactly one division and none is chosen yet, that
+   * division is picked too (the template library needs one).
+   */
+  teamChosen(teamId: string): void {
+    this.newTask.teamId = teamId;
+    if (!teamId || this.newTask.divisionId) return;
+    const divisions = this.createDivisions();
+    if (divisions.length === 1) {
+      this.newTask.divisionId = divisions[0].id;
+      void this.divisionChosen(divisions[0].id);
     }
   }
 
@@ -334,7 +371,9 @@ export class TaskListComponent implements OnInit {
 
   /** Load the division's library for the picker, preselecting its default. */
   async divisionChosen(divisionId: string): Promise<void> {
-    this.newTask.teamId = '';
+    // Keep the team while it still supports the division.
+    const team = this.chosenTeam();
+    if (team && divisionId && !supports(team, divisionId)) this.newTask.teamId = '';
     this.library.set(null);
     this.templateChoice = null;
     if (!divisionId) return;

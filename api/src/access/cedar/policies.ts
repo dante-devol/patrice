@@ -126,21 +126,42 @@ function teamRef(id: string): string {
   return `${NS}::Team::"${id}"`;
 }
 
+/**
+ * A team that division D's authority reaches: one listing exactly D and not supporting
+ * every division. A multi-division or all-division team is administered only by
+ * org-wide authority and by roles held at the team (ADR 0020).
+ */
+function singleDivisionTeamIn(division: string): string {
+  return (
+    `(resource has divisions && resource has allDivisions && resource has divisionCount ` +
+    `&& !resource.allDivisions && resource.divisionCount == 1 && resource.divisions.contains(${division}))`
+  );
+}
+
+/** The same, for any division the principal is a member of. */
+const SINGLE_DIVISION_TEAM_IN_OWN =
+  '(resource has divisions && resource has allDivisions && resource has divisionCount ' +
+  '&& !resource.allDivisions && resource.divisionCount == 1 ' +
+  '&& principal.memberDivisions.containsAll(resource.divisions))';
+
 /** Build the Cedar `when {...}` scope condition for a grant, or '' for global. */
 function scopeCondition(g: ProjectableGrant): string {
   switch (g.scopeKind) {
     case 'global':
       return '';
-    case 'specific_division':
-      return ` when { resource has division && resource.division == ${divisionRef(
-        g.scopeDivisionId ?? '',
-      )} }`;
+    case 'specific_division': {
+      const d = divisionRef(g.scopeDivisionId ?? '');
+      return ` when { (resource has division && resource.division == ${d}) || ${singleDivisionTeamIn(d)} }`;
+    }
     case 'specific_team':
       return ` when { resource has team && resource.team == ${teamRef(
         g.scopeTeamId ?? '',
       )} }`;
     case 'own_division':
-      return ' when { resource has division && principal.memberDivisions.contains(resource.division) }';
+      return (
+        ' when { (resource has division && principal.memberDivisions.contains(resource.division)) || ' +
+        `${SINGLE_DIVISION_TEAM_IN_OWN} }`
+      );
     case 'own_team':
       return ' when { resource has team && principal.memberTeams.contains(resource.team) }';
     case 'role':
@@ -165,7 +186,7 @@ function scopeCondition(g: ProjectableGrant): string {
   }
 }
 
-/** Where a unit role is assigned: a division (covering its teams) or one team. */
+/** Where a unit role is assigned: a division (covering its single-division teams) or one team. */
 export interface UnitPlacement {
   unitType: 'division' | 'team';
   unitId: string;
@@ -191,7 +212,9 @@ export function grantToPolicies(g: ProjectableGrant, placements: readonly UnitPl
   return placements.map((p) => {
     const unit =
       p.unitType === 'division'
-        ? `resource has division && resource.division == ${divisionRef(p.unitId)}`
+        ? `((resource has division && resource.division == ${divisionRef(p.unitId)}) || ${singleDivisionTeamIn(
+            divisionRef(p.unitId),
+          )})`
         : `resource has team && resource.team == ${teamRef(p.unitId)}`;
     const leads = ASSIGN_ROLE_ACTIONS.has(g.action)
       ? ' && resource has targetRoleAssignableByLeads && resource.targetRoleAssignableByLeads'

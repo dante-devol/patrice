@@ -5,7 +5,7 @@ import { ActivityService } from '../activity/activity.service';
 import { ConflictError, DeniedError, NotFoundError, ValidationError } from '../common/errors';
 import { AccessService, ResourceRef } from '../access/access.service';
 import { ACTIONS } from '../access/actions';
-import { divisionRef, teamRef } from '../access/entity-loader';
+import { divisionRef, TEAM_REF_SELECT, teamRefOf } from '../access/entity-loader';
 import { BatchMembershipsDto } from './membership.dto';
 
 export type UnitKind = 'division' | 'team';
@@ -69,7 +69,7 @@ export class MembershipService {
         select: { id: true, restrictClaims: true, allowCustomTemplates: true, lifecycleState: true },
       }),
       this.prisma.team.findMany({
-        select: { id: true, divisionId: true, restrictClaims: true, lifecycleState: true },
+        select: { ...TEAM_REF_SELECT, lifecycleState: true },
       }),
     ]);
     const units = new Map<string, UnitRow>();
@@ -82,7 +82,7 @@ export class MembershipService {
       });
     }
     for (const t of teams) {
-      units.set(this.unitKey('team', t.id), { kind: 'team', id: t.id, lifecycleState: t.lifecycleState, ref: teamRef(t) });
+      units.set(this.unitKey('team', t.id), { kind: 'team', id: t.id, lifecycleState: t.lifecycleState, ref: teamRefOf(t) });
     }
     return units;
   }

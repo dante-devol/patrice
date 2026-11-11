@@ -66,7 +66,7 @@ const STATS_SELECT = {
 /**
  * Stats for a division or team page, computed over the tasks the caller can see
  * there (the task list's pre-filter plus a Cedar `task:read` check on each row), so
- * the numbers never reveal hidden work. A division's stats include its teams. The
+ * the numbers never reveal hidden work. A division's stats include the teams that support it. The
  * team, claimant and requester filters narrow every number in the response.
  */
 @Injectable()
@@ -149,7 +149,9 @@ export class UnitStatsService {
     if (unitType === 'division') {
       const teams = await this.prisma.team.findMany({
         where: {
-          divisionId: unitId,
+          // Every team that supports the division, all-division teams included. Its
+          // numbers count only this division's tasks (the rows are already narrowed).
+          OR: [{ allDivisions: true }, { divisions: { some: { divisionId: unitId } } }],
           lifecycleState: LifecycleState.active,
           ...(query.team ? { id: { in: query.team } } : {}),
         },

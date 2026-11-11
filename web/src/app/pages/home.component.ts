@@ -77,7 +77,7 @@ interface WorkGroup {
                class="paper block px-4 py-3 relative overflow-hidden hover:bg-paper-hover">
               <span class="absolute left-0 top-0 bottom-0 w-[3px]" [style.background]="unitColor(c.unit)"></span>
               <div class="text-[13px] text-ink-soft">
-                @if (c.unit.unitType === 'team' && c.unit.divisionId) { Team in {{ lookup.divisionName(c.unit.divisionId) }} } @else { Division }
+                @if (c.unit.unitType === 'team') { Team · {{ lookup.teamDivisionsLabel(c.unit) }} } @else { Division }
                 @if (c.unit.roles.length) { <span class="ml-2.5 font-bold text-ink">{{ roleNames(c.unit) }}</span> }
               </div>
               <div class="font-display font-bold text-[18px] leading-tight mt-0.5">{{ c.unit.name }}</div>
@@ -213,8 +213,12 @@ export class HomeComponent implements OnInit {
     return [...groups.values()].sort((a, b) => (order.get(a.key) ?? 1e9) - (order.get(b.key) ?? 1e9));
   });
 
+  /** A division's color; a team with one division wears that division's, any other team its own. */
   unitColor(u: MyUnit): string {
-    return this.lookup.divisionColor(u.unitType === 'division' ? u.unitId : (u.divisionId ?? ''));
+    if (u.unitType === 'division') return this.lookup.divisionColor(u.unitId);
+    return !u.allDivisions && u.divisionIds.length === 1
+      ? this.lookup.divisionColor(u.divisionIds[0])
+      : this.lookup.teamColor(u.unitId);
   }
   roleNames(u: MyUnit): string {
     return u.roles.map((r) => r.name).join(', ');

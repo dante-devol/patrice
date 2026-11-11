@@ -124,10 +124,10 @@ export class EntityLoader {
   async team(id: string): Promise<ResourceRef> {
     const t = await this.db.team.findUnique({
       where: { id: this.id(id, 'TEAM_NOT_FOUND', 'Team') },
-      select: { id: true, divisionId: true, restrictClaims: true },
+      select: TEAM_REF_SELECT,
     });
     if (!t) throw notFound('TEAM_NOT_FOUND', 'Team');
-    return teamRef(t);
+    return teamRefOf(t);
   }
 
   /** A user; `targetRoleId` adds the role being given or taken (the `role` scope). */
@@ -216,12 +216,52 @@ export function divisionRef(d: { id: string; restrictClaims: boolean; allowCusto
   };
 }
 
-export function teamRef(t: { id: string; divisionId: string; restrictClaims: boolean }): ResourceRef {
+/** The facts a Team entity carries: which divisions it supports, and its claim rule. */
+export interface TeamRefInput {
+  id: string;
+  allDivisions: boolean;
+  divisionIds: readonly string[];
+  restrictClaims: boolean;
+}
+
+/**
+ * A team as Cedar sees it. It states facts only: the divisions it lists (none when it
+ * supports all of them), `allDivisions`, and `divisionCount` (Cedar has no set size).
+ * Whether division authority reaches the team is the policies' call (§2 of
+ * docs/plans/multi-division-teams.md): only a team with exactly one division is in
+ * that division's reach.
+ */
+export function teamRef(t: TeamRefInput): ResourceRef {
+  const divisionIds = t.allDivisions ? [] : [...t.divisionIds];
   return {
     type: 'Team',
     id: t.id,
-    attrs: { team: ref('Team', t.id), division: ref('Division', t.divisionId), restrictClaims: t.restrictClaims },
+    attrs: {
+      team: ref('Team', t.id),
+      divisions: divisionIds.map((d) => ref('Division', d)),
+      allDivisions: t.allDivisions,
+      divisionCount: divisionIds.length,
+      restrictClaims: t.restrictClaims,
+    },
   };
+}
+
+/** The select a team row needs for {@link teamRefOf}. */
+export const TEAM_REF_SELECT = {
+  id: true,
+  allDivisions: true,
+  restrictClaims: true,
+  divisions: { select: { divisionId: true } },
+} as const;
+
+/** {@link teamRef} from a row loaded with {@link TEAM_REF_SELECT}. */
+export function teamRefOf(t: {
+  id: string;
+  allDivisions: boolean;
+  restrictClaims: boolean;
+  divisions: { divisionId: string }[];
+}): ResourceRef {
+  return teamRef({ ...t, divisionIds: t.divisions.map((d) => d.divisionId) });
 }
 
 function notFound(

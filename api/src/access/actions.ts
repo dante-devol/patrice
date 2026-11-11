@@ -96,7 +96,8 @@ export const ACTIONS = {
    */
   taskComposeTemplate: { action: 'task:compose_template', resourceType: 'Division' },
   teamRead: { action: 'team:read', resourceType: 'Team' },
-  teamCreate: { action: 'team:create', resourceType: 'Division' },
+  // Asserted on the proposed team, so its divisions decide who may create it.
+  teamCreate: { action: 'team:create', resourceType: 'Team' },
   teamUpdate: { action: 'team:update', resourceType: 'Team' },
   teamRetire: { action: 'team:retire', resourceType: 'Team' },
   teamRevive: { action: 'team:revive', resourceType: 'Team' },

@@ -9,24 +9,26 @@ import { errorMessage } from '../../core/errors';
 import { UnsavedChangesService } from '../../core/unsaved-changes.service';
 import { teamColor as computeTeamColor } from '../tasks/task-presentation';
 import { SaveBarComponent } from './save-bar.component';
+import { DivisionPickerComponent, divisionsKey, fromDivisionsKey } from './division-picker.component';
 import { StagedRows } from './staged-rows';
 import { StagedOp, isStale, runStaged, stagedErrorMessage } from './staged';
 
 interface Fields {
   name: string;
   restrictClaims: boolean;
-  /** Chosen when the team is created, fixed after. */
-  divisionId: string;
+  /** The divisions it supports, as a divisionsKey. */
+  divisions: string;
 }
 
 /**
- * Teams editor: name, restrict-claims, retire/revive. Every team belongs to a division,
- * picked when it's added. Every change, new teams included, is staged until Save.
+ * Teams editor: name, divisions, restrict-claims, retire/revive. A team supports one
+ * division, several, or all of them. Every change, new teams included, is staged until
+ * Save. Dropping a division the team's tasks use is refused by the API.
  */
 @Component({
   selector: 'teams-admin',
   standalone: true,
-  imports: [FormsModule, RouterLink, SaveBarComponent, LoadingTableRowsComponent],
+  imports: [FormsModule, RouterLink, SaveBarComponent, LoadingTableRowsComponent, DivisionPickerComponent],
   template: `
     <div class="panel">
       <h2>Teams</h2>
@@ -35,7 +37,7 @@ interface Fields {
       </div>
       @if (loadError()) { <p class="error">{{ loadError() }}</p> }
       <table [attr.aria-busy]="!loaded()">
-        <thead><tr><th>Name</th><th>Division</th><th>Color</th><th>Restrict claims</th><th>State</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Divisions</th><th>Color</th><th>Restrict claims</th><th>State</th><th></th></tr></thead>
         @if (!loaded()) {
           <tbody loadingRows [cols]="6" [rows]="5" label="Loading teams"></tbody>
         } @else {
@@ -44,10 +46,7 @@ interface Fields {
             <tr class="is-staged">
               <td><input [ngModel]="c.fields.name" (ngModelChange)="rows.updateCreate(c.key, 'name', $event)" placeholder="New team name" aria-label="Name" /></td>
               <td>
-                <select [ngModel]="c.fields.divisionId" (ngModelChange)="rows.updateCreate(c.key, 'divisionId', $event)" aria-label="Division">
-                  <option value="" disabled>Division…</option>
-                  @for (d of divisions(); track d.id) { <option [value]="d.id">{{ d.name }}</option> }
-                </select>
+                <division-picker [divisions]="divisions()" [value]="c.fields.divisions" (valueChange)="rows.updateCreate(c.key, 'divisions', $event)" />
               </td>
               <td></td>
               <td><input type="checkbox" [ngModel]="c.fields.restrictClaims" (ngModelChange)="rows.updateCreate(c.key, 'restrictClaims', $event)" aria-label="Restrict claims" /></td>
@@ -61,7 +60,13 @@ interface Fields {
               <td class="name-cell" [style.--c]="computeColor(t)">
                 <input [class.is-changed]="rows.isChanged(t, 'name')" [ngModel]="rows.value(t, 'name')" (ngModelChange)="rows.set(t, 'name', $event)" aria-label="Name" />
               </td>
-              <td>{{ divisionName(t.divisionId) }}</td>
+              <td>
+                @if (t.lifecycleState === 'retired') { {{ divisionsLabel(t) }} }
+                @else {
+                  <division-picker [divisions]="divisions()" [value]="rows.value(t, 'divisions')" [changed]="rows.isChanged(t, 'divisions')"
+                                   (valueChange)="rows.set(t, 'divisions', $event)" />
+                }
+              </td>
               <td>
                 <span [style.background]="computeColor(t)" title="Computed from the name"
                       style="display:inline-block;width:26px;height:20px;border-radius:2px"></span>
@@ -95,8 +100,8 @@ export class TeamsAdminComponent implements OnDestroy {
   private readonly orgApi = inject(OrgApi);
   private readonly unsaved = inject(UnsavedChangesService);
   readonly rows = new StagedRows<Team, Fields>(
-    (t) => ({ name: t.name, restrictClaims: t.restrictClaims, divisionId: t.divisionId }),
-    () => ({ name: '', restrictClaims: false, divisionId: '' }),
+    (t) => ({ name: t.name, restrictClaims: t.restrictClaims, divisions: divisionsKey(t) }),
+    () => ({ name: '', restrictClaims: false, divisions: '' }),
   );
   readonly divisions = signal<Division[]>([]);
   readonly busy = signal(false);
@@ -114,8 +119,13 @@ export class TeamsAdminComponent implements OnDestroy {
 
   lcStamp(state: string): string { return `stamp stamp--lc-${state}`; }
   computeColor(t: Team): string { return computeTeamColor(t.name); }
-  divisionName(id: string): string {
-    return this.divisions().find((d) => d.id === id)?.name ?? '';
+  /** A retired team's divisions, read-only. */
+  divisionsLabel(t: Team): string {
+    if (t.allDivisions) return 'All divisions';
+    return t.divisionIds
+      .map((id) => this.divisions().find((d) => d.id === id)?.name ?? 'Unknown division')
+      .sort((a, b) => a.localeCompare(b))
+      .join(', ');
   }
 
   constructor() {
@@ -157,22 +167,36 @@ export class TeamsAdminComponent implements OnDestroy {
   }
 
   async save(): Promise<void> {
-    if (this.rows.creates().some((c) => !c.fields.name.trim() || !c.fields.divisionId)) {
-      this.saveError.set('Give every new team a name and a division, or remove it.');
+    if (this.rows.creates().some((c) => !c.fields.name.trim() || !c.fields.divisions)) {
+      this.saveError.set('Give every new team a name and at least one division, or remove it.');
+      return;
+    }
+    if (Object.values(this.rows.edits()).some((e) => e.divisions === '')) {
+      this.saveError.set('A team needs at least one division, or all of them.');
       return;
     }
     const ops: StagedOp[] = [
       ...this.rows.creates().map((c) => ({
         run: () =>
           firstValueFrom(
-            this.orgApi.createTeam({ name: c.fields.name.trim(), divisionId: c.fields.divisionId, restrictClaims: c.fields.restrictClaims }),
+            this.orgApi.createTeam({
+              name: c.fields.name.trim(),
+              restrictClaims: c.fields.restrictClaims,
+              ...fromDivisionsKey(c.fields.divisions),
+            }),
           ),
         clear: () => this.rows.removeCreate(c.key),
       })),
-      ...Object.entries(this.rows.edits()).map(([id, { divisionId: _fixed, ...patch }]) => ({
+      ...Object.entries(this.rows.edits()).map(([id, { divisions, ...patch }]) => ({
         run: () => {
           const t = this.rows.saved().find((x) => x.id === id)!;
-          return firstValueFrom(this.orgApi.updateTeam(id, { ...patch, version: t.version }));
+          const divisionChange =
+            divisions === undefined
+              ? {}
+              : divisions === 'all'
+                ? { allDivisions: true }
+                : { allDivisions: false, ...fromDivisionsKey(divisions) };
+          return firstValueFrom(this.orgApi.updateTeam(id, { ...patch, ...divisionChange, version: t.version }));
         },
         clear: () => this.rows.clearEdit(id),
       })),

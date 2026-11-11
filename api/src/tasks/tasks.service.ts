@@ -177,14 +177,14 @@ export class TasksService {
     if (dto.teamId) {
       const team = await this.prisma.team.findFirst({
         where: { id: dto.teamId },
-        select: { id: true, lifecycleState: true, divisionId: true },
+        select: { id: true, lifecycleState: true, allDivisions: true, divisions: { select: { divisionId: true } } },
       });
       if (!team) throw new NotFoundError('TEAM_NOT_FOUND', 'Team not found');
       if (team.lifecycleState === LifecycleState.retired) {
         throw new ConflictError('TEAM_RETIRED', 'Team is retired');
       }
-      if (team.divisionId !== division.id) {
-        throw new UnprocessableError('TEAM_NOT_IN_DIVISION', "The team belongs to a different division");
+      if (!team.allDivisions && !team.divisions.some((d) => d.divisionId === division.id)) {
+        throw new UnprocessableError('TEAM_NOT_IN_DIVISION', "The team doesn't support this division");
       }
     }
 
